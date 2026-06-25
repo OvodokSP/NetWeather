@@ -29,23 +29,18 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
     
-    - name: Create resource directories
-      run: |
-        mkdir -p app/src/main/res/drawable
-        mkdir -p app/src/main/res/mipmap-anydpi-v26
-        mkdir -p app/src/main/res/values
-        mkdir -p app/src/main/res/xml
-        mkdir -p app/src/main/res/layout
+    - name: Run setup script
+      run: python3 setup_project.py
     
-    - name: Create all XML resources
-      run: python3 scripts/create_resources.py
-    
-    - name: Verify resources
+    - name: Verify project structure
       run: |
+        echo "=== Java files ==="
+        find app/src/main/java -name "*.kt" | head -20
+        echo "=== Resource files ==="
         ls -la app/src/main/res/values/
         ls -la app/src/main/res/xml/
         ls -la app/src/main/res/drawable/
-        cat app/src/main/res/values/strings.xml
+        ls -la app/src/main/res/layout/
     
     - name: Build Debug APK
       run: ./gradlew assembleDebug --no-daemon
