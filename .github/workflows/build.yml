@@ -41,17 +41,21 @@ jobs:
     - name: Fix final error v2
       run: python3 fix_final_v2.py
     
-    - name: Verify project structure
-      run: |
-        echo "=== Checking fixed files ==="
-        head -50 app/src/main/java/com/netweather/presentation/main/components/AvailabilityIndexCard.kt
-        echo "=== Resource files ==="
-        ls -la app/src/main/res/values/
-        ls -la app/src/main/res/xml/
-        ls -la app/src/main/res/drawable/
+    - name: Fix Canvas error definitively
+      run: python3 fix_canvas_final.py
     
-    - name: Clean Gradle cache
-      run: ./gradlew clean --no-daemon
+    - name: Verify fixed file
+      run: |
+        echo "=== Checking AvailabilityIndexCard.kt ==="
+        cat app/src/main/java/com/netweather/presentation/main/components/AvailabilityIndexCard.kt | head -80
+        echo "=== File size ==="
+        wc -l app/src/main/java/com/netweather/presentation/main/components/AvailabilityIndexCard.kt
+    
+    - name: Remove Gradle cache completely
+      run: |
+        rm -rf ~/.gradle/caches/
+        rm -rf app/build/
+        ./gradlew clean --no-daemon
     
     - name: Build Debug APK
       run: ./gradlew assembleDebug --no-daemon
