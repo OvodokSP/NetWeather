@@ -34,19 +34,24 @@ jobs:
     
     - name: Fix compilation errors
       run: python3 fix_errors.py
-          
+    
     - name: Fix final error
       run: python3 fix_final.py
     
+    - name: Fix final error v2
+      run: python3 fix_final_v2.py
+    
     - name: Verify project structure
       run: |
-        echo "=== Java files ==="
-        find app/src/main/java -name "*.kt" | head -20
+        echo "=== Checking fixed files ==="
+        head -50 app/src/main/java/com/netweather/presentation/main/components/AvailabilityIndexCard.kt
         echo "=== Resource files ==="
         ls -la app/src/main/res/values/
         ls -la app/src/main/res/xml/
         ls -la app/src/main/res/drawable/
-        ls -la app/src/main/res/layout/
+    
+    - name: Clean Gradle cache
+      run: ./gradlew clean --no-daemon
     
     - name: Build Debug APK
       run: ./gradlew assembleDebug --no-daemon
