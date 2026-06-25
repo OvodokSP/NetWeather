@@ -34,6 +34,9 @@ jobs:
     
     - name: Fix compilation errors
       run: python3 fix_errors.py
+          
+    - name: Fix final error
+      run: python3 fix_final.py
     
     - name: Verify project structure
       run: |
