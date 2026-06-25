@@ -29,21 +29,57 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
     
-    - name: Generate placeholder icons
+    - name: Create placeholder icons
       run: |
         mkdir -p app/src/main/res/mipmap-mdpi
         mkdir -p app/src/main/res/mipmap-hdpi
         mkdir -p app/src/main/res/mipmap-xhdpi
         mkdir -p app/src/main/res/mipmap-xxhdpi
         mkdir -p app/src/main/res/mipmap-xxxhdpi
-        convert -size 48x48 xc:'#006C4C' app/src/main/res/mipmap-mdpi/ic_launcher.png
-        convert -size 72x72 xc:'#006C4C' app/src/main/res/mipmap-hdpi/ic_launcher.png
-        convert -size 96x96 xc:'#006C4C' app/src/main/res/mipmap-xhdpi/ic_launcher.png
-        convert -size 144x144 xc:'#006C4C' app/src/main/res/mipmap-xxhdpi/ic_launcher.png
-        convert -size 192x192 xc:'#006C4C' app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
-        for size in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
-          cp app/src/main/res/mipmap-$size/ic_launcher.png app/src/main/res/mipmap-$size/ic_launcher_round.png
-        done
+        
+        # Создаём простые XML векторные иконки вместо PNG
+        cat > app/src/main/res/drawable/ic_launcher_foreground.xml << 'EOF'
+        <vector xmlns:android="http://schemas.android.com/apk/res/android"
+            android:width="108dp"
+            android:height="108dp"
+            android:viewportWidth="108"
+            android:viewportHeight="108">
+            <path
+                android:fillColor="#FFFFFF"
+                android:pathData="M72,58c0,-6.6 -5.4,-12 -12,-12c-0.7,0 -1.4,0.1 -2,0.2C56.6,39.5 50,34 42,34c-8.8,0 -16,7.2 -16,16c0,0.5 0,1 0.1,1.5C22.4,52.6 20,56 20,60c0,5.5 4.5,10 10,10h40C75.5,70 80,65.5 80,60C80,54.5 76.5,50 72,50z"/>
+            <path
+                android:fillColor="#006C4C"
+                android:pathData="M54,50c-3.3,0 -6,2.7 -6,6s2.7,6 6,6s6,-2.7 6,-6S57.3,50 54,50z"/>
+        </vector>
+        EOF
+        
+        cat > app/src/main/res/drawable/ic_launcher_background.xml << 'EOF'
+        <vector xmlns:android="http://schemas.android.com/apk/res/android"
+            android:width="108dp"
+            android:height="108dp"
+            android:viewportWidth="108"
+            android:viewportHeight="108">
+            <path
+                android:fillColor="#006C4C"
+                android:pathData="M0,0h108v108h-108z"/>
+        </vector>
+        EOF
+        
+        cat > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml << 'EOF'
+        <?xml version="1.0" encoding="utf-8"?>
+        <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+            <background android:drawable="@drawable/ic_launcher_background"/>
+            <foreground android:drawable="@drawable/ic_launcher_foreground"/>
+        </adaptive-icon>
+        EOF
+        
+        cat > app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml << 'EOF'
+        <?xml version="1.0" encoding="utf-8"?>
+        <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+            <background android:drawable="@drawable/ic_launcher_background"/>
+            <foreground android:drawable="@drawable/ic_launcher_foreground"/>
+        </adaptive-icon>
+        EOF
     
     - name: Build Debug APK
       run: ./gradlew assembleDebug
