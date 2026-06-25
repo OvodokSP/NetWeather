@@ -32,6 +32,9 @@ jobs:
     - name: Run setup script
       run: python3 setup_project.py
     
+    - name: Fix compilation errors
+      run: python3 fix_errors.py
+    
     - name: Verify project structure
       run: |
         echo "=== Java files ==="
