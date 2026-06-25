@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Widget Colors -->
+    <color name="widget_background">#FFFFFFFF</color>
+    <color name="widget_background_dark">#FF1F1F1F</color>
+    <color name="widget_text_primary">#FF191C1A</color>
+    <color name="widget_text_secondary">#FF707973</color>
+    <color name="widget_divider">#FFE0E0E0</color>
+    
+    <!-- Status Colors -->
+    <color name="status_normal">#FF2ECC71</color>
+    <color name="status_warning">#FFF1C40F</color>
+    <color name="status_restricted">#FFE67E22</color>
+    <color name="status_error">#FFE74C3C</color>
+    <color name="status_unknown">#FF95A5A6</color>
+    
+    <!-- Theme Colors -->
+    <color name="primary">#FF006C4C</color>
+    <color name="primary_dark">#FF6CDBAC</color>
+</resources>

@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_large_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- Заголовок с индексом и режимом -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <!-- Индекс доступности -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center">
+
+            <TextView
+                android:id="@+id/tv_availability_index"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0%"
+                android:textSize="42sp"
+                android:textStyle="bold"
+                android:textColor="@color/widget_text_primary" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Доступность"
+                android:textSize="11sp"
+                android:textColor="@color/widget_text_secondary" />
+
+        </LinearLayout>
+
+        <!-- Режим сети -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center">
+
+            <TextView
+                android:id="@+id/tv_network_mode_emoji"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🟢"
+                android:textSize="36sp" />
+
+            <TextView
+                android:id="@+id/tv_network_mode"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Нормальный доступ"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textColor="@color/widget_text_primary" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- Разделитель -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="12dp"
+        android:background="@color/widget_divider" />
+
+    <!-- Заголовок проблемных сервисов -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Проблемные сервисы"
+        android:textSize="13sp"
+        android:textStyle="bold"
+        android:textColor="@color/widget_text_primary" />
+
+    <!-- Список проблемных сервисов (упрощённо через TextView) -->
+    <TextView
+        android:id="@+id/tv_problem_services"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="8dp"
+        android:text="Все сервисы работают нормально"
+        android:textSize="12sp"
+        android:textColor="@color/widget_text_primary" />
+
+    <!-- Время последней проверки -->
+    <TextView
+        android:id="@+id/tv_last_check_time"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Обновлено: --:--"
+        android:textSize="11sp"
+        android:textColor="@color/widget_text_secondary"
+        android:gravity="center" />
+
+</LinearLayout>
