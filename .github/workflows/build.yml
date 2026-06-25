@@ -42,13 +42,9 @@ jobs:
     
     - name: Verify resources
       run: |
-        echo "=== Values ==="
         ls -la app/src/main/res/values/
-        echo "=== XML ==="
         ls -la app/src/main/res/xml/
-        echo "=== Drawable ==="
         ls -la app/src/main/res/drawable/
-        echo "=== strings.xml content ==="
         cat app/src/main/res/values/strings.xml
     
     - name: Build Debug APK
