@@ -29,19 +29,59 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
     
-    - name: Create launcher icons from Base64
+    - name: Create all resource directories
       run: |
         mkdir -p app/src/main/res/drawable
         mkdir -p app/src/main/res/mipmap-anydpi-v26
+        mkdir -p app/src/main/res/mipmap-mdpi
+        mkdir -p app/src/main/res/mipmap-hdpi
+        mkdir -p app/src/main/res/mipmap-xhdpi
+        mkdir -p app/src/main/res/mipmap-xxhdpi
+        mkdir -p app/src/main/res/mipmap-xxxhdpi
+        mkdir -p app/src/main/res/values
+        mkdir -p app/src/main/res/xml
+        mkdir -p app/src/main/res/layout
+        echo "Directories created"
+    
+    - name: Create launcher icons
+      run: |
+        echo 'PHZlY3RvciB4bWxuczphbmRyb2lkPSJodHRwOi8vc2NoZW1hcy5hbmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiIGFuZHJvaWQ6d2lkdGg9IjEwOGRwIiBhbmRyb2lkOmhlaWdodD0iMTA4ZHAiIGFuZHJvaWQ6dmlld3BvcnRXaWR0aD0iMTA4IiBhbmRyb2lkOnZpZXdwb3J0SGVpZ2h0PSIxMDgiPjxwYXRoIGFuZHJvaWQ6ZmlsbENvbG9yPSIjRkZGRkZGIiBhbmRyb2lkOnBhdGhEYXRhPSJNNzIsNThjMCwtNi42IC01LjQsLTEyIC0xMiwtMTJjLTAuNywwIC0xLjQsMC4xIC0yLDAuMkM1Ni42LDM5LjUgNTAsMzQgNDIsMzRjLTguOCwwIC0xNiw3LjIgLTE2LDE2YzAsMC41IDAsMSAwLjEsMS41QzIyLjQsNTIuNiAyMCw1NiAyMCw2MGMwLDUuNSA0LjUsMTAgMTAsMTBoNDBDNzUuNSw3MCA4MCw2NS41IDgwLDYwQzgwLDU0LjUgNzYuNSw1MCA3Miw1MHoiLz48cGF0aCBhbmRyb2lkOmZpbGxDb2xvcj0iIzAwNkM0QyIgYW5kcm9pZDpwYXRoRGF0YT0iTTU0LDUwYy0zLjMsMCAtNiwyLjcgLTYsNnMyLjcsNiA2LDZzNiwtMi43IDYsLTZTNzcuMyw1MCA1NCw1MHoiLz48L3ZlY3Rvcj4=' | base64 -d > app/src/main/res/drawable/ic_launcher_foreground.xml
+        echo 'PHZlY3RvciB4bWxuczphbmRyb2lkPSJodHRwOi8vc2NoZW1hcy5hbmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiIGFuZHJvaWQ6d2lkdGg9IjEwOGRwIiBhbmRyb2lkOmhlaWdodD0iMTA4ZHAiIGFuZHJvaWQ6dmlld3BvcnRXaWR0aD0iMTA4IiBhbmRyb2lkOnZpZXdwb3J0SGVpZ2h0PSIxMDgiPjxwYXRoIGFuZHJvaWQ6ZmlsbENvbG9yPSIjMDA2QzRDIiBhbmRyb2lkOnBhdGhEYXRhPSJNMCwwaDEwOHYxMDhoLTEwOHoiLz48L3ZlY3Rvcj4=' | base64 -d > app/src/main/res/drawable/ic_launcher_background.xml
+        echo 'PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48YWRhcHRpdmUtaWNvbiB4bWxuczphbmRyb2lkPSJodHRwOi8vc2NoZW1hcy5hbmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiPjxiYWNrZ3JvdW5kIGFuZHJvaWQ6ZHJhd2FibGU9IkBkcmF3YWJsZS9pY19sYXVuY2hlcl9iYWNrZ3JvdW5kIi8+PGZvcmVncm91bmQgYW5kcm9pZDpkcmF3YWJsZT0iQGRyYXdhYmxlL2ljX2xhdW5jaGVyX2ZvcmVncm91bmQiLz48L2FkYXB0aXZlLWljb24+' | base64 -d > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+        echo 'PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48YWRhcHRpdmUtaWNvbiB4bWxuczphbmRyb2lkPSJodHRwOi8vc2NoZW1hcy5hbmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiPjxiYWNrZ3JvdW5kIGFuZHJvaWQ6ZHJhd2FibGU9IkBkcmF3YWJsZS9pY19sYXVuY2hlcl9iYWNrZ3JvdW5kIi8+PGZvcmVncm91bmQgYW5kcm9pZDpkcmF3YWJsZT0iQGRyYXdhYmxlL2ljX2xhdW5jaGVyX2ZvcmVncm91bmQiLz48L2FkYXB0aXZlLWljb24+' | base64 -d > app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+        echo "Icons created"
+    
+    - name: Create strings.xml
+      run: |
+        echo 'PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPHJlc291cmNlcz4KICAgIDxzdHJpbmcgbmFtZT0iYXBwX25hbWUiPk5ldFdlYXRoZXI8L3N0cmluZz4KICAgIDxzdHJpbmcgbmFtZT0id2lkZ2V0X3NtYWxsX2xhYmVsIj5OZXRXZWF0aGVyICjQvdCw0Y3QsCk8L3RhZC48L3N0cmluZz4KICAgIDxzdHJpbmcgbmFtZT0id2lkZ2V0X21lZGl1bV9sYWJlbCI+TmV0V2VhdGhlciAo0KPQpdC/0YEuPC9zdHJpbmc+CiAgICA8c3RyaW5nIG5hbWU9IndpZGdldF9sYXJnZV9sYWJlbCI+TmV0V2VhdGhlciAo0JLQtdGA0YEuPC9zdHJpbmc+CiAgICA8c3RyaW5nIG5hbWU9IndpZGdldF9zbWFsbF9kZXNjcmlwdGlvbiI+0JrQsNC70L7QstCw0YLQsCDQvdCw0Y3QvNC+0LI8L3N0cmluZz4KICAgIDxzdHJpbmcgbmFtZT0id2lkZ2V0X21lZGl1bV9kZXNjcmlwdGlvbiI+0JrQsNC70L7QstCw0YLQsCDQstC40L3QvdC+PC9zdHJpbmc+CiAgICA8c3RyaW5nIG5hbWU9IndpZ2V0X2xhcmdlX2Rlc2NyaXB0aW9uIj7Qn9C10L3QuNC10L3QvtCx0L7QstC+INC/0L7RgNC+0YE8L3N0cmluZz4KPC9yZXNvdXJjZXM+' | base64 -d > app/src/main/res/values/strings.xml
+        echo "strings.xml created"
+    
+    - name: Create themes.xml
+      run: |
+        echo 'PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPHJlc291cmNlcz4KICAgIDxzdHlsZSBuYW1lPSJUaGVtZS5OZXRXZWF0aGVyIiBwYXJlbnQ9ImFuZHJvaWQ6VGhlbWUuTWF0ZXJpYWwuTGlnaHQuTm9BY3Rpb25CYXIiPgogICAgICAgIDxpdGVtIG5hbWU9ImFuZHJvaWQ6c3RhdHVzQmFyQ29sb3IiPkBhbmRyb2lkOmNvbG9yL3RyYW5zcGFyZW50PC9pdGVtPgogICAgPC9zdHlsZT4KPC9yZXNvdXJjZXM+' | base64 -d > app/src/main/res/values/themes.xml
+        echo "themes.xml created"
+    
+    - name: Create xml resource files
+      run: |
+        echo 'PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPGRhdGEtZXh0cmFjdGlvbi1ydWxlcz4KICAgIDxjbG91ZC1iYWNrdXA+CiAgICAgICAgPGluY2x1ZGUgZG9tYWluPSJzaGFyZWRwcmVmIiBwYXRoPSIuIi8+CiAgICA8L2Nsb3VkLWJhY2t1cD4KICAgIDxkZXZpY2UtdHJhbnNmZXI+CiAgICAgICAgPGluY2x1ZGUgZG9tYWluPSJzaGFyZWRwcmVmIiBwYXRoPSIuIi8+CiAgICA8L2RldmljZS10cmFuc2Zlcj4KPC9kYXRhLWV4dHJhY3Rpb24tcnVsZXM+' | base64 -d > app/src/main/res/xml/data_extraction_rules.xml
         
-        echo 'PHZlY3RvciB4bWxuczphbmRyb2lkPSJodHRwOi8vc2NoZW1hcy5hbmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiCiAgICBhbmRyb2lkOndpZHRoPSIxMDhkcCIKICAgIGFuZHJvaWQ6aGVpZ2h0PSIxMDhkcCIKICAgIGFuZHJvaWQ6dmlld3BvcnRXaWR0aD0iMTA4IgogICAgYW5kcm9pZDp2aWV3cG9ydEhlaWdodD0iMTA4Ij4KICAgIDxwYXRoCiAgICAgICAgYW5kcm9pZDpmaWxsQ29sb3I9IiNGRkZGRkYiCiAgICAgICAgYW5kcm9pZDpwYXRoRGF0YT0iTTcyLDU4YzAsLTYuNiAtNS40LC0xMiAtMTIsLTEyYy0wLjcsMCAtMS40LDAuMSAtMiwwLjJDNTYuNiwzOS41IDUwLDM0IDQyLDM0Yy04LjgsMCAtMTYsNy4yIC0xNiwxNmMwLDAuNSAwLDEgMC4xLDEuNUMyMi40LDUyLjYgMjAsNTYgMjAsNjBjMCw1LjUgNC41LDEwIDEwLDEwaDQwQzc1LjUsNzAgODAsNjUuNSA4MCw2MEM4MCw1NC41IDc2LjUsNTAgNzIsNTB6Ii8+CiAgICA8cGF0aAogICAgICAgIGFuZHJvaWQ6ZmlsbENvbG9yPSIjMDA2QzRDIgogICAgICAgIGFuZHJvaWQ6cGF0aERhdGE9Ik01NCw1MGMtMy4zLDAgLTYsMi43IC02LDZzMi43LDYgNiw2czYsLTIuNyA2LC02UzU3LjMsNTAgNTQsNTB6Ii8+CjwvdmVjdG9yPg==' | base64 -d > app/src/main/res/drawable/ic_launcher_foreground.xml
+        echo 'PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPGZ1bGwtYmFja3VwLWNvbnRlbnQ+CiAgICA8aW5jbHVkZSBkb21haW49InNoYXJlZHByZWYiIHBhdGg9Ii4iLz4KPC9mdWxsLWJhY2t1cC1jb250ZW50Pg==' | base64 -d > app/src/main/res/xml/backup_rules.xml
         
-        echo 'PHZlY3RvciB4bWxuczphbmRyb2lkPSJodHRwOi8vc2NoZW1hcy5hbmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiCiAgICBhbmRyb2lkOndpZHRoPSIxMDhkcCIKICAgIGFuZHJvaWQ6aGVpZ2h0PSIxMDhkcCIKICAgIGFuZHJvaWQ6dmlld3BvcnRXaWR0aD0iMTA4IgogICAgYW5kcm9pZDp2aWV3cG9ydEhlaWdodD0iMTA4Ij4KICAgIDxwYXRoCiAgICAgICAgYW5kcm9pZDpmaWxsQ29sb3I9IiMwMDZDNEMiCiAgICAgICAgYW5kcm9pZDpwYXRoRGF0YT0iTTAsMGgxMDh2MTA4aC0xMDh6Ii8+CjwvdmVjdG9yPg==' | base64 -d > app/src/main/res/drawable/ic_launcher_background.xml
+        echo 'PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPGFwcHdpZGdldC1wcm92aWRlciB4bWxuczphbmRyb2lkPSJodHRwOi8vc2NoZW1hcy5hbmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiCiAgICBhbmRyb2lkOm1pbldpZHRoPSIxMTBkcCIKICAgIGFuZHJvaWQ6bWluSGVpZ2h0PSIxMTBkcCIKICAgIGFuZHJvaWQ6dXBkYXRlUGVyaW9kTWlsbGlzPSIxODAwMDAwIgogICAgYW5kcm9pZDppbml0aWFsTGF5b3V0PSJAbGF5b3V0L3dpZGdldF9zbWFsbCIKICAgIGFuZHJvaWQ6cmVzaXplTW9kZT0iaG9yaXpvbnRhbHx2ZXJ0aWNhbCIKICAgIGFuZHJvaWQ6d2lkZ2V0Q2F0ZWdvcnk9ImhvbWVfc2NyZWVuIiAvPg==' | base64 -d > app/src/main/res/xml/widget_small_info.xml
         
-        echo 'PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPGFkYXB0aXZlLWljb24geG1sbnM6YW5kcm9pZD0iaHR0cDovL3NjaGVtYXMuYW5kcm9pZC5jb20vYXBrL3Jlcy9hbmRyb2lkIj4KICAgIDxiYWNrZ3JvdW5kIGFuZHJvaWQ6ZHJhd2FibGU9IkBkcmF3YWJsZS9pY19sYXVuY2hlcl9iYWNrZ3JvdW5kIi8+CiAgICA8Zm9yZWdyb3VuZCBhbmRyb2lkOmRyYXdhYmxlPSJAZHJhd2FibGUvaWNfbGF1bmNoZXJfZm9yZWdyb3VuZCIvPgo8L2FkYXB0aXZlLWljb24+' | base64 -d > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+        echo 'PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPGFwcHdpZGdldC1wcm92aWRlciB4bWxuczphbmRyb2lkPSJodHRwOi8vc2NoZW1hcy5hbmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiCiAgICBhbmRyb2lkOm1pbldpZHRoPSIyNTBkcCIKICAgIGFuZHJvaWQ6bWluSGVpZ2h0PSIxMTBkcCIKICAgIGFuZHJvaWQ6dXBkYXRlUGVyaW9kTWlsbGlzPSIxODAwMDAwIgogICAgYW5kcm9pZDppbml0aWFsTGF5b3V0PSJAbGF5b3V0L3dpZGdldF9tZWRpdW0iCiAgICBhbmRyb2lkOnJlc2l6ZU1vZGU9Imhvcml6b250YWx8dmVydGljYWwiCiAgICBhbmRyb2lkOndpZGdldENhdGVnb3J5PSJob21lX3NjcmVlbiIgLz4=' | base64 -d > app/src/main/res/xml/widget_medium_info.xml
         
-        echo 'PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPGFkYXB0aXZlLWljb24geG1sbnM6YW5kcm9pZD0iaHR0cDovL3NjaGVtYXMuYW5kcm9pZC5jb20vYXBrL3Jlcy9hbmRyb2lkIj4KICAgIDxiYWNrZ3JvdW5kIGFuZHJvaWQ6ZHJhd2FibGU9IkBkcmF3YWJsZS9pY19sYXVuY2hlcl9iYWNrZ3JvdW5kIi8+CiAgICA8Zm9yZWdyb3VuZCBhbmRyb2lkOmRyYXdhYmxlPSJAZHJhd2FibGUvaWNfbGF1bmNoZXJfZm9yZWdyb3VuZCIvPgo8L2FkYXB0aXZlLWljb24+' | base64 -d > app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+        echo 'PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPGFwcHdpZGdldC1wcm92aWRlciB4bWxuczphbmRyb2lkPSJodHRwOi8vc2NoZW1hcy5hbmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiCiAgICBhbmRyb2lkOm1pbldpZHRoPSIyNTBkcCIKICAgIGFuZHJvaWQ6bWluSGVpZ2h0PSIyNTBkcCIKICAgIGFuZHJvaWQ6dXBkYXRlUGVyaW9kTWlsbGlzPSIxODAwMDAwIgogICAgYW5kcm9pZDppbml0aWFsTGF5b3V0PSJAbGF5b3V0L3dpZGdldF9sYXJnZSIKICAgIGFuZHJvaWQ6cmVzaXplTW9kZT0iaG9yaXpvbnRhbHx2ZXJ0aWNhbCIKICAgIGFuZHJvaWQ6d2lkZ2V0Q2F0ZWdvcnk9ImhvbWVfc2NyZWVuIiAvPg==' | base64 -d > app/src/main/res/xml/widget_large_info.xml
         
+        echo "XML files created"
+    
+    - name: Verify all resources
+      run: |
+        echo "=== Values directory ==="
+        ls -la app/src/main/res/values/
+        echo "=== XML directory ==="
+        ls -la app/src/main/res/xml/
+        echo "=== Drawable directory ==="
         ls -la app/src/main/res/drawable/
     
     - name: Build Debug APK
