@@ -29,60 +29,23 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
     
-    - name: Create placeholder icons
+    - name: Create launcher icons from Base64
       run: |
-        mkdir -p app/src/main/res/mipmap-mdpi
-        mkdir -p app/src/main/res/mipmap-hdpi
-        mkdir -p app/src/main/res/mipmap-xhdpi
-        mkdir -p app/src/main/res/mipmap-xxhdpi
-        mkdir -p app/src/main/res/mipmap-xxxhdpi
+        mkdir -p app/src/main/res/drawable
+        mkdir -p app/src/main/res/mipmap-anydpi-v26
         
-        # Создаём простые XML векторные иконки вместо PNG
-        cat > app/src/main/res/drawable/ic_launcher_foreground.xml << 'EOF'
-        <vector xmlns:android="http://schemas.android.com/apk/res/android"
-            android:width="108dp"
-            android:height="108dp"
-            android:viewportWidth="108"
-            android:viewportHeight="108">
-            <path
-                android:fillColor="#FFFFFF"
-                android:pathData="M72,58c0,-6.6 -5.4,-12 -12,-12c-0.7,0 -1.4,0.1 -2,0.2C56.6,39.5 50,34 42,34c-8.8,0 -16,7.2 -16,16c0,0.5 0,1 0.1,1.5C22.4,52.6 20,56 20,60c0,5.5 4.5,10 10,10h40C75.5,70 80,65.5 80,60C80,54.5 76.5,50 72,50z"/>
-            <path
-                android:fillColor="#006C4C"
-                android:pathData="M54,50c-3.3,0 -6,2.7 -6,6s2.7,6 6,6s6,-2.7 6,-6S57.3,50 54,50z"/>
-        </vector>
-        EOF
+        echo 'PHZlY3RvciB4bWxuczphbmRyb2lkPSJodHRwOi8vc2NoZW1hcy5hbmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiCiAgICBhbmRyb2lkOndpZHRoPSIxMDhkcCIKICAgIGFuZHJvaWQ6aGVpZ2h0PSIxMDhkcCIKICAgIGFuZHJvaWQ6dmlld3BvcnRXaWR0aD0iMTA4IgogICAgYW5kcm9pZDp2aWV3cG9ydEhlaWdodD0iMTA4Ij4KICAgIDxwYXRoCiAgICAgICAgYW5kcm9pZDpmaWxsQ29sb3I9IiNGRkZGRkYiCiAgICAgICAgYW5kcm9pZDpwYXRoRGF0YT0iTTcyLDU4YzAsLTYuNiAtNS40LC0xMiAtMTIsLTEyYy0wLjcsMCAtMS40LDAuMSAtMiwwLjJDNTYuNiwzOS41IDUwLDM0IDQyLDM0Yy04LjgsMCAtMTYsNy4yIC0xNiwxNmMwLDAuNSAwLDEgMC4xLDEuNUMyMi40LDUyLjYgMjAsNTYgMjAsNjBjMCw1LjUgNC41LDEwIDEwLDEwaDQwQzc1LjUsNzAgODAsNjUuNSA4MCw2MEM4MCw1NC41IDc2LjUsNTAgNzIsNTB6Ii8+CiAgICA8cGF0aAogICAgICAgIGFuZHJvaWQ6ZmlsbENvbG9yPSIjMDA2QzRDIgogICAgICAgIGFuZHJvaWQ6cGF0aERhdGE9Ik01NCw1MGMtMy4zLDAgLTYsMi43IC02LDZzMi43LDYgNiw2czYsLTIuNyA2LC02UzU3LjMsNTAgNTQsNTB6Ii8+CjwvdmVjdG9yPg==' | base64 -d > app/src/main/res/drawable/ic_launcher_foreground.xml
         
-        cat > app/src/main/res/drawable/ic_launcher_background.xml << 'EOF'
-        <vector xmlns:android="http://schemas.android.com/apk/res/android"
-            android:width="108dp"
-            android:height="108dp"
-            android:viewportWidth="108"
-            android:viewportHeight="108">
-            <path
-                android:fillColor="#006C4C"
-                android:pathData="M0,0h108v108h-108z"/>
-        </vector>
-        EOF
+        echo 'PHZlY3RvciB4bWxuczphbmRyb2lkPSJodHRwOi8vc2NoZW1hcy5hbmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiCiAgICBhbmRyb2lkOndpZHRoPSIxMDhkcCIKICAgIGFuZHJvaWQ6aGVpZ2h0PSIxMDhkcCIKICAgIGFuZHJvaWQ6dmlld3BvcnRXaWR0aD0iMTA4IgogICAgYW5kcm9pZDp2aWV3cG9ydEhlaWdodD0iMTA4Ij4KICAgIDxwYXRoCiAgICAgICAgYW5kcm9pZDpmaWxsQ29sb3I9IiMwMDZDNEMiCiAgICAgICAgYW5kcm9pZDpwYXRoRGF0YT0iTTAsMGgxMDh2MTA4aC0xMDh6Ii8+CjwvdmVjdG9yPg==' | base64 -d > app/src/main/res/drawable/ic_launcher_background.xml
         
-        cat > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml << 'EOF'
-        <?xml version="1.0" encoding="utf-8"?>
-        <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-            <background android:drawable="@drawable/ic_launcher_background"/>
-            <foreground android:drawable="@drawable/ic_launcher_foreground"/>
-        </adaptive-icon>
-        EOF
+        echo 'PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPGFkYXB0aXZlLWljb24geG1sbnM6YW5kcm9pZD0iaHR0cDovL3NjaGVtYXMuYW5kcm9pZC5jb20vYXBrL3Jlcy9hbmRyb2lkIj4KICAgIDxiYWNrZ3JvdW5kIGFuZHJvaWQ6ZHJhd2FibGU9IkBkcmF3YWJsZS9pY19sYXVuY2hlcl9iYWNrZ3JvdW5kIi8+CiAgICA8Zm9yZWdyb3VuZCBhbmRyb2lkOmRyYXdhYmxlPSJAZHJhd2FibGUvaWNfbGF1bmNoZXJfZm9yZWdyb3VuZCIvPgo8L2FkYXB0aXZlLWljb24+' | base64 -d > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
         
-        cat > app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml << 'EOF'
-        <?xml version="1.0" encoding="utf-8"?>
-        <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-            <background android:drawable="@drawable/ic_launcher_background"/>
-            <foreground android:drawable="@drawable/ic_launcher_foreground"/>
-        </adaptive-icon>
-        EOF
+        echo 'PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPGFkYXB0aXZlLWljb24geG1sbnM6YW5kcm9pZD0iaHR0cDovL3NjaGVtYXMuYW5kcm9pZC5jb20vYXBrL3Jlcy9hbmRyb2lkIj4KICAgIDxiYWNrZ3JvdW5kIGFuZHJvaWQ6ZHJhd2FibGU9IkBkcmF3YWJsZS9pY19sYXVuY2hlcl9iYWNrZ3JvdW5kIi8+CiAgICA8Zm9yZWdyb3VuZCBhbmRyb2lkOmRyYXdhYmxlPSJAZHJhd2FibGUvaWNfbGF1bmNoZXJfZm9yZWdyb3VuZCIvPgo8L2FkYXB0aXZlLWljb24+' | base64 -d > app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+        
+        ls -la app/src/main/res/drawable/
     
     - name: Build Debug APK
-      run: ./gradlew assembleDebug
+      run: ./gradlew assembleDebug --no-daemon
     
     - name: Upload APK
       uses: actions/upload-artifact@v4
