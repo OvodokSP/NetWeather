@@ -1,0 +1,28 @@
+name: Fix Base Mipmap Icons
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add base mipmap launcher icons
+        run: |
+          mkdir -p app/src/main/res/mipmap
+          mkdir -p app/src/main/res/mipmap-anydpi-v26
+
+          cp app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml app/src/main/res/mipmap/ic_launcher.xml
+          cp app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml app/src/main/res/mipmap/ic_launcher_round.xml
+
+      - name: Commit changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: Add base mipmap launcher icons
+          branch: main
