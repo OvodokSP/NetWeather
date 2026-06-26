@@ -1,0 +1,60 @@
+name: Manual Repository Patch
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Apply repository cleanup patch
+        run: |
+          set -e
+
+          cat > AGENTS.md <<'EOF'
+          # NetWeather Agent Rules
+
+          1. Do not rewrite the project from scratch unless explicitly requested.
+          2. Use branches: fix/*, feature/*, release/*.
+          3. Before commit, run:
+             ./gradlew clean
+             ./gradlew test
+             ./gradlew lint
+             ./gradlew assembleDebug
+          4. Do not use Python scripts to patch Android source code or CI.
+          5. GitHub Actions must build directly through Gradle.
+          6. Main screen, widget and background monitoring must use one source of truth.
+          7. After every network check, update persistent state and widgets.
+          8. Do not use PeriodicWorkRequest for intervals below 15 minutes.
+          9. For 30 seconds and 1 minute use OneTimeWorkRequest with re-scheduling.
+          10. Update README.md and CHANGELOG.md after functional changes.
+          11. Do not leave TODOs or placeholder implementations.
+          EOF
+
+          rm -f setup_project.py
+          rm -f fix_errors.py
+          rm -f fix_final.py
+          rm -f fix_final_v2.py
+          rm -f fix_canvas_final.py
+          rm -f fix_structure.py
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v8
+        with:
+          commit-message: "Add agent rules and remove Python patch scripts"
+          branch: fix/agent-rules-cleanup
+          title: "Add AGENTS.md and remove Python patch scripts"
+          body: |
+            This PR:
+            - adds AGENTS.md with project rules
+            - removes Python auto-fix scripts
+            - keeps workflow files unchanged to avoid GitHub workflow permission restrictions
+          delete-branch: true

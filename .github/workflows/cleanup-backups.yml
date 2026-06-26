@@ -1,0 +1,25 @@
+name: Cleanup Backup Files
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Remove backup files
+        run: |
+          find app/src/main/res -name "*.backup" -type f -delete
+          find app/src/main -name "*.backup" -type f -delete
+
+      - name: Commit cleanup
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: Remove invalid backup resource files
+          branch: main

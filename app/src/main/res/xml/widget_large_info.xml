@@ -8,7 +8,11 @@
     android:minResizeHeight="250dp"
     android:maxResizeWidth="400dp"
     android:maxResizeHeight="400dp"
+<<<<<<< HEAD
     android:updatePeriodMillis="30000"
+=======
+    android:updatePeriodMillis="1800000"
+>>>>>>> 7cc6a7d6689f532881dba1bf02308ce22004ecb0
     android:initialLayout="@layout/widget_large"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen"

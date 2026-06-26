@@ -1,0 +1,27 @@
+name: Apply Fixed Package
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply fixed package
+        run: |
+          unzip -o patches/NetWeather-fixed-package.zip -d /tmp/netweather-fixed
+          rsync -av --delete \
+            --exclude=".git" \
+            /tmp/netweather-fixed/NetWeather-main/ ./
+
+      - name: Commit fixed package
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: Apply fixed NetWeather package
+          branch: main
