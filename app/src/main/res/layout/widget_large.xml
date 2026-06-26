@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="12dp"
+    android:background="@drawable/widget_bg">
+    <TextView android:id="@+id/title" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="NetWeather" android:textStyle="bold" android:textColor="#111827" android:textSize="14sp" />
+    <TextView android:id="@+id/index" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Нет данных" android:textStyle="bold" android:textColor="#1565C0" android:textSize="28sp" />
+    <TextView android:id="@+id/mode" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Нажмите обновить" android:textColor="#374151" android:textSize="13sp" />
+    <TextView android:id="@+id/counts" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="" android:textColor="#6B7280" android:textSize="12sp" />
+    <TextView android:id="@+id/time" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="" android:textColor="#6B7280" android:textSize="11sp" />
+    <TextView android:id="@+id/problemList" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="" android:textSize="12sp" android:textColor="#4B5563" android:maxLines="5" />
+</LinearLayout>
