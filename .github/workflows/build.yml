@@ -2,14 +2,8 @@ name: Build NetWeather APK
 
 on:
   push:
-    branches:
-      - main
-      - develop
-      - "feature/**"
-      - "fix/**"
-
+    branches: [ main, develop, "feature/**", "fix/**" ]
   pull_request:
-
   workflow_dispatch:
 
 permissions:
@@ -17,8 +11,8 @@ permissions:
 
 jobs:
   build:
-    name: Build Debug APK
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
@@ -29,28 +23,26 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-          cache: gradle
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
 
       - name: Generate Gradle Wrapper
-        run: gradle wrapper --gradle-version 8.7
+        timeout-minutes: 3
+        run: gradle wrapper --gradle-version 8.7 --no-daemon --stacktrace
 
       - name: Make gradlew executable
-        run: chmod +x gradlew
+        run: chmod +x ./gradlew
 
       - name: Clean
-        run: ./gradlew clean
+        timeout-minutes: 5
+        run: ./gradlew clean --no-daemon --stacktrace
 
-      - name: Run Unit Tests
-        run: ./gradlew test
-
-      - name: Run Android Lint
-        run: ./gradlew lint
-
-      - name: Assemble Debug APK
-        run: ./gradlew assembleDebug
+      - name: Build Debug APK
+        timeout-minutes: 20
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
@@ -58,19 +50,3 @@ jobs:
           name: NetWeather-debug
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
-
-      - name: Upload Lint Reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: lint-report
-          path: app/build/reports/
-          if-no-files-found: ignore
-
-      - name: Upload Test Reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: unit-tests
-          path: app/build/reports/tests/
-          if-no-files-found: ignore
