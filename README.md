@@ -44,3 +44,6 @@ MIT. Можно использовать свободно.
 - Расширенная аналитика
 - Сравнение провайдеров
 - Прогноз состояния сети
+## Maintenance notes
+
+This repository is expected to build through Gradle/GitHub Actions without Python auto-fix scripts. Short monitoring intervals such as 30 seconds are implemented as active one-time WorkManager checks because Android does not support sub-15-minute `PeriodicWorkRequest` intervals.

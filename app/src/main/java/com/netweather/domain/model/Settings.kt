@@ -17,7 +17,7 @@ data class Settings(
 ) {
     companion object {
         const val DEFAULT_CHECK_INTERVAL_MINUTES = 15
-        const val MIN_CHECK_INTERVAL_MINUTES = 5
+        const val MIN_CHECK_INTERVAL_MINUTES = 0
         const val MAX_CHECK_INTERVAL_MINUTES = 60
         
         const val DEFAULT_CONNECTION_TIMEOUT_MS = 10000L
@@ -34,7 +34,7 @@ data class Settings(
     }
     
     fun getCheckIntervalMs(): Long {
-        return checkIntervalMinutes * 60 * 1000L
+        return if (checkIntervalMinutes == 0) 30_000L else checkIntervalMinutes * 60 * 1000L
     }
     
     fun isValid(): Boolean {

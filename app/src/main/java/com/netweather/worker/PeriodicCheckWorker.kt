@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -128,6 +130,12 @@ class PeriodicCheckWorker @AssistedInject constructor(
             if (settings.enableNotifications) {
                 processNotifications(resources, checkResults, previousResults, settings)
             }
+
+            // Для коротких интервалов WorkManager не поддерживает PeriodicWorkRequest,
+            // поэтому планируем следующую однократную проверку вручную.
+            if (settings.checkIntervalMinutes < 15) {
+                enqueuePeriodicCheck(applicationContext, settings.checkIntervalMinutes.toLong())
+            }
             
             Result.success()
         } catch (e: Exception) {
@@ -192,11 +200,27 @@ class PeriodicCheckWorker @AssistedInject constructor(
         private const val WORK_NAME = "periodic_check_worker"
         
         fun enqueuePeriodicCheck(context: Context, intervalMinutes: Long = 15L) {
+            val workManager = WorkManager.getInstance(context)
+
+            if (intervalMinutes < 15L) {
+                val delaySeconds = if (intervalMinutes <= 0L) 30L else 60L
+                val workRequest = OneTimeWorkRequestBuilder<PeriodicCheckWorker>()
+                    .setInitialDelay(delaySeconds, TimeUnit.SECONDS)
+                    .build()
+
+                workManager.enqueueUniqueWork(
+                    WORK_NAME,
+                    ExistingWorkPolicy.REPLACE,
+                    workRequest
+                )
+                return
+            }
+
             val workRequest = PeriodicWorkRequestBuilder<PeriodicCheckWorker>(
                 intervalMinutes, TimeUnit.MINUTES
             ).build()
             
-            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            workManager.enqueueUniquePeriodicWork(
                 WORK_NAME,
                 ExistingPeriodicWorkPolicy.UPDATE,
                 workRequest

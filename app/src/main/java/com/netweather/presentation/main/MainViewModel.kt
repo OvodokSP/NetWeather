@@ -1,5 +1,6 @@
 package com.netweather.presentation.main
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.netweather.domain.model.AvailabilityIndex
@@ -14,6 +15,8 @@ import com.netweather.domain.repository.ResourceRepository
 import com.netweather.domain.usecase.CalculateAvailabilityIndexUseCase
 import com.netweather.domain.usecase.CheckAllResourcesUseCase
 import com.netweather.domain.usecase.DetermineNetworkModeUseCase
+import com.netweather.widget.WidgetUtils
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,7 +30,8 @@ class MainViewModel @Inject constructor(
     private val diagnosticsRepository: DiagnosticsRepository,
     private val checkAllResourcesUseCase: CheckAllResourcesUseCase,
     private val calculateAvailabilityIndexUseCase: CalculateAvailabilityIndexUseCase,
-    private val determineNetworkModeUseCase: DetermineNetworkModeUseCase
+    private val determineNetworkModeUseCase: DetermineNetworkModeUseCase,
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(MainUiState())
@@ -101,6 +105,7 @@ class MainViewModel @Inject constructor(
                     networkState = networkState,
                     error = null
                 )
+                WidgetUtils.updateAllWidgets(appContext, networkState)
                 
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(

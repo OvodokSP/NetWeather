@@ -2,7 +2,15 @@ name: Build NetWeather APK
 
 on:
   push:
+<<<<<<< HEAD
+    branches:
+      - main
+      - develop
+      - "feature/**"
+      - "fix/**"
+=======
     branches: [ main, develop, "feature/**", "fix/**" ]
+>>>>>>> 7cc6a7d6689f532881dba1bf02308ce22004ecb0
   pull_request:
   workflow_dispatch:
 
@@ -29,9 +37,18 @@ jobs:
         with:
           gradle-version: "8.7"
 
+<<<<<<< HEAD
+      - name: Generate Gradle Wrapper if missing
+        timeout-minutes: 5
+        run: |
+          if [ ! -f ./gradlew ]; then
+            gradle wrapper --gradle-version 8.7 --no-daemon --stacktrace
+          fi
+=======
       - name: Generate Gradle Wrapper
         timeout-minutes: 3
         run: gradle wrapper --gradle-version 8.7 --no-daemon --stacktrace
+>>>>>>> 7cc6a7d6689f532881dba1bf02308ce22004ecb0
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
@@ -49,4 +66,8 @@ jobs:
         with:
           name: NetWeather-debug
           path: app/build/outputs/apk/debug/*.apk
+<<<<<<< HEAD
           if-no-files-found: error
+=======
+          if-no-files-found: error
+>>>>>>> 7cc6a7d6689f532881dba1bf02308ce22004ecb0

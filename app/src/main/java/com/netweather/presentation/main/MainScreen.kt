@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -18,7 +19,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -71,9 +71,7 @@ fun MainScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
-        PullToRefreshBox(
-            isRefreshing = uiState.isLoading,
-            onRefresh = { viewModel.refreshData() },
+Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
@@ -81,12 +79,13 @@ fun MainScreen(
             if (uiState.hasData()) {
                 MainContent(
                     uiState = uiState,
+                    onRefresh = { viewModel.refreshData() },
                     onToggleResource = { resourceId ->
                         viewModel.toggleResource(resourceId)
                     }
                 )
             } else if (!uiState.isLoading) {
-                EmptyState()
+                EmptyState(onRefresh = { viewModel.refreshData() })
             }
         }
     }
@@ -95,6 +94,7 @@ fun MainScreen(
 @Composable
 private fun MainContent(
     uiState: MainUiState,
+    onRefresh: () -> Unit,
     onToggleResource: (Long) -> Unit
 ) {
     val networkState = uiState.networkState ?: return
@@ -104,6 +104,12 @@ private fun MainContent(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        item {
+            Button(onClick = onRefresh, modifier = Modifier.fillMaxWidth()) {
+                Text(text = "Обновить")
+            }
+        }
+
         item {
             AvailabilityIndexCard(
                 availabilityIndex = networkState.availabilityIndex,
@@ -202,7 +208,7 @@ private fun LastCheckInfo(
 }
 
 @Composable
-private fun EmptyState() {
+private fun EmptyState(onRefresh: () -> Unit) {
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -227,11 +233,17 @@ private fun EmptyState() {
             Spacer(modifier = Modifier.height(8.dp))
             
             Text(
-                text = "Потяните вниз для обновления",
+                text = "Нажмите кнопку для первой проверки",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Button(onClick = onRefresh) {
+                Text(text = "Обновить")
+            }
         }
     }
 }
