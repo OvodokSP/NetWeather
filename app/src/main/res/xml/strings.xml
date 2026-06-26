@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NetWeather</string>
+    <string name="widget_small_label">NetWeather (Малый)</string>
+    <string name="widget_medium_label">NetWeather (Средний)</string>
+    <string name="widget_large_label">NetWeather (Большой)</string>
+    <string name="widget_small_description">Индекс доступности</string>
+    <string name="widget_medium_description">Индекс и режим</string>
+    <string name="widget_large_description">Полная информация</string>
+</resources>
