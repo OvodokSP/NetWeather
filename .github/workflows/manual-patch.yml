@@ -46,66 +46,15 @@ jobs:
           rm -f fix_canvas_final.py
           rm -f fix_structure.py
 
-          mkdir -p .github/workflows
-
-          cat > .github/workflows/build.yml <<'EOF'
-          name: Build APK
-
-          on:
-            push:
-              branches: [ main ]
-            pull_request:
-            workflow_dispatch:
-
-          jobs:
-            build:
-              runs-on: ubuntu-latest
-
-              steps:
-                - name: Checkout repository
-                  uses: actions/checkout@v4
-
-                - name: Set up JDK 17
-                  uses: actions/setup-java@v4
-                  with:
-                    java-version: '17'
-                    distribution: 'temurin'
-
-                - name: Setup Gradle
-                  uses: gradle/actions/setup-gradle@v4
-
-                - name: Make Gradle executable
-                  run: chmod +x ./gradlew
-
-                - name: Clean
-                  run: ./gradlew clean --no-daemon
-
-                - name: Test
-                  run: ./gradlew test --no-daemon
-
-                - name: Lint
-                  run: ./gradlew lint --no-daemon
-
-                - name: Build Debug APK
-                  run: ./gradlew assembleDebug --no-daemon
-
-                - name: Upload Debug APK
-                  uses: actions/upload-artifact@v4
-                  with:
-                    name: NetWeather-Debug
-                    path: app/build/outputs/apk/debug/*.apk
-          EOF
-
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v8
         with:
-          commit-message: "Clean CI and add agent rules"
-          branch: fix/clean-ci-agent-rules
-          title: "Clean CI and add AGENTS.md"
+          commit-message: "Add agent rules and remove Python patch scripts"
+          branch: fix/agent-rules-cleanup
+          title: "Add AGENTS.md and remove Python patch scripts"
           body: |
             This PR:
-            - adds AGENTS.md
+            - adds AGENTS.md with project rules
             - removes Python auto-fix scripts
-            - replaces build.yml with clean Gradle CI
-            - uploads debug APK artifact
+            - keeps workflow files unchanged to avoid GitHub workflow permission restrictions
           delete-branch: true
