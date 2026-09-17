@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+BASE_URL="${BASE_URL:-http://127.0.0.1:18081}"
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+if [[ -f "$ROOT_DIR/.env" ]]; then
+  set -a
+  source "$ROOT_DIR/.env"
+  set +a
+fi
+TOKEN="${NETWEATHER_API_TOKEN:-}"
+AUTH=()
+if [[ -n "$TOKEN" ]]; then AUTH=(-H "Authorization: Bearer $TOKEN"); fi
+ok(){ printf 'PASS  %s\n' "$1"; }
+get(){ curl -fsS "$BASE_URL$1" >/dev/null; ok "GET $1"; }
+
+get /api/health
+get /api/system
+get /api/dashboard
+get /api/groups
+get /api/resources
+get /api/incidents
+get '/api/history?hours=24'
+curl -fsSI "$BASE_URL/" >/dev/null; ok 'HEAD /'
+curl -fsS "$BASE_URL/" | grep -q 'Network Observatory'; ok 'GET / frontend'
+
+if [[ -z "$TOKEN" ]]; then
+  echo 'SKIP  write/diagnostic tests: NETWEATHER_API_TOKEN is unavailable'
+  exit 0
+fi
+
+TMP_JSON="$(curl -fsS -X POST "${AUTH[@]}" -H 'Content-Type: application/json' "$BASE_URL/api/resources" -d '{"name":"__NetWeather self-test__","target":"https://example.com","group_name":"SELFTEST","interval_seconds":86400,"alerts_enabled":false}')"
+RID="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$TMP_JSON")"
+cleanup(){ curl -fsS -X DELETE "${AUTH[@]}" "$BASE_URL/api/resources/$RID" >/dev/null 2>&1 || true; }
+trap cleanup EXIT
+ok 'POST /api/resources'
+curl -fsS -X PATCH "${AUTH[@]}" -H 'Content-Type: application/json' "$BASE_URL/api/resources/$RID" -d '{"slow_threshold_ms":1200,"failure_threshold":3}' >/dev/null; ok 'PATCH /api/resources/{id}'
+curl -fsS -X POST "${AUTH[@]}" "$BASE_URL/api/resources/$RID/check" >/dev/null; ok 'POST /api/resources/{id}/check'
+curl -fsS "$BASE_URL/api/resources/$RID" >/dev/null; ok 'GET /api/resources/{id}'
+curl -fsS -X POST "${AUTH[@]}" "$BASE_URL/api/resources/$RID/trace" >/dev/null; ok 'POST /api/resources/{id}/trace'
+curl -fsS -X POST "${AUTH[@]}" "$BASE_URL/api/check-all" >/dev/null; ok 'POST /api/check-all'
+cleanup
+trap - EXIT
+ok 'DELETE /api/resources/{id}'
+echo 'NetWeather smoke test: PASS'
