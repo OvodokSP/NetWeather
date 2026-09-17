@@ -1,0 +1,31 @@
+services:
+  netweather:
+    build: .
+    restart: unless-stopped
+    environment:
+      NETWEATHER_API_TOKEN: ${NETWEATHER_API_TOKEN}
+      DEFAULT_INTERVAL_SECONDS: ${DEFAULT_INTERVAL_SECONDS:-60}
+      REQUEST_TIMEOUT_SECONDS: ${REQUEST_TIMEOUT_SECONDS:-8}
+      ALLOW_PRIVATE_TARGETS: ${ALLOW_PRIVATE_TARGETS:-false}
+    volumes:
+      - netweather_data:/data
+    expose:
+      - "8000"
+
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    depends_on:
+      - netweather
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  netweather_data:
+  caddy_data:
+  caddy_config:
