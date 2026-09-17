@@ -9,23 +9,8 @@ services:
       ALLOW_PRIVATE_TARGETS: ${ALLOW_PRIVATE_TARGETS:-false}
     volumes:
       - netweather_data:/data
-    expose:
-      - "8000"
-
-  caddy:
-    image: caddy:2.8-alpine
-    restart: unless-stopped
-    depends_on:
-      - netweather
     ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
+      - "127.0.0.1:${NETWEATHER_BIND_PORT:-18080}:8000"
 
 volumes:
   netweather_data:
-  caddy_data:
-  caddy_config:
