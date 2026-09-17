@@ -1,51 +1,107 @@
 # NetWeather Web
 
-Web-контур NetWeather для `netweather.online`. Проверки выполняются на VPS, а браузер отображает агрегированное состояние, историю и поэтапную диагностику DNS → TCP → TLS → HTTP.
+Web-контур NetWeather для `netweather.online`. Проверки выполняются на VPS, браузер отображает агрегированное состояние, историю и поэтапную диагностику DNS → TCP → TLS → HTTP.
 
-## Что уже реализовано
+## Что реализовано
 
-- Реальные проверки HTTP/HTTPS-ресурсов с VPS.
+- Реальные HTTP/HTTPS-проверки с VPS.
 - DNS, TCP, TLS и HTTP тайминги.
 - Индекс доступности и режимы NetWeather по логике Android-приложения.
 - Фоновый планировщик с индивидуальным интервалом от 30 секунд.
-- SQLite + WAL и хранение истории за 30 дней.
+- SQLite + WAL и история за 30 дней.
 - Графики доступности и задержки.
 - Группы ресурсов: российские, международные, пользовательские.
 - Ручная проверка одного ресурса и всех ресурсов.
-- Современный responsive UI для desktop/mobile.
-- Dark/light theme.
-- Bearer-токен для операций изменения конфигурации.
+- Responsive desktop/mobile UI, dark/light theme.
+- Bearer-токен для изменения конфигурации.
 - Блокировка private/loopback/link-local целей по умолчанию.
-- Docker Compose + Caddy + автоматический HTTPS.
 
-## Быстрый запуск на VPS
+## Production-схема для текущего VPS
 
-Требования: Docker Engine и Docker Compose plugin.
+На VPS уже работает системный nginx на 80/443, поэтому NetWeather **не запускает собственный Caddy** и не публикует контейнер наружу. Приложение слушает только loopback:
+
+```text
+Internet
+   │
+   ▼
+nginx :80/:443 (host)
+   │
+   ▼
+127.0.0.1:18080
+   │
+   ▼
+NetWeather container :8000
+   ├── scheduler
+   ├── DNS/TCP/TLS/HTTP diagnostics
+   ├── SQLite history
+   └── static web UI
+```
+
+## DNS
+
+Для production у домена должен остаться **один** A-record:
+
+- `netweather.online` → `31.77.56.66`
+- `www.netweather.online` → CNAME `netweather.online`
+
+Старые A-records на другие IP необходимо удалить, иначе запросы и ACME-проверки могут попадать на другой сервер.
+
+## Установка
 
 ```bash
-git clone https://github.com/OvodokSP/NetWeather.git
-cd NetWeather
+cd /opt
+sudo git clone https://github.com/OvodokSP/NetWeather.git
+cd /opt/NetWeather
 git checkout feature/web-vps-monitoring
 cd web
 cp .env.example .env
-```
-
-Создайте длинный случайный токен и поместите его в `.env`:
-
-```bash
 openssl rand -hex 32
 nano .env
 ```
 
-Запуск:
+В `.env`:
+
+```env
+NETWEATHER_API_TOKEN=<случайный секрет>
+DEFAULT_INTERVAL_SECONDS=60
+REQUEST_TIMEOUT_SECONDS=8
+ALLOW_PRIVATE_TARGETS=false
+NETWEATHER_BIND_PORT=18080
+```
+
+Запуск контейнера:
 
 ```bash
 docker compose up -d --build
 docker compose ps
-docker compose logs -f --tail=100
+curl -fsS http://127.0.0.1:18080/api/health
 ```
 
-Проверка API локально на сервере:
+## Подключение к существующему nginx
+
+Готовый server block лежит в `deploy/nginx-netweather.conf`.
+
+```bash
+sudo cp deploy/nginx-netweather.conf /etc/nginx/sites-available/netweather.online
+sudo ln -sfn /etc/nginx/sites-available/netweather.online /etc/nginx/sites-enabled/netweather.online
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+Проверка HTTP до выпуска сертификата:
+
+```bash
+curl -I http://netweather.online/
+curl -fsS http://netweather.online/api/health
+```
+
+Для TLS используйте уже принятый на VPS способ выпуска сертификатов. Если установлен Certbot с nginx plugin:
+
+```bash
+sudo certbot --nginx -d netweather.online -d www.netweather.online
+```
+
+После этого:
 
 ```bash
 curl -fsS https://netweather.online/api/health
@@ -57,19 +113,9 @@ curl -fsS https://netweather.online/api/health
 {"status":"ok","time":...}
 ```
 
-## DNS домена
-
-У регистратора домена должны быть созданы записи:
-
-- `A` для `netweather.online` → публичный IPv4 VPS.
-- `A` для `www.netweather.online` → публичный IPv4 VPS.
-- При наличии IPv6 можно дополнительно создать `AAAA`.
-
-На VPS должны быть доступны входящие TCP 80 и 443. Caddy автоматически получает и обновляет TLS-сертификаты после корректного DNS-разрешения домена.
-
 ## Управление
 
-Публичные GET-endpoint'ы позволяют отображать состояние без авторизации. Создание, изменение, удаление ресурсов и принудительные проверки требуют `NETWEATHER_API_TOKEN`.
+Публичные GET endpoint'ы отображают состояние без авторизации. Создание, изменение и удаление ресурсов, а также принудительные проверки требуют `NETWEATHER_API_TOKEN`.
 
 В UI нажмите `API-токен` и вставьте значение из `.env`. Токен сохраняется только в `localStorage` браузера.
 
@@ -93,24 +139,8 @@ Authorization: Bearer <NETWEATHER_API_TOKEN>
 
 ## Безопасность
 
-`ALLOW_PRIVATE_TARGETS=false` оставляйте значением по умолчанию для публичного сайта. Это запрещает проверку loopback, link-local и private IP и снижает риск использования NetWeather как SSRF-инструмента.
+`ALLOW_PRIVATE_TARGETS=false` оставлять значением по умолчанию для публичного сайта. Это блокирует loopback, link-local и private IP и снижает риск SSRF.
 
-Если позже понадобится мониторинг внутренних сервисов, его лучше реализовать через отдельный приватный probe/agent, а не открывать private targets на публичном API.
+Если понадобится мониторинг внутренних сервисов, его следует вынести в отдельный приватный probe/agent.
 
-## Архитектура
-
-```text
-Internet
-   │
-   ▼
-Caddy :443
-   │
-   ▼
-FastAPI / NetWeather monitor
-   ├── scheduler
-   ├── DNS/TCP/TLS/HTTP diagnostics
-   ├── SQLite history
-   └── static web UI
-```
-
-Один worker Uvicorn выбран намеренно: планировщик находится внутри процесса приложения. При горизонтальном масштабировании scheduler нужно вынести в отдельный worker/queue, чтобы избежать дублирования проверок.
+Один worker Uvicorn выбран намеренно: scheduler находится внутри процесса приложения. При горизонтальном масштабировании scheduler нужно вынести в отдельный worker/queue.
