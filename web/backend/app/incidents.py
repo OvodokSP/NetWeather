@@ -56,10 +56,14 @@ def write_check(resource_id:int,payload:dict[str,Any])->None:
         if slow:
             iid=_open(conn,resource_id,"SLOW","warning",f"{r['name']}: отклик {payload['response_time_ms']} мс выше порога {r['slow_threshold_ms']} мс",now)
             if iid: notices.append({"event":"incident_opened","incident_id":iid,"resource":r["name"],"kind":"SLOW","severity":"warning","message":"Высокая задержка","time":now})
-        elif payload["status"]=="OK": _close(conn,resource_id,"SLOW",now)
+        elif payload["status"]=="OK":
+            for iid in _close(conn,resource_id,"SLOW",now):
+                notices.append({"event":"incident_closed","incident_id":iid,"resource":r["name"],"kind":"SLOW","severity":"info","message":"Задержка вернулась в норму","time":now})
         days=payload.get("tls_days_left")
         if days is not None and days<=14:
             iid=_open(conn,resource_id,"TLS_EXPIRY","warning",f"{r['name']}: TLS-сертификат истекает через {days} дн.",now)
             if iid: notices.append({"event":"incident_opened","incident_id":iid,"resource":r["name"],"kind":"TLS_EXPIRY","severity":"warning","message":f"TLS: {days} дн.","time":now})
-        elif days is not None and days>14: _close(conn,resource_id,"TLS_EXPIRY",now)
+        elif days is not None and days>14:
+            for iid in _close(conn,resource_id,"TLS_EXPIRY",now):
+                notices.append({"event":"incident_closed","incident_id":iid,"resource":r["name"],"kind":"TLS_EXPIRY","severity":"info","message":"Срок TLS снова вне порога тревоги","time":now})
     for notice in notices: _notify(notice)
