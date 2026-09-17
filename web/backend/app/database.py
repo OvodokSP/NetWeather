@@ -136,5 +136,5 @@ def summary() -> dict[str, Any]:
     lat=[r["response_time_ms"] for r in checked if r.get("response_time_ms") is not None]
     return {"availability_index":score,"mode":mode,"total":len(resources),"checked":len(checked),"available":available,
       "problematic":len(checked)-available,"last_updated":max(r.get("checked_at") or 0 for r in checked),"groups":groups,
-      "avg_latency_ms":round(sum(lat)/len(lat)) if lat else None,"active_incidents":sum(1 for r in resources if r.get("active_incidents")),
+      "avg_latency_ms":round(sum(lat)/len(lat)) if lat else None,"active_incidents":sum(int(r.get("active_incidents") or 0) for r in resources),
       "tls_expiring":sum(1 for r in checked if r.get("tls_days_left") is not None and r["tls_days_left"]<=14)}
