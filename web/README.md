@@ -18,7 +18,7 @@ Web-контур NetWeather для `netweather.online`. Проверки вып�
 
 ## Production-схема для текущего VPS
 
-На VPS уже работает системный nginx на 80/443, поэтому NetWeather **не запускает собственный Caddy** и не публикует контейнер наружу. Приложение слушает только loopback:
+На VPS уже работает системный nginx на 80/443. Порт `127.0.0.1:18080` занят `whitelist-xray`, поэтому NetWeather использует отдельный loopback-порт `18081`.
 
 ```text
 Internet
@@ -27,7 +27,7 @@ Internet
 nginx :80/:443 (host)
    │
    ▼
-127.0.0.1:18080
+127.0.0.1:18081
    │
    ▼
 NetWeather container :8000
@@ -39,12 +39,10 @@ NetWeather container :8000
 
 ## DNS
 
-Для production у домена должен остаться **один** A-record:
+Для production у домена должен остаться один A-record:
 
 - `netweather.online` → `31.77.56.66`
 - `www.netweather.online` → CNAME `netweather.online`
-
-Старые A-records на другие IP необходимо удалить, иначе запросы и ACME-проверки могут попадать на другой сервер.
 
 ## Установка
 
@@ -54,19 +52,27 @@ sudo git clone https://github.com/OvodokSP/NetWeather.git
 cd /opt/NetWeather
 git checkout feature/web-vps-monitoring
 cd web
-cp .env.example .env
-openssl rand -hex 32
-nano .env
 ```
 
-В `.env`:
+Создание `.env`:
 
-```env
-NETWEATHER_API_TOKEN=<случайный секрет>
+```bash
+TOKEN="$(openssl rand -hex 32)"
+cat > .env <<EOF
+NETWEATHER_API_TOKEN=$TOKEN
 DEFAULT_INTERVAL_SECONDS=60
 REQUEST_TIMEOUT_SECONDS=8
 ALLOW_PRIVATE_TARGETS=false
-NETWEATHER_BIND_PORT=18080
+NETWEATHER_BIND_PORT=18081
+EOF
+chmod 600 .env
+unset TOKEN
+```
+
+Перед запуском убедитесь, что порт свободен:
+
+```bash
+sudo ss -lntp | grep ':18081 ' || echo '18081 free'
 ```
 
 Запуск контейнера:
@@ -74,7 +80,7 @@ NETWEATHER_BIND_PORT=18080
 ```bash
 docker compose up -d --build
 docker compose ps
-curl -fsS http://127.0.0.1:18080/api/health
+curl -fsS http://127.0.0.1:18081/api/health
 ```
 
 ## Подключение к существующему nginx
@@ -95,7 +101,7 @@ curl -I http://netweather.online/
 curl -fsS http://netweather.online/api/health
 ```
 
-Для TLS используйте уже принятый на VPS способ выпуска сертификатов. Если установлен Certbot с nginx plugin:
+Если используется Certbot с nginx plugin:
 
 ```bash
 sudo certbot --nginx -d netweather.online -d www.netweather.online
@@ -119,6 +125,12 @@ curl -fsS https://netweather.online/api/health
 
 В UI нажмите `API-токен` и вставьте значение из `.env`. Токен сохраняется только в `localStorage` браузера.
 
+Посмотреть токен на сервере:
+
+```bash
+grep '^NETWEATHER_API_TOKEN=' .env
+```
+
 ## API
 
 - `GET /api/health`
@@ -140,7 +152,5 @@ Authorization: Bearer <NETWEATHER_API_TOKEN>
 ## Безопасность
 
 `ALLOW_PRIVATE_TARGETS=false` оставлять значением по умолчанию для публичного сайта. Это блокирует loopback, link-local и private IP и снижает риск SSRF.
-
-Если понадобится мониторинг внутренних сервисов, его следует вынести в отдельный приватный probe/agent.
 
 Один worker Uvicorn выбран намеренно: scheduler находится внутри процесса приложения. При горизонтальном масштабировании scheduler нужно вынести в отдельный worker/queue.
