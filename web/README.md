@@ -1,30 +1,32 @@
 # NetWeather Web
 
-Web-контур NetWeather для `netweather.online`. Проверки выполняются на VPS, браузер отображает агрегированное состояние, историю и поэтапную диагностику DNS → TCP → TLS → HTTP.
+NetWeather Web — VPS-first монитор доступности интернет-ресурсов для `netweather.online`. Все сетевые проверки выполняются на VPS, браузер получает готовые измерения, историю и события.
 
-## Что реализовано
+## Версия 0.2.0-web
 
-- Реальные HTTP/HTTPS-проверки с VPS.
-- DNS, TCP, TLS и HTTP тайминги.
-- Индекс доступности и режимы NetWeather по логике Android-приложения.
-- Фоновый планировщик с индивидуальным интервалом от 30 секунд.
-- SQLite + WAL и история за 30 дней.
-- Графики доступности и задержки.
-- Группы ресурсов: российские, международные, пользовательские.
-- Ручная проверка одного ресурса и всех ресурсов.
-- Responsive desktop/mobile UI, dark/light theme.
-- Bearer-токен для изменения конфигурации.
-- Блокировка private/loopback/link-local целей по умолчанию.
+- DNS → TCP → TLS → HTTP диагностика с отдельными таймингами каждого этапа.
+- Индекс доступности, режимы сети и группировка ресурсов.
+- Стартовый набор из 8 ресурсов создаётся автоматически только для пустой БД.
+- Любые пользовательские группы и HTTP/HTTPS-цели.
+- История за 30 дней и графики доступности/задержки.
+- Контроль срока TLS-сертификата.
+- Триггеры: N последовательных ошибок, медленный ответ, истечение TLS.
+- Журнал активных/закрытых инцидентов и подтверждение тревог.
+- Browser Notifications; опциональный серверный JSON webhook через `ALERT_WEBHOOK_URL`.
+- Ручная проверка одной цели или всех целей.
+- Traceroute до публичной цели из VPS-контейнера.
+- Карточка ресурса с последними проверками, IP, HTTP, задержкой и TLS.
+- Защита от SSRF: private/loopback/link-local/reserved targets блокируются; HTTP redirects автоматически не следуются.
+- Responsive dark/light UI без внешних JS/CSS CDN.
+- HEAD для корня поддерживается, поэтому стандартные uptime-проверки не получают 405.
 
-## Production-схема для текущего VPS
-
-На VPS уже работает системный nginx на 80/443. Порт `127.0.0.1:18080` занят `whitelist-xray`, поэтому NetWeather использует отдельный loopback-порт `18081`.
+## Production-схема
 
 ```text
 Internet
    │
    ▼
-nginx :80/:443 (host)
+nginx :80/:443 на VPS 31.77.56.66
    │
    ▼
 127.0.0.1:18081
@@ -32,125 +34,97 @@ nginx :80/:443 (host)
    ▼
 NetWeather container :8000
    ├── scheduler
-   ├── DNS/TCP/TLS/HTTP diagnostics
-   ├── SQLite history
+   ├── DNS / TCP / TLS / HTTP
+   ├── traceroute
+   ├── incidents / triggers
+   ├── SQLite WAL
    └── static web UI
 ```
 
-## DNS
+`127.0.0.1:18080` на текущем VPS занят другим сервисом, поэтому NetWeather использует `18081`.
 
-Для production у домена должен остаться один A-record:
+## Обновление на VPS
 
-- `netweather.online` → `31.77.56.66`
-- `www.netweather.online` → CNAME `netweather.online`
-
-## Установка
+Существующий `.env` не перезаписывать.
 
 ```bash
-cd /opt
-sudo git clone https://github.com/OvodokSP/NetWeather.git
 cd /opt/NetWeather
 git checkout feature/web-vps-monitoring
+git pull --ff-only origin feature/web-vps-monitoring
 cd web
+docker compose up -d --build
 ```
 
-Создание `.env`:
+Для новых установок:
 
-```bash
-TOKEN="$(openssl rand -hex 32)"
-cat > .env <<EOF
-NETWEATHER_API_TOKEN=$TOKEN
+```env
+NETWEATHER_API_TOKEN=<long-random-secret>
 DEFAULT_INTERVAL_SECONDS=60
 REQUEST_TIMEOUT_SECONDS=8
 ALLOW_PRIVATE_TARGETS=false
+NETWEATHER_SEED_DEFAULTS=true
+ALERT_WEBHOOK_URL=
 NETWEATHER_BIND_PORT=18081
-EOF
-chmod 600 .env
-unset TOKEN
 ```
 
-Перед запуском убедитесь, что порт свободен:
+`ALERT_WEBHOOK_URL` необязателен. Если указан, NetWeather отправляет JSON при открытии/закрытии инцидентов.
+
+## Проверка после обновления
 
 ```bash
-sudo ss -lntp | grep ':18081 ' || echo '18081 free'
-```
-
-Запуск контейнера:
-
-```bash
-docker compose up -d --build
+cd /opt/NetWeather/web
+chmod +x deploy/smoke-test.sh
 docker compose ps
 curl -fsS http://127.0.0.1:18081/api/health
+./deploy/smoke-test.sh
 ```
 
-## Подключение к существующему nginx
+Smoke test проверяет:
+- health/system/dashboard/groups/resources/incidents/history;
+- HEAD и frontend;
+- CRUD временного ресурса;
+- ручную проверку;
+- traceroute;
+- check-all;
+- удаление временной цели.
 
-Готовый server block лежит в `deploy/nginx-netweather.conf`.
+## Как работают тревоги
 
-```bash
-sudo cp deploy/nginx-netweather.conf /etc/nginx/sites-available/netweather.online
-sudo ln -sfn /etc/nginx/sites-available/netweather.online /etc/nginx/sites-enabled/netweather.online
-sudo nginx -t
-sudo systemctl reload nginx
-```
+У каждого ресурса есть:
+- `failure_threshold` — сколько последовательных неуспешных проверок открывает DOWN incident;
+- `slow_threshold_ms` — порог SLOW incident;
+- `alerts_enabled` — включение триггеров для цели;
+- TLS expiry trigger при остатке <= 14 дней.
 
-Проверка HTTP до выпуска сертификата:
-
-```bash
-curl -I http://netweather.online/
-curl -fsS http://netweather.online/api/health
-```
-
-Если используется Certbot с nginx plugin:
-
-```bash
-sudo certbot --nginx -d netweather.online -d www.netweather.online
-```
-
-После этого:
-
-```bash
-curl -fsS https://netweather.online/api/health
-```
-
-Ожидаемый ответ:
-
-```json
-{"status":"ok","time":...}
-```
-
-## Управление
-
-Публичные GET endpoint'ы отображают состояние без авторизации. Создание, изменение и удаление ресурсов, а также принудительные проверки требуют `NETWEATHER_API_TOKEN`.
-
-В UI нажмите `API-токен` и вставьте значение из `.env`. Токен сохраняется только в `localStorage` браузера.
-
-Посмотреть токен на сервере:
-
-```bash
-grep '^NETWEATHER_API_TOKEN=' .env
-```
+DOWN автоматически закрывается после восстановления. События хранятся в SQLite; активные можно подтвердить через UI.
 
 ## API
 
+Публичные:
 - `GET /api/health`
+- `GET /api/system`
 - `GET /api/dashboard`
+- `GET /api/groups`
 - `GET /api/resources`
+- `GET /api/resources/{id}`
+- `GET /api/incidents`
+- `GET /api/history?hours=24`
+
+С Bearer token:
 - `POST /api/resources`
 - `PATCH /api/resources/{id}`
 - `DELETE /api/resources/{id}`
 - `POST /api/resources/{id}/check`
+- `POST /api/resources/{id}/trace`
 - `POST /api/check-all`
-- `GET /api/history?hours=24`
+- `POST /api/incidents/{id}/ack`
 
-Для write-запросов:
+## Nginx / TLS
 
-```http
-Authorization: Bearer <NETWEATHER_API_TOKEN>
+Готовый vhost: `deploy/nginx-netweather.conf`. Upstream должен оставаться `127.0.0.1:18081`.
+
+```bash
+nginx -t && systemctl reload nginx
 ```
 
-## Безопасность
-
-`ALLOW_PRIVATE_TARGETS=false` оставлять значением по умолчанию для публичного сайта. Это блокирует loopback, link-local и private IP и снижает риск SSRF.
-
-Один worker Uvicorn выбран намеренно: scheduler находится внутри процесса приложения. При горизонтальном масштабировании scheduler нужно вынести в отдельный worker/queue.
+TLS выпускается и обновляется Certbot на хосте.
