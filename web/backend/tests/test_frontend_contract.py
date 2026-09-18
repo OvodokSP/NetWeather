@@ -53,8 +53,21 @@ class FrontendContractTest(unittest.TestCase):
             "diagCheck","openAddResource","overviewAddResource","groupDialog","openAddGroup","groupForm",
             "sidebarAddResource","manageGroups","expandChart","enableNotifications",
             "ackAllIncidents","resourceIdentityPreview","resourceTargetHint",
+            "resourceCatalogForm","catalogSearch","resourceCatalogGroups","customResourceTarget",
+            "customResourceName","customResourceGroup","customCatalogMatch","addCatalogResources","resourceEditDialog",
         ):
             self.assertIn(f'id="{item}"', self.html)
+
+    def test_ranked_catalog_picker_contract(self):
+        for token in (
+            "function openResourceCatalog(", "function renderCatalog(", "function inspectCustomResource(",
+            "/api/resource-catalog", "/api/resource-catalog/match?target=", "/api/resource-catalog/add",
+        ):
+            self.assertIn(token, self.js)
+        self.assertIn(".resource-catalog-groups{", self.css)
+        self.assertIn(".catalog-resource-row{", self.css)
+        self.assertIn(".custom-resource-block{", self.css)
+        self.assertIn("Добавить выбранные", self.html)
 
     def test_resource_identity_and_incident_read_handlers_exist(self):
         self.assertIn("function targetMeta(", self.js)
