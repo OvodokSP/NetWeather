@@ -223,8 +223,22 @@ def resource_matrix() -> list[dict[str, Any]]:
                 diagnosis = "INSUFFICIENT_DATA"
                 diagnosis_text = "Недостаточно данных для классификации"
                 confidence = "none"
+            legacy = {
+                "status": ext_d.get("status") if ext_d else None,
+                "response_time_ms": ext_d.get("response_time_ms") if ext_d else None,
+                "dns_ms": ext_d.get("dns_ms") if ext_d else None,
+                "tcp_ms": ext_d.get("tcp_ms") if ext_d else None,
+                "tls_ms": ext_d.get("tls_ms") if ext_d else None,
+                "http_ms": ext_d.get("http_ms") if ext_d else None,
+                "http_status": ext_d.get("http_status") if ext_d else None,
+                "resolved_ip": ext_d.get("resolved_ip") if ext_d else None,
+                "message": ext_d.get("message") if ext_d else None,
+                "checked_at": ext_d.get("checked_at") if ext_d else None,
+                "tls_days_left": ext_d.get("tls_days_left") if ext_d else None,
+            }
             result.append({
                 **dict(r),
+                **legacy,
                 "external": ext_d,
                 "domestic": dom_d if dom_fresh else None,
                 "domestic_stale": bool(dom_d and not dom_fresh),
