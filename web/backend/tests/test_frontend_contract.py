@@ -102,6 +102,13 @@ class FrontendContractTest(unittest.TestCase):
         self.assertIn("data-ack", self.js)
         self.assertIn("resource-logo-img", self.css)
 
+    def test_navigation_hides_unavailable_capabilities(self):
+        self.assertIn("function applyCapabilityNavigation(", self.js)
+        self.assertIn("capability-hidden", self.js)
+        self.assertIn(".capability-hidden", self.css)
+        self.assertIn('data-view="map"', self.html)
+        self.assertIn('id="diagTraceDomestic"', self.html)
+
     def test_stale_core_and_live_map_contract(self):
         for token in (
             "core-offline", "lastSuccessAt", "function probeInRegion(",
