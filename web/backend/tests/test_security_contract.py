@@ -68,6 +68,7 @@ class SecurityContractTest(unittest.TestCase):
         self.assertIn("SSH_ORIGINAL_COMMAND", self.gate)
         self.assertIn("^deploy", self.gate)
         self.assertIn("netweather-deploy-helper", self.gate)
+        self.assertIn('[[ "$#" -eq 1 ]]', self.helper)
 
     def test_kernel_guard_blocks_host_and_private_networks(self):
         self.assertIn("chain input", self.guard)
