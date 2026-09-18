@@ -16,6 +16,8 @@ VOLUME="web_netweather_data"
 ENV_FILE="/etc/netweather/netweather.env"
 STATE="/var/lib/netweather-deploy"
 ARCHIVE="${STATE}/image-${SHA}.tar.gz"
+HEALTH_JSON="${STATE}/health-${SHA}.json"
+LOAD_LOG="${STATE}/docker-load-${SHA}.txt"
 HEALTH="http://127.0.0.1:18081/api/health"
 MAX_BYTES=$((320 * 1024 * 1024))
 
@@ -33,9 +35,10 @@ fi
 gzip -t "${ARCHIVE}"
 
 echo "=== LOAD VERIFIED IMAGE ARCHIVE ==="
-gzip -dc "${ARCHIVE}" | docker load >/tmp/netweather-docker-load.txt
-cat /tmp/netweather-docker-load.txt
-rm -f "${ARCHIVE}" /tmp/netweather-docker-load.txt
+rm -f "${LOAD_LOG}" "${HEALTH_JSON}"
+gzip -dc "${ARCHIVE}" | docker load >"${LOAD_LOG}"
+cat "${LOAD_LOG}"
+rm -f "${ARCHIVE}" "${LOAD_LOG}"
 
 docker image inspect "${IMAGE}" >/dev/null
 REV="$(docker image inspect -f '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "${IMAGE}")"
@@ -120,14 +123,14 @@ run_locked "${IMAGE}" >/dev/null
 echo "=== HEALTH ==="
 ready=0
 for _ in $(seq 1 35); do
-  if curl -fsS --max-time 4 "${HEALTH}" >/tmp/netweather-health.json; then
+  if curl -fsS --max-time 4 "${HEALTH}" >"${HEALTH_JSON}"; then
     ready=1
     break
   fi
   sleep 2
 done
 [[ "${ready}" == 1 ]]
-cat /tmp/netweather-health.json
+cat "${HEALTH_JSON}"
 echo
 
 echo "=== SECURITY ASSERTIONS ==="
@@ -145,7 +148,7 @@ curl -fsS --max-time 5 http://127.0.0.1:18081/api/system >/dev/null
 curl -fsS --max-time 5 http://127.0.0.1:18081/api/groups >/dev/null
 
 trap - ERR
-rm -f /tmp/netweather-health.json
+rm -f "${HEALTH_JSON}"
 
 echo "=== DEPLOY PASS ==="
 docker ps --filter "name=^${CONTAINER}$" --format 'NAME={{.Names}} STATUS={{.Status}} PORTS={{.Ports}}'
