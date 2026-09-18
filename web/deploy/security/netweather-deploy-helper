@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+umask 077
+
+[[ "${EUID}" -eq 0 ]] || { echo "root required" >&2; exit 77; }
+SHA="${1:-}"
+[[ "${SHA}" =~ ^[0-9a-f]{40}$ ]] || { echo "invalid revision" >&2; exit 64; }
+
+IMAGE="netweather-web:${SHA}"
+CONTAINER="netweather-web"
+NETWORK="netweather-isolated"
+SUBNET="172.30.250.0/28"
+IP="172.30.250.2"
+VOLUME="web_netweather_data"
+ENV_FILE="/etc/netweather/netweather.env"
+STATE="/var/lib/netweather-deploy"
+ARCHIVE="${STATE}/image-${SHA}.tar.gz"
+HEALTH="http://127.0.0.1:18081/api/health"
+MAX_BYTES=$((320 * 1024 * 1024))
+
+install -d -o root -g root -m 0700 "${STATE}"
+[[ -f "${ENV_FILE}" ]] || { echo "missing ${ENV_FILE}" >&2; exit 78; }
+
+# The deploy channel accepts only a bounded Docker image archive on stdin.
+head -c $((MAX_BYTES + 1)) > "${ARCHIVE}"
+SIZE="$(stat -c %s "${ARCHIVE}")"
+if (( SIZE == 0 || SIZE > MAX_BYTES )); then
+  rm -f "${ARCHIVE}"
+  echo "image archive outside allowed size" >&2
+  exit 65
+fi
+gzip -t "${ARCHIVE}"
+
+echo "=== LOAD VERIFIED IMAGE ARCHIVE ==="
+gzip -dc "${ARCHIVE}" | docker load >/tmp/netweather-docker-load.txt
+cat /tmp/netweather-docker-load.txt
+rm -f "${ARCHIVE}" /tmp/netweather-docker-load.txt
+
+docker image inspect "${IMAGE}" >/dev/null
+REV="$(docker image inspect -f '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "${IMAGE}")"
+[[ "${REV}" == "${SHA}" ]] || { echo "image revision label mismatch" >&2; exit 66; }
+
+# Production never consumes repository-controlled compose files.
+if ! docker network inspect "${NETWORK}" >/dev/null 2>&1; then
+  docker network create --driver bridge --subnet "${SUBNET}" --gateway 172.30.250.1 \
+    -o com.docker.network.bridge.enable_icc=false "${NETWORK}" >/dev/null
+fi
+ACTUAL_SUBNET="$(docker network inspect -f '{{(index .IPAM.Config 0).Subnet}}' "${NETWORK}")"
+[[ "${ACTUAL_SUBNET}" == "${SUBNET}" ]] || { echo "unexpected NetWeather network subnet: ${ACTUAL_SUBNET}" >&2; exit 67; }
+
+docker volume inspect "${VOLUME}" >/dev/null 2>&1 || docker volume create "${VOLUME}" >/dev/null
+VOLUME_PATH="$(docker volume inspect -f '{{.Mountpoint}}' "${VOLUME}")"
+chown -R 10001:10001 "${VOLUME_PATH}"
+chmod 0750 "${VOLUME_PATH}"
+
+OLD_IMAGE=""
+for old_name in "${CONTAINER}" web-netweather-1; do
+  if docker container inspect "${old_name}" >/dev/null 2>&1; then
+    OLD_IMAGE="$(docker container inspect -f '{{.Image}}' "${old_name}")"
+    docker rm -f "${old_name}" >/dev/null
+  fi
+done
+
+run_locked() {
+  local image="$1"
+  docker run -d \
+    --name "${CONTAINER}" \
+    --hostname netweather-app \
+    --restart unless-stopped \
+    --init \
+    --read-only \
+    --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m \
+    --cap-drop ALL \
+    --security-opt no-new-privileges=true \
+    --pids-limit 256 \
+    --memory 512m \
+    --memory-swap 512m \
+    --cpus 0.75 \
+    --ulimit nofile=1024:4096 \
+    --user 10001:10001 \
+    --network "${NETWORK}" \
+    --ip "${IP}" \
+    --sysctl net.ipv6.conf.all.disable_ipv6=1 \
+    --publish 127.0.0.1:18081:8000 \
+    --mount type=volume,source="${VOLUME}",target=/data \
+    --env-file "${ENV_FILE}" \
+    --log-driver local \
+    --log-opt max-size=10m \
+    --log-opt max-file=3 \
+    --health-cmd="python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3).read()\"" \
+    --health-interval=10s \
+    --health-timeout=5s \
+    --health-retries=5 \
+    --health-start-period=5s \
+    --label netweather.security-profile=isolated-v1 \
+    "$image"
+}
+
+rollback() {
+  rc=$?
+  echo "=== DEPLOY FAILED: ROLLBACK ===" >&2
+  docker rm -f "${CONTAINER}" >/dev/null 2>&1 || true
+  if [[ -n "${OLD_IMAGE}" ]]; then
+    run_locked "${OLD_IMAGE}" >/dev/null || true
+  fi
+  exit "${rc}"
+}
+trap rollback ERR
+
+echo "=== START LOCKED CONTAINER ==="
+run_locked "${IMAGE}" >/dev/null
+
+echo "=== HEALTH ==="
+ready=0
+for _ in $(seq 1 35); do
+  if curl -fsS --max-time 4 "${HEALTH}" >/tmp/netweather-health.json; then
+    ready=1
+    break
+  fi
+  sleep 2
+done
+[[ "${ready}" == 1 ]]
+cat /tmp/netweather-health.json
+echo
+
+echo "=== SECURITY ASSERTIONS ==="
+[[ "$(docker inspect -f '{{.Config.User}}' "${CONTAINER}")" == "10001:10001" ]]
+[[ "$(docker inspect -f '{{.HostConfig.ReadonlyRootfs}}' "${CONTAINER}")" == "true" ]]
+[[ "$(docker inspect -f '{{.HostConfig.Privileged}}' "${CONTAINER}")" == "false" ]]
+docker inspect -f '{{json .HostConfig.CapDrop}}' "${CONTAINER}" | grep -q '"ALL"'
+docker inspect -f '{{json .HostConfig.SecurityOpt}}' "${CONTAINER}" | grep -q 'no-new-privileges'
+[[ -z "$(docker inspect -f '{{range .Mounts}}{{if eq .Type "bind"}}{{.Source}}{{end}}{{end}}' "${CONTAINER}")" ]]
+[[ "$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${CONTAINER}")" == "${IP}" ]]
+
+echo "=== API SMOKE ==="
+curl -fsS --max-time 5 http://127.0.0.1:18081/ >/dev/null
+curl -fsS --max-time 5 http://127.0.0.1:18081/api/system >/dev/null
+curl -fsS --max-time 5 http://127.0.0.1:18081/api/groups >/dev/null
+
+trap - ERR
+rm -f /tmp/netweather-health.json
+
+echo "=== DEPLOY PASS ==="
+docker ps --filter "name=^${CONTAINER}$" --format 'NAME={{.Names}} STATUS={{.Status}} PORTS={{.Ports}}'
