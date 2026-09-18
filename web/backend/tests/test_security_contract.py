@@ -64,6 +64,12 @@ class SecurityContractTest(unittest.TestCase):
         self.assertNotIn("/var/run/docker.sock", self.helper)
         self.assertNotIn("type=bind", self.helper)
 
+    def test_deploy_helper_keeps_temp_files_out_of_shared_tmp(self):
+        self.assertIn('HEALTH_JSON="${STATE}/health-${SHA}.json"', self.helper)
+        self.assertIn('LOAD_LOG="${STATE}/docker-load-${SHA}.txt"', self.helper)
+        self.assertNotIn("/tmp/netweather-health.json", self.helper)
+        self.assertNotIn("/tmp/netweather-docker-load.txt", self.helper)
+
     def test_deploy_ssh_is_forced_command_only(self):
         self.assertIn("SSH_ORIGINAL_COMMAND", self.gate)
         self.assertIn("^deploy", self.gate)
