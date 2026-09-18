@@ -38,7 +38,6 @@ install -o root -g root -m 0755 "${SECURITY_SRC}/netweather-egress-guard" /usr/l
 install -o root -g root -m 0644 "${SECURITY_SRC}/netweather-egress-guard.service" /etc/systemd/system/netweather-egress-guard.service
 
 cat >/etc/sudoers.d/netweather-deploy <<'SUDOERS'
-Defaults:netweather-deploy !authenticate
 netweather-deploy ALL=(root) NOPASSWD: /usr/local/sbin/netweather-deploy-helper *
 SUDOERS
 chmod 0440 /etc/sudoers.d/netweather-deploy
