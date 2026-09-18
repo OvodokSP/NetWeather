@@ -5,7 +5,7 @@ var COLORS=["#55c7ff","#ff6374","#ffad4d","#55e0d0","#6b85ff","#72df8e","#a67cff
 var S={
   dashboard:null, incidents:[], system:null, groups:[], realtime:null, events:[],
   historyExt:[], historyDom:[], streamMinutes:60, detailId:null, diagId:null,
-  faultId:null, view:"overview", poll:null, streamMeta:null
+  faultId:null, view:"overview", poll:null, streamMeta:null, owner:false
 };
 
 function q(s){return document.querySelector(s)}
@@ -30,7 +30,7 @@ function empty(title,text){return '<div class="empty-state"><div><b>'+esc(title)
 
 async function api(path,opt,secure){
   opt=opt||{};
-  if(secure&&!token()){q("#tokenInput").value="";q("#tokenDialog").showModal();throw new Error("Сначала укажите API-токен")}
+  if(secure&&!S.owner&&!token()){q("#tokenInput").value="";q("#tokenDialog").showModal();throw new Error("Войдите в режим владельца")}
   var headers={"Content-Type":"application/json"};Object.assign(headers,opt.headers||{});if(secure)Object.assign(headers,auth());
   var res=await fetch(path,Object.assign({},opt,{headers:headers}));
   if(!res.ok){var msg="HTTP "+res.status;try{var j=await res.json();msg=j.detail||msg}catch(_e){}if(res.status===401)toast("Неверный API-токен");throw new Error(msg)}
@@ -63,9 +63,10 @@ async function loadAll(silent){
       api("/api/realtime?minutes="+S.streamMinutes+"&scope=EXTERNAL"),
       api("/api/events?limit=30"),
       api("/api/history?hours="+hours+"&scope=EXTERNAL"),
-      api("/api/history?hours="+hours+"&scope=DOMESTIC")
+      api("/api/history?hours="+hours+"&scope=DOMESTIC"),
+      api("/api/session")
     ]);
-    S.dashboard=a[0];S.incidents=a[1];S.system=a[2];S.groups=a[3];S.realtime=a[4];S.events=a[5];S.historyExt=a[6];S.historyDom=a[7];
+    S.dashboard=a[0];S.incidents=a[1];S.system=a[2];S.groups=a[3];S.realtime=a[4];S.events=a[5];S.historyExt=a[6];S.historyDom=a[7];S.owner=!!a[8].authenticated;
     renderAll();
     setCoreOnline(true)
   }catch(e){
@@ -86,7 +87,7 @@ function historyAverage(h,key){
 }
 
 function renderAll(){
-  renderOverview();renderResources();renderIncidents();renderDiagnostics();renderHistory();renderSettings();renderSearch("");
+  renderOverview();renderGroups();renderResources();renderIncidents();renderDiagnostics();renderHistory();renderSettings();renderSearch("");renderOwnerState();
   if(S.system)q("#versionLabel").textContent=S.system.version
 }
 
@@ -121,6 +122,7 @@ function renderOverview(){
   q("#alertBadge").textContent=active.length;q("#alertBadge").classList.toggle("hidden",!active.length);
   q("#notifyCount").textContent=active.length;q("#notifyCount").classList.toggle("hidden",!active.length);
 
+  renderOverviewGroups();
   renderRealtime();
   renderEvents();
   renderResourceCards();
@@ -142,6 +144,46 @@ function incidentSpark(){
   var now=Math.floor(Date.now()/1000),b=new Array(12).fill(0);
   S.incidents.forEach(function(i){var t=i.opened_at||0,d=Math.floor((now-t)/7200);if(d>=0&&d<12)b[11-d]++});
   return b
+}
+
+function groupStats(key){
+  var rows=(S.dashboard&&S.dashboard.resources||[]).filter(function(r){return r.group_name===key}),ok=0,bad=0,unknown=0;
+  rows.forEach(function(r){if(r.diagnosis==="AVAILABLE")ok++;else if(r.diagnosis==="LIKELY_RESTRICTION"||r.diagnosis==="LIKELY_OUTAGE")bad++;else unknown++});
+  return{total:rows.length,ok:ok,bad:bad,unknown:unknown}
+}
+
+function renderOverviewGroups(){
+  var el=q("#overviewGroupsList");if(!el)return;
+  if(!S.groups.length){el.innerHTML=empty("Групп нет","Создайте первую группу.");return}
+  el.innerHTML=S.groups.map(function(g){var s=groupStats(g.id);return '<button class="group-card" data-group-open="'+esc(g.id)+'"><i style="background:'+esc(g.color||"#3A8DFF")+'"></i><div><b>'+esc(g.title)+'</b><span>'+s.total+' ресурсов · '+s.ok+' доступно'+(s.bad?' · '+s.bad+' проблем':'')+'</span></div><strong>→</strong></button>'}).join("");
+  qa("[data-group-open]").forEach(function(b){b.onclick=function(){openView("resources");q("#groupFilter").value=b.dataset.groupOpen;renderResources()}});
+}
+
+function renderGroups(){
+  var el=q("#groupsGrid");if(!el)return;
+  if(!S.groups.length){el.innerHTML=empty("Групп пока нет","Создайте первую группу ресурсов.");return}
+  el.innerHTML=S.groups.map(function(g){var s=groupStats(g.id);return '<article class="group-manage-card"><div class="group-manage-head"><i style="background:'+esc(g.color||"#3A8DFF")+'"></i><div><h2>'+esc(g.title)+'</h2><span>'+esc(g.id)+'</span></div></div><div class="group-manage-stats"><div><b>'+s.total+'</b><span>ресурсов</span></div><div><b>'+s.ok+'</b><span>доступно</span></div><div><b>'+s.bad+'</b><span>проблем</span></div></div><div class="group-manage-actions"><button class="btn tiny secondary edit-group" data-group-edit="'+esc(g.id)+'">Изменить</button>'+(g.id!=="CUSTOM"?'<button class="btn tiny danger delete-group" data-group-delete="'+esc(g.id)+'">Удалить</button>':'')+'</div></article>'}).join("");
+  qa(".edit-group").forEach(function(b){b.onclick=function(){openGroupForm(S.groups.find(function(g){return g.id===b.dataset.groupEdit}))}});
+  qa(".delete-group").forEach(function(b){b.onclick=function(){deleteGroup(b.dataset.groupDelete)}});
+}
+
+function openGroupForm(g){
+  q("#groupForm").reset();q("#groupKey").value=g?g.id:"";q("#groupDialogTitle").textContent=g?"Изменить группу":"Новая группа";q("#groupTitle").value=g?g.title:"";q("#groupColor").value=g&&g.color?g.color:"#3A8DFF";q("#groupDialog").showModal()
+}
+async function saveGroup(e){
+  e.preventDefault();var key=q("#groupKey").value,title=q("#groupTitle").value.trim(),color=q("#groupColor").value;
+  if(!title){toast("Введите название группы");return}
+  try{if(key)await api("/api/groups/"+encodeURIComponent(key),{method:"PATCH",body:JSON.stringify({title:title,color:color})},true);else await api("/api/groups",{method:"POST",body:JSON.stringify({title:title,color:color})},true);q("#groupDialog").close();await loadAll(true);toast(key?"Группа обновлена":"Группа создана")}catch(err){toast(err.message)}
+}
+async function deleteGroup(key){
+  var g=S.groups.find(function(x){return x.id===key});if(!g)return;
+  if(!confirm("Удалить группу «"+g.title+"»? Ресурсы будут перенесены в «Пользовательские»."))return;
+  try{await api("/api/groups/"+encodeURIComponent(key),{method:"DELETE"},true);await loadAll(true);toast("Группа удалена")}catch(err){toast(err.message)}
+}
+
+function renderOwnerState(){
+  var b=q("#ownerButton"),t=q("#ownerButtonText");if(!b||!t)return;
+  b.classList.toggle("active",S.owner);t.textContent=S.owner?"Владелец":"Войти";
 }
 
 function renderRealtime(){
@@ -295,7 +337,7 @@ function drawSpark(canvas,values,color){
 
 function renderSettings(){
   if(!S.system||!S.dashboard)return;
-  q("#tokenState").textContent=token()?"Токен сохранён в этом браузере.":"Токен не указан.";
+  q("#tokenState").textContent=S.owner?"Режим владельца активен. Повторный ввод пароля не требуется.":"Сейчас открыт режим просмотра. Для изменения ресурсов и групп войдите как владелец.";
   q("#alertSystemState").textContent=S.system.webhook_configured?"Server webhook настроен.":"Webhook не настроен; инциденты сохраняются в журнале.";
   q("#securityState").textContent=S.system.private_targets_allowed?"Private targets разрешены.":"Private/loopback/link-local цели заблокированы.";
   var vals=[["Версия",S.system.version],["Uptime",duration(S.system.uptime_seconds)],["Ресурсы",S.system.resources],["Проверки",S.system.checks],["Инциденты",S.system.active_incidents],["Traceroute",S.system.traceroute_available?"готов":"нет"],["База",S.system.database],["Scheduler",S.system.scheduler_enabled?"включён":"выключен"]];
@@ -339,13 +381,14 @@ function setup(){
   document.addEventListener("click",function(e){if(!e.target.closest(".search-wrap"))q("#searchResults").classList.add("hidden")});
   q("#themeToggle").onclick=function(){var light=document.documentElement.dataset.theme==="light";document.documentElement.dataset.theme=light?"dark":"light";localStorage.setItem("netweather_theme",light?"dark":"light");renderAll()};
   document.documentElement.dataset.theme=localStorage.getItem("netweather_theme")||"dark";
-  [q("#openToken"),q("#overviewToken"),q("#openToken2")].forEach(function(b){b.onclick=function(){q("#tokenInput").value=token();q("#tokenDialog").showModal()}});
+  [q("#ownerButton"),q("#openToken2")].forEach(function(b){b.onclick=function(){if(S.owner){openView("settings");return}q("#tokenInput").value="";q("#tokenDialog").showModal()}});
+  q("#overviewGroups").onclick=function(){openView("groups")};q("#manageGroups").onclick=function(){openView("groups")};
   q("#openAlerts").onclick=function(){openView("alerts")};
-  q("#tokenForm").onsubmit=async function(e){e.preventDefault();var t=q("#tokenInput").value.trim();if(!t){toast("Введите API-токен");return}localStorage.setItem("netweather_token",t);try{await api("/api/auth/verify",{},true);q("#tokenDialog").close();renderSettings();toast("API-токен проверен")}catch(err){localStorage.removeItem("netweather_token");toast("Токен не принят: "+err.message)}};
-  q("#clearToken").onclick=function(){localStorage.removeItem("netweather_token");q("#tokenInput").value="";renderSettings();toast("Токен удалён")};
+  q("#tokenForm").onsubmit=async function(e){e.preventDefault();var password=q("#tokenInput").value;if(!password){toast("Введите пароль владельца");return}try{await api("/api/session/login",{method:"POST",body:JSON.stringify({password:password})});localStorage.removeItem("netweather_token");S.owner=true;q("#tokenDialog").close();q("#tokenInput").value="";renderOwnerState();renderSettings();toast("Режим владельца включён")}catch(err){toast(err.message)}};
+  q("#clearToken").onclick=async function(){try{await api("/api/session/logout",{method:"POST"});localStorage.removeItem("netweather_token");S.owner=false;q("#tokenDialog").close();renderOwnerState();renderSettings();toast("Вы вышли из режима владельца")}catch(err){toast(err.message)}};
   qa(".modal-close").forEach(function(b){b.onclick=function(){b.closest("dialog").close()}});
-  q("#resourceForm").onsubmit=saveResource;
-  q("#openAddResource").onclick=function(){openResourceForm(null)};q("#overviewAddResource").onclick=function(){openResourceForm(null)};
+  q("#resourceForm").onsubmit=saveResource;q("#groupForm").onsubmit=saveGroup;
+  q("#openAddResource").onclick=function(){openResourceForm(null)};q("#overviewAddResource").onclick=function(){openResourceForm(null)};q("#openAddGroup").onclick=function(){openGroupForm(null)};
   q("#checkAll").onclick=checkAll;
   qa(".seg").forEach(function(b){b.onclick=async function(){qa(".seg").forEach(function(x){x.classList.remove("active")});b.classList.add("active");S.streamMinutes=Number(b.dataset.minutes);S.realtime=await api("/api/realtime?minutes="+S.streamMinutes+"&scope=EXTERNAL");renderRealtime();renderResourceCards()}});
   q("#streamChart").addEventListener("mousemove",handleChartMove);q("#streamChart").addEventListener("mouseleave",function(){q("#chartTooltip").classList.add("hidden")});
