@@ -65,9 +65,19 @@ class FrontendContractTest(unittest.TestCase):
         self.assertIn("data-ack", self.js)
         self.assertIn("resource-logo-img", self.css)
 
-    def test_availability_axis_uses_even_ticks(self):
-        self.assertIn("for(var ti=0;ti<=4;ti++)ticks.push", self.js)
-        self.assertNotIn("var ticks=[100,99,98,95,90]", self.js)
+    def test_availability_axis_matches_reference_bands(self):
+        self.assertIn("var ticks=[100,99,98,95,90]", self.js)
+        self.assertIn("function availabilityY(", self.js)
+
+    def test_overview_resource_window_scrolls(self):
+        self.assertIn(".compact-table{", self.css)
+        self.assertIn("overflow-y:auto", self.css)
+        self.assertIn("var visible=rows;", self.js)
+        self.assertNotIn("var visible=rows.slice(0,6)", self.js)
+
+    def test_reference_typography_tokens_are_global(self):
+        self.assertIn('--nw-font:"Inter","Segoe UI",Roboto,Arial,sans-serif', self.css)
+        self.assertIn("html,body,button,input,select,textarea{font-family:var(--nw-font)}", self.css)
 
     def test_overview_is_desktop_no_scroll(self):
         self.assertIn("html,body{margin:0;width:100%;height:100%;overflow:hidden", self.css)
