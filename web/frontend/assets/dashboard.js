@@ -7,7 +7,7 @@ var S={
   historyExt:[],historyDom:[],streamMinutes:60,detailId:null,diagId:null,
   faultId:null,view:"overview",poll:null,streamMeta:null,authRequired:false,
   owner:true,mapScale:1,metaCache:{},catalog:null,catalogSelected:{},customCatalogMatch:null,customAutoCatalogKey:null,
-  dashboardPrefs:null,searchIndex:-1
+  dashboardPrefs:null,searchIndex:-1,coreOnline:false,lastSuccessAt:null
 };
 
 var DASHBOARD_PREFS_KEY="netweather_dashboard_v1";
@@ -399,7 +399,7 @@ async function loadAll(silent){
     ]);
     S.dashboard=a[0];S.incidents=a[1];S.system=a[2];S.groups=a[3];S.realtime=a[4];S.events=a[5];S.historyExt=a[6];S.historyDom=a[7];
     S.authRequired=!!a[8].auth_required;S.owner=!S.authRequired||!!a[8].authenticated;
-    renderAll();setCoreOnline(true)
+    S.lastSuccessAt=Date.now();renderAll();setCoreOnline(true)
   }catch(e){
     setCoreOnline(false);
     if(!silent)toast("Ошибка загрузки: "+e.message)
@@ -407,8 +407,23 @@ async function loadAll(silent){
 }
 
 function setCoreOnline(ok){
+  S.coreOnline=!!ok;
+  document.body.classList.toggle("core-offline",!ok);
   q("#apiStatus").textContent=ok?"онлайн":"нет связи";
-  var p=q(".pulse-dot");if(p)p.style.background=ok?"var(--green)":"var(--red)"
+  var p=q(".pulse-dot");if(p)p.style.background=ok?"var(--green)":"var(--red)";
+  if(!ok){
+    var health=q("#topSystemStatus");
+    if(health){
+      health.className="health-pill bad";
+      health.querySelector("b").textContent="Нет связи с Core";
+      health.querySelector("span").textContent="показаны последние данные"
+    }
+    if(q("#welcomeTitle"))q("#welcomeTitle").textContent="Данные временно не обновляются";
+    if(q("#welcomeSubtitle")){
+      var last=S.lastSuccessAt?new Date(S.lastSuccessAt).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit",second:"2-digit"}):"неизвестно";
+      q("#welcomeSubtitle").textContent="Последний успешный снимок: "+last+". Статусы ниже могут быть устаревшими."
+    }
+  }
 }
 
 function historyAverage(h,key){
@@ -592,11 +607,17 @@ function renderResourceCards(){
   hydrateResourceIcons()
 }
 
+function probeInRegion(p,region){
+  var lat=Number(p.lat),lon=Number(p.lon);
+  if(region==="RU")return lat>=41&&lat<=82&&((lon>=19&&lon<=180)||(lon>=-180&&lon<=-169));
+  if(region==="EU")return lat>=34&&lat<=72&&lon>=-25&&lon<=45;
+  return true
+}
 function renderMap(){
-  var probes=S.dashboard&&S.dashboard.probes||[];
+  var probes=S.dashboard&&S.dashboard.probes||[],region=q("#mapRegion")?q("#mapRegion").value:"WORLD";
   var map=q("#mapPoints"),emptyEl=q("#mapEmpty");
   if(map)map.innerHTML="";
-  var located=probes.filter(function(p){return Number.isFinite(Number(p.lat))&&Number.isFinite(Number(p.lon))});
+  var located=probes.filter(function(p){return Number.isFinite(Number(p.lat))&&Number.isFinite(Number(p.lon))&&probeInRegion(p,region)});
   if(emptyEl)emptyEl.classList.toggle("hidden",!!located.length);
   if(!map||!located.length)return;
   located.forEach(function(p){
@@ -604,6 +625,8 @@ function renderMap(){
     var circle=document.createElementNS("http://www.w3.org/2000/svg","circle");
     circle.setAttribute("cx",x);circle.setAttribute("cy",y);circle.setAttribute("r",p.online?"5":"4");
     circle.setAttribute("fill",p.online?"#42df9c":"#ff6174");circle.setAttribute("class","map-point");
+    circle.setAttribute("tabindex","0");circle.setAttribute("role","img");circle.setAttribute("aria-label",p.name+" · "+(p.online?"онлайн":"нет связи"));
+    var title=document.createElementNS("http://www.w3.org/2000/svg","title");title.textContent=p.name+" · "+(p.online?"онлайн":"нет связи");circle.appendChild(title);
     map.appendChild(circle)
   })
 }
@@ -1062,7 +1085,7 @@ function setup(){
   q("#expandChart").onclick=function(){var panel=q(".streams-panel"),expanded=panel.classList.toggle("chart-expanded");this.setAttribute("aria-expanded",expanded?"true":"false");this.setAttribute("title",expanded?"Свернуть график":"Развернуть график")};
   q("#mapZoomIn").onclick=function(){S.mapScale=Math.min(2,S.mapScale+.15);q("#worldMapSvg").style.transform="scale("+S.mapScale+")"};
   q("#mapZoomOut").onclick=function(){S.mapScale=Math.max(.8,S.mapScale-.15);q("#worldMapSvg").style.transform="scale("+S.mapScale+")"};
-  q("#mapRegion").onchange=function(){toast("Фильтр карты: "+this.options[this.selectedIndex].text)};
+  q("#mapRegion").onchange=function(){renderMap()};
   q("#faultResourceSelect").onchange=function(){S.faultId=Number(this.value);renderFaultPanel()};
   q("#searchInput").oninput=renderResources;q("#groupFilter").onchange=renderResources;q("#statusFilter").onchange=renderResources;
   q("#diagResource").onchange=function(){S.diagId=Number(this.value);var r=resourceById(this.value);if(r)showDiagnostic(r)};
