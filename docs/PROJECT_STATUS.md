@@ -2,7 +2,7 @@
 
 ## Current checkpoint
 
-**Web:** `0.3.9-web`  
+**Web:** `0.3.10-web`  
 **Development branch:** `feature/web-vps-monitoring`  
 **Production domain:** `netweather.online`
 
@@ -34,15 +34,26 @@ Verified:
 Last remaining deployment corrective:
 - deploy helper temporary files moved from shared `/tmp` to root-owned deployment state directory.
 
-## Current UI work
+## Current UI checkpoint
 
-- normalize button states;
-- normalize dialog behavior;
-- keyboard navigation;
-- focus visibility;
-- loading/error states;
-- polish GitHub presentation;
-- remove prototype/dead UI behavior.
+Completed in 0.3.10:
+- shared dialog open/close/focus behavior;
+- backdrop close and Escape contract;
+- focus return to opener;
+- explicit focus-visible states;
+- busy-state / double-submit protection;
+- custom destructive confirmation dialog;
+- keyboard global search navigation;
+- stale Core state;
+- real map-region filter;
+- live probe layer on the map page;
+- GitHub project documentation/templates refresh.
+
+Next UI work:
+- responsive pass on narrow layouts;
+- contextual help/tooltips;
+- remaining empty/error-state polish;
+- browser-probe panels when capability exists.
 
 ## Next functional work
 
