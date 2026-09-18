@@ -600,9 +600,12 @@ function renderResourceCards(){
     var pts=(r.points||[]).filter(function(p){return p.availability!=null});
     var latency=(rr.domestic||rr.external||{}).response_time_ms;
     var delta=pts.length>2?Number(pts[pts.length-1].availability)-Number(pts[0].availability):0;
-    return '<article class="resource-card" data-resource="'+r.id+'"><div class="resource-card-top"><div class="resource-card-name">'+resourceIconHtml(r.target,r.name)+'<b>'+esc(r.name)+'</b></div><span class="resource-state '+(cls==="bad"?"bad":cls==="warn"?"warn":"")+'">'+(delta>=0?"↑ ":"↓ ")+Math.abs(delta).toFixed(1)+'%</span></div><div class="resource-card-metrics"><strong>'+pct(r.availability_24h,1)+'</strong><span>'+num(latency," мс")+'</span></div><canvas data-card-spark="'+r.id+'"></canvas><div class="resource-card-foot"><span>◴ '+num(latency," мс")+'</span><span>'+esc(groupTitle(r.group_name))+'</span></div></article>'
+    return '<article class="resource-card" data-resource="'+r.id+'" tabindex="0" role="button" aria-label="Открыть ресурс «'+esc(r.name)+'»"><div class="resource-card-top"><div class="resource-card-name">'+resourceIconHtml(r.target,r.name)+'<b>'+esc(r.name)+'</b></div><span class="resource-state '+(cls==="bad"?"bad":cls==="warn"?"warn":"")+'">'+(delta>=0?"↑ ":"↓ ")+Math.abs(delta).toFixed(1)+'%</span></div><div class="resource-card-metrics"><strong>'+pct(r.availability_24h,1)+'</strong><span>'+num(latency," мс")+'</span></div><canvas data-card-spark="'+r.id+'"></canvas><div class="resource-card-foot"><span>◴ '+num(latency," мс")+'</span><span>'+esc(groupTitle(r.group_name))+'</span></div></article>'
   }).join("");
-  qa(".resource-card").forEach(function(card){card.onclick=function(){openDetail(Number(card.dataset.resource))}});
+  qa(".resource-card").forEach(function(card){
+    card.onclick=function(){openDetail(Number(card.dataset.resource))};
+    card.onkeydown=function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();openDetail(Number(card.dataset.resource))}}
+  });
   cards.forEach(function(r,i){var c=document.querySelector('[data-card-spark="'+r.id+'"]');drawSpark(c,(r.points||[]).map(function(p){return p.availability}).filter(function(v){return v!=null}),COLORS[i%COLORS.length])});
   hydrateResourceIcons()
 }
@@ -654,9 +657,12 @@ function renderOverviewTable(){
   var visible=rows;
   el.innerHTML='<div class="table-head"><div>Ресурс</div><div>Статус</div><div>Доступность (24ч)</div><div>Время ответа</div><div>DNS</div><div>TCP</div><div>TLS</div><div>HTTP</div><div>Тренд (1ч)</div><div></div></div>'+visible.map(function(r){
     var rt=realtimeById(r.id)||{},x=r.domestic||r.external||{};
-    return '<div class="table-row" data-resource="'+r.id+'"><div class="table-resource with-logo">'+resourceIconHtml(r.target,r.name)+'<div><b>'+esc(r.name)+'</b><span>'+esc(r.target)+'</span></div></div><div><span class="status-chip '+diagClass(r.diagnosis)+'">'+diagText(r.diagnosis)+'</span></div><div>'+pct(rt.availability_24h,1)+'</div><div>'+num(x.response_time_ms," мс")+'</div><div><i class="stage-dot '+stageState("DNS",r,x)+'"></i></div><div><i class="stage-dot '+stageState("TCP",r,x)+'"></i></div><div><i class="stage-dot '+stageState("TLS",r,x)+'"></i></div><div><i class="stage-dot '+stageState("HTTP",r,x)+'"></i></div><div><canvas class="trend-canvas" data-trend="'+r.id+'"></canvas></div><button type="button" class="row-more" data-row-more="'+r.id+'" aria-label="Открыть «'+esc(r.name)+'»">⋮</button></div>'
+    return '<div class="table-row" data-resource="'+r.id+'" tabindex="0" aria-label="Открыть ресурс «'+esc(r.name)+'»"><div class="table-resource with-logo">'+resourceIconHtml(r.target,r.name)+'<div><b>'+esc(r.name)+'</b><span>'+esc(r.target)+'</span></div></div><div><span class="status-chip '+diagClass(r.diagnosis)+'">'+diagText(r.diagnosis)+'</span></div><div>'+pct(rt.availability_24h,1)+'</div><div>'+num(x.response_time_ms," мс")+'</div><div><i class="stage-dot '+stageState("DNS",r,x)+'"></i></div><div><i class="stage-dot '+stageState("TCP",r,x)+'"></i></div><div><i class="stage-dot '+stageState("TLS",r,x)+'"></i></div><div><i class="stage-dot '+stageState("HTTP",r,x)+'"></i></div><div><canvas class="trend-canvas" data-trend="'+r.id+'"></canvas></div><button type="button" class="row-more" data-row-more="'+r.id+'" aria-label="Открыть «'+esc(r.name)+'»">⋮</button></div>'
   }).join("");
-  qa("#overviewResourceTable .table-row").forEach(function(row){row.onclick=function(e){if(e.target.closest("[data-row-more]"))return;openDetail(Number(row.dataset.resource))}});
+  qa("#overviewResourceTable .table-row").forEach(function(row){
+    row.onclick=function(e){if(e.target.closest("[data-row-more]"))return;openDetail(Number(row.dataset.resource))};
+    row.onkeydown=function(e){if((e.key==="Enter"||e.key===" ")&&!e.target.closest("[data-row-more]")){e.preventDefault();openDetail(Number(row.dataset.resource))}}
+  });
   qa("#overviewResourceTable [data-row-more]").forEach(function(button){button.onclick=function(e){e.stopPropagation();openDetail(Number(button.dataset.rowMore))}});
   visible.forEach(function(r,i){var rt=realtimeById(r.id)||{},c=document.querySelector('[data-trend="'+r.id+'"]');drawSpark(c,(rt.points||[]).map(function(p){return p.availability}).filter(function(v){return v!=null}),COLORS[i%COLORS.length])});
   hydrateResourceIcons()
@@ -758,8 +764,11 @@ function renderResources(){
   q("#groupOptions").innerHTML=S.groups.map(function(g){return '<option value="'+esc(g.id)+'">'+esc(g.title)+'</option>'}).join("");
   var rows=filteredResources(),el=q("#resourcesTable");
   if(!rows.length){el.innerHTML=empty(all.length?"Ничего не найдено":"Список пуст",all.length?"Измените фильтры.":"Добавьте ресурс.");return}
-  el.innerHTML='<div class="table-head"><div>Ресурс</div><div>Вывод</div><div>VPS</div><div>РФ</div><div>DNS</div><div>HTTP</div><div>Действия</div></div>'+rows.map(function(r){var ext=r.external||{},dom=r.domestic||{};return '<div class="table-row" data-resource="'+r.id+'"><div class="table-resource"><b>'+esc(r.name)+'</b><span>'+esc(r.target)+' · '+esc(groupTitle(r.group_name))+'</span></div><div><span class="status-chip '+diagClass(r.diagnosis)+'">'+diagText(r.diagnosis)+'</span></div><div>'+stText(ext.status)+'</div><div>'+stText(dom.status)+'</div><div>'+num((dom.dns_ms!=null?dom.dns_ms:ext.dns_ms)," мс")+'</div><div>'+((dom.http_status!=null?dom.http_status:ext.http_status)||"—")+'</div><div><button class="btn tiny secondary row-check" data-check="'+r.id+'">Проверить</button></div></div>'}).join("");
-  qa("#resourcesTable .table-row").forEach(function(row){row.onclick=function(e){if(e.target.closest(".row-check"))return;openDetail(Number(row.dataset.resource))}});
+  el.innerHTML='<div class="table-head"><div>Ресурс</div><div>Вывод</div><div>VPS</div><div>РФ</div><div>DNS</div><div>HTTP</div><div>Действия</div></div>'+rows.map(function(r){var ext=r.external||{},dom=r.domestic||{};return '<div class="table-row" data-resource="'+r.id+'" tabindex="0" aria-label="Открыть ресурс «'+esc(r.name)+'»"><div class="table-resource"><b>'+esc(r.name)+'</b><span>'+esc(r.target)+' · '+esc(groupTitle(r.group_name))+'</span></div><div><span class="status-chip '+diagClass(r.diagnosis)+'">'+diagText(r.diagnosis)+'</span></div><div>'+stText(ext.status)+'</div><div>'+stText(dom.status)+'</div><div>'+num((dom.dns_ms!=null?dom.dns_ms:ext.dns_ms)," мс")+'</div><div>'+((dom.http_status!=null?dom.http_status:ext.http_status)||"—")+'</div><div><button class="btn tiny secondary row-check" data-check="'+r.id+'">Проверить</button></div></div>'}).join("");
+  qa("#resourcesTable .table-row").forEach(function(row){
+    row.onclick=function(e){if(e.target.closest(".row-check"))return;openDetail(Number(row.dataset.resource))};
+    row.onkeydown=function(e){if((e.key==="Enter"||e.key===" ")&&!e.target.closest(".row-check")){e.preventDefault();openDetail(Number(row.dataset.resource))}}
+  });
   qa(".row-check").forEach(function(b){b.onclick=function(e){e.stopPropagation();manualCheck(Number(b.dataset.check),b)}})
 }
 
