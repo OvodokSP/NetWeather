@@ -26,8 +26,8 @@ get '/api/history?hours=24'
 curl -fsSI "$BASE_URL/" >/dev/null; ok 'HEAD /'
 FRONTEND_HTML="$(curl -fsS "$BASE_URL/")"
 grep -Fq 'NetWeather' <<<"$FRONTEND_HTML"; ok 'GET / frontend'
-curl -fsS "$BASE_URL/assets/dashboard.js?v=0.3.3" >/dev/null; ok 'GET /assets/dashboard.js'
-curl -fsS "$BASE_URL/assets/dashboard.css?v=0.3.3" >/dev/null; ok 'GET /assets/dashboard.css'
+curl -fsS "$BASE_URL/assets/dashboard.js?v=0.3.4" >/dev/null; ok 'GET /assets/dashboard.js'
+curl -fsS "$BASE_URL/assets/dashboard.css?v=0.3.4" >/dev/null; ok 'GET /assets/dashboard.css'
 
 if [[ -z "$TOKEN" ]]; then
   echo 'SKIP  write/diagnostic tests: NETWEATHER_API_TOKEN is unavailable'
@@ -36,7 +36,7 @@ fi
 
 curl -fsS "${AUTH[@]}" "$BASE_URL/api/auth/verify" >/dev/null; ok 'GET /api/auth/verify'
 
-TMP_JSON="$(curl -fsS -X POST "${AUTH[@]}" -H 'Content-Type: application/json' "$BASE_URL/api/resources" -d '{"name":"__NetWeather self-test__","target":"https://example.com","group_name":"SELFTEST","interval_seconds":86400,"alerts_enabled":false}')"
+TMP_JSON="$(curl -fsS -X POST "${AUTH[@]}" -H 'Content-Type: application/json' "$BASE_URL/api/resources" -d '{"name":"__NetWeather self-test__","target":"https://example.com","group_name":"CUSTOM","interval_seconds":86400,"alerts_enabled":false}')"
 RID="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$TMP_JSON")"
 cleanup(){ curl -fsS -X DELETE "${AUTH[@]}" "$BASE_URL/api/resources/$RID" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
