@@ -632,6 +632,12 @@ function renderMap(){
   if(map)map.innerHTML="";
   var located=probes.filter(function(p){return Number.isFinite(Number(p.lat))&&Number.isFinite(Number(p.lon))&&probeInRegion(p,region)});
   if(emptyEl)emptyEl.classList.toggle("hidden",!!located.length);
+  var status=q("#mapStatus");
+  if(status){
+    var offline=located.filter(function(p){return !p.online}).length;
+    status.className="map-status "+(!located.length?"neutral":offline?"bad":"ok");
+    status.querySelector("span").textContent=!located.length?"Нет данных о состоянии точек":offline?("Проблемные точки: "+offline+" из "+located.length):"Все отображаемые точки онлайн"
+  }
   if(!map||!located.length)return;
   located.forEach(function(p){appendProbePoint(map,p)})
 }
