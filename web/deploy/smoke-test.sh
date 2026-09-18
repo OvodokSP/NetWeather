@@ -18,11 +18,15 @@ get /api/system
 get /api/dashboard
 get /api/groups
 get /api/resources
+get '/api/realtime?minutes=60&scope=EXTERNAL'
+get '/api/events?limit=10'
 get /api/incidents
 get '/api/history?hours=24'
 curl -fsSI "$BASE_URL/" >/dev/null; ok 'HEAD /'
 FRONTEND_HTML="$(curl -fsS "$BASE_URL/")"
-grep -Fq 'Network Observatory' <<<"$FRONTEND_HTML"; ok 'GET / frontend'
+grep -Fq 'NetWeather' <<<"$FRONTEND_HTML"; ok 'GET / frontend'
+curl -fsS "$BASE_URL/assets/dashboard.js?v=0.3.1" >/dev/null; ok 'GET /assets/dashboard.js'
+curl -fsS "$BASE_URL/assets/dashboard.css?v=0.3.1" >/dev/null; ok 'GET /assets/dashboard.css'
 
 if [[ -z "$TOKEN" ]]; then
   echo 'SKIP  write/diagnostic tests: NETWEATHER_API_TOKEN is unavailable'
