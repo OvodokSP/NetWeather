@@ -438,6 +438,18 @@ function historyDelta(h,key){
   return a==null||b==null?null:b-a
 }
 
+function applyCapabilityNavigation(){
+  if(!S.dashboard)return;
+  var probes=S.dashboard.probes||[];
+  var hasMap=probes.some(function(p){return Number.isFinite(Number(p.lat))&&Number.isFinite(Number(p.lon))});
+  var hasDomestic=probes.some(function(p){return p.scope==="DOMESTIC"&&p.online});
+  var mapNav=q('.side-item[data-view="map"]'),world=q("#worldButton"),domTrace=q("#diagTraceDomestic");
+  if(mapNav)mapNav.classList.toggle("capability-hidden",!hasMap);
+  if(world)world.classList.toggle("capability-hidden",!hasMap);
+  if(domTrace)domTrace.classList.toggle("capability-hidden",!hasDomestic);
+  if(!hasMap&&S.view==="map")openView("overview")
+}
+
 function renderAll(){
   renderOverview();
   renderGroups();
@@ -448,6 +460,7 @@ function renderAll(){
   renderProbes();
   renderNotifications();
   renderSettings();
+  applyCapabilityNavigation();
   renderSearch("");
   if(S.system)q("#versionLabel").textContent=S.system.version
 }
@@ -809,8 +822,14 @@ function renderProbes(){
 }
 
 function renderNotifications(){
-  var b=q("#browserNotifyState"),w=q("#notifyWebhookState");if(!b||!w||!S.system)return;
-  b.textContent=!window.Notification?"Браузер не поддерживает Notification API.":Notification.permission==="granted"?"Разрешение выдано.":Notification.permission==="denied"?"Уведомления заблокированы браузером.":"Разрешение ещё не запрашивалось.";
+  var b=q("#browserNotifyState"),w=q("#notifyWebhookState"),button=q("#enableNotifications");if(!b||!w||!S.system)return;
+  var supported="Notification" in window,permission=supported?Notification.permission:"unsupported";
+  b.textContent=!supported?"Браузер не поддерживает Notification API.":permission==="granted"?"Разрешение выдано.":permission==="denied"?"Уведомления заблокированы браузером.":"Разрешение ещё не запрашивалось.";
+  if(button){
+    button.disabled=!supported||permission==="denied"||permission==="granted";
+    button.textContent=permission==="granted"?"Уведомления включены":permission==="denied"?"Заблокировано браузером":!supported?"Не поддерживается":"Включить уведомления браузера";
+    button.title=permission==="denied"?"Разрешение можно изменить в настройках браузера":""
+  }
   w.textContent=S.system.webhook_configured?"Server webhook настроен.":"Webhook не настроен."
 }
 
