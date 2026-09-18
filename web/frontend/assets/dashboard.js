@@ -189,11 +189,13 @@ function setBusy(button,busy,label){
     if(button.dataset.busy==="1")return;
     button.dataset.busy="1";button._busyHtml=button.innerHTML;button._busyDisabled=button.disabled;
     button.disabled=true;button.setAttribute("aria-busy","true");button.classList.add("is-busy");
+    var dialog=button.closest&&button.closest("dialog");if(dialog){dialog.dataset.locked="1";dialog.setAttribute("aria-busy","true")}
     if(label)button.textContent=label
   }else{
     if(button.dataset.busy!=="1")return;
     if(button._busyHtml!=null)button.innerHTML=button._busyHtml;
     button.disabled=!!button._busyDisabled;button.removeAttribute("aria-busy");button.classList.remove("is-busy");
+    var dialog=button.closest&&button.closest("dialog");if(dialog){delete dialog.dataset.locked;dialog.removeAttribute("aria-busy")}
     delete button.dataset.busy;delete button._busyHtml;delete button._busyDisabled
   }
 }
