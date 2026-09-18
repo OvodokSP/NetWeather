@@ -138,12 +138,19 @@ def seed_defaults() -> None:
             return
         now = int(time.time())
         for name, target, group in DEFAULT_RESOURCES:
+            match = catalog_match(target)
             conn.execute("""INSERT INTO resources(
               name,target,group_name,interval_seconds,enabled,created_at,updated_at,last_checked_at,
               expected_status_min,expected_status_max,slow_threshold_ms,failure_threshold,alerts_enabled,
-              last_success_at,last_failure_at
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (name,target,group,DEFAULT_INTERVAL,1,now,now,0,200,399,1800,2,1,0,0))
+              last_success_at,last_failure_at,catalog_key
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+              match.name if match else name,
+              match.target if match else target,
+              match.group_key if match else group,
+              DEFAULT_INTERVAL,1,now,now,0,200,399,1800,2,1,0,0,
+              match.key if match else None,
+            ))
 
 
 def latest_resources() -> list[dict[str, Any]]:
