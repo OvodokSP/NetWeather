@@ -6,8 +6,146 @@ var S={
   dashboard:null,incidents:[],system:null,groups:[],realtime:null,events:[],
   historyExt:[],historyDom:[],streamMinutes:60,detailId:null,diagId:null,
   faultId:null,view:"overview",poll:null,streamMeta:null,authRequired:false,
-  owner:true,mapScale:1,metaCache:{},catalog:null,catalogSelected:{},customCatalogMatch:null,customAutoCatalogKey:null
+  owner:true,mapScale:1,metaCache:{},catalog:null,catalogSelected:{},customCatalogMatch:null,customAutoCatalogKey:null,
+  dashboardPrefs:null
 };
+
+var DASHBOARD_PREFS_KEY="netweather_dashboard_v1";
+var DASHBOARD_PANEL_LABELS={
+  global_kpi:"Глобальная доступность",
+  domestic_kpi:"Российский контур",
+  personal_kpi:"Моя сеть",
+  incidents_kpi:"Активные инциденты",
+  realtime:"График доступности",
+  events:"Последние события",
+  pinned_resources:"Закреплённые ресурсы",
+  map:"Карта сбоев",
+  resources_table:"Таблица ресурсов",
+  fault_domain:"Трассировка / fault domain"
+};
+var DASHBOARD_PANEL_ORDER=["global_kpi","domestic_kpi","personal_kpi","incidents_kpi","realtime","events","pinned_resources","map","resources_table","fault_domain"];
+
+function defaultDashboardPreferences(){
+  return{
+    pinned_resource_ids:[],
+    panels:{
+      global_kpi:true,domestic_kpi:true,personal_kpi:true,incidents_kpi:true,
+      realtime:true,events:true,pinned_resources:true,map:true,resources_table:true,fault_domain:true
+    }
+  }
+}
+function loadDashboardPreferences(){
+  if(S.dashboardPrefs)return S.dashboardPrefs;
+  var base=defaultDashboardPreferences();
+  try{
+    var raw=JSON.parse(localStorage.getItem(DASHBOARD_PREFS_KEY)||"null");
+    if(raw&&typeof raw==="object"){
+      if(Array.isArray(raw.pinned_resource_ids))base.pinned_resource_ids=raw.pinned_resource_ids.map(Number).filter(Number.isFinite).slice(0,6);
+      if(raw.panels&&typeof raw.panels==="object")Object.keys(base.panels).forEach(function(k){if(typeof raw.panels[k]==="boolean")base.panels[k]=raw.panels[k]})
+    }
+  }catch(_e){}
+  S.dashboardPrefs=base;
+  return base
+}
+function saveDashboardPreferences(prefs){
+  S.dashboardPrefs=prefs;
+  localStorage.setItem(DASHBOARD_PREFS_KEY,JSON.stringify(prefs))
+}
+function dashboardCapabilities(){
+  var resources=S.dashboard&&S.dashboard.resources||[],probes=S.dashboard&&S.dashboard.probes||[];
+  var hasDomestic=probes.some(function(p){return p.scope==="DOMESTIC"&&p.online});
+  var hasPersonal=probes.some(function(p){return ["PERSONAL","BROWSER","DEVICE","LOCAL"].indexOf(String(p.scope||"").toUpperCase())>=0&&p.online});
+  var hasMap=probes.some(function(p){return Number.isFinite(Number(p.lat))&&Number.isFinite(Number(p.lon))});
+  var hasRealtime=!!(S.realtime&&S.realtime.resources&&S.realtime.resources.length);
+  return{
+    global_kpi:true,
+    domestic_kpi:hasDomestic,
+    personal_kpi:hasPersonal,
+    incidents_kpi:true,
+    realtime:hasRealtime,
+    events:true,
+    pinned_resources:resources.length>0,
+    map:hasMap,
+    resources_table:resources.length>0,
+    fault_domain:resources.length>0
+  }
+}
+function visiblePinnedResourceIds(){
+  var resources=S.dashboard&&S.dashboard.resources||[],valid=new Set(resources.map(function(r){return Number(r.id)})),prefs=loadDashboardPreferences();
+  var chosen=(prefs.pinned_resource_ids||[]).filter(function(id){return valid.has(Number(id))}).slice(0,6);
+  if(!chosen.length)chosen=resources.slice(0,6).map(function(r){return Number(r.id)});
+  return chosen
+}
+function applyDashboardPreferences(){
+  if(!S.dashboard)return;
+  var prefs=loadDashboardPreferences(),caps=dashboardCapabilities();
+  qa("[data-dashboard-panel]").forEach(function(node){
+    var key=node.dataset.dashboardPanel;
+    var visible=!!caps[key]&&prefs.panels[key]!==false;
+    node.classList.toggle("dashboard-hidden",!visible)
+  });
+  var kpis=qa(".kpi-grid > [data-dashboard-panel]").filter(function(n){return !n.classList.contains("dashboard-hidden")});
+  q(".kpi-grid").style.gridTemplateColumns=kpis.length?"repeat("+kpis.length+",minmax(0,1fr))":"1fr";
+  [[".overview-row-chart"],[".overview-row-middle"],[".overview-row-bottom"]].forEach(function(entry){
+    var row=q(entry[0]);if(!row)return;
+    var visible=Array.from(row.children).filter(function(n){return !n.classList.contains("dashboard-hidden")});
+    row.classList.toggle("dashboard-row-hidden",visible.length===0);
+    row.classList.toggle("single-panel",visible.length===1)
+  });
+  var grid=q(".overview-grid"),tracks=[];
+  if(!q(".headline-row").classList.contains("dashboard-hidden"))tracks.push("55px");
+  if(kpis.length)tracks.push("82px");
+  if(!q(".overview-row-chart").classList.contains("dashboard-row-hidden"))tracks.push("minmax(0,1.1fr)");
+  if(!q(".overview-row-middle").classList.contains("dashboard-row-hidden"))tracks.push("148px");
+  if(!q(".overview-row-bottom").classList.contains("dashboard-row-hidden"))tracks.push("minmax(0,1fr)");
+  grid.style.gridTemplateRows=tracks.join(" ");
+}
+function renderDashboardPreferencesModal(){
+  if(!S.dashboard)return;
+  var prefs=loadDashboardPreferences(),caps=dashboardCapabilities(),resources=S.dashboard.resources||[];
+  var selected=new Set(visiblePinnedResourceIds());
+  q("#pinnedResourceCount").textContent=selected.size+" / 6";
+  var grouped=S.groups.map(function(g){
+    var rows=resources.filter(function(r){return r.group_name===g.id});
+    if(!rows.length)return "";
+    return '<details class="preferences-resource-group" open><summary><span><i style="background:'+esc(g.color||"#55C7FF")+'"></i><b>'+esc(g.title)+'</b></span><em>'+rows.length+'</em></summary><div class="preferences-resource-list">'+rows.map(function(r){
+      var checked=selected.has(Number(r.id));
+      return '<label class="preferences-resource-row"><input type="checkbox" data-pin-resource="'+r.id+'" '+(checked?"checked":"")+'><span class="preferences-checkbox"></span>'+resourceIconHtml(r.target,r.name)+'<span><b>'+esc(r.name)+'</b><small>'+esc(r.target.replace(/^https?:\/\//,""))+'</small></span></label>'
+    }).join("")+'</div></details>'
+  }).join("");
+  q("#pinnedResourceGroups").innerHTML=grouped||empty("Нет ресурсов","Сначала добавьте ресурсы в мониторинг.");
+  q("#dashboardPanelChoices").innerHTML=DASHBOARD_PANEL_ORDER.filter(function(key){return caps[key]}).map(function(key){
+    var checked=prefs.panels[key]!==false;
+    return '<label class="dashboard-panel-choice"><input type="checkbox" data-dashboard-choice="'+key+'" '+(checked?"checked":"")+'><span class="preferences-checkbox"></span><b>'+esc(DASHBOARD_PANEL_LABELS[key])+'</b></label>'
+  }).join("");
+  qa("[data-pin-resource]").forEach(function(box){box.onchange=function(){
+    var checked=qa("[data-pin-resource]:checked");
+    if(checked.length>6){box.checked=false;toast("На главном экране можно закрепить максимум 6 ресурсов")}
+    q("#pinnedResourceCount").textContent=qa("[data-pin-resource]:checked").length+" / 6"
+  }});
+  hydrateResourceIcons()
+}
+function openDashboardPreferences(){
+  renderDashboardPreferencesModal();
+  q("#dashboardPreferencesDialog").showModal()
+}
+function submitDashboardPreferences(e){
+  e.preventDefault();
+  var prefs=loadDashboardPreferences();
+  prefs.pinned_resource_ids=qa("[data-pin-resource]:checked").map(function(x){return Number(x.dataset.pinResource)}).slice(0,6);
+  DASHBOARD_PANEL_ORDER.forEach(function(key){
+    var box=q('[data-dashboard-choice="'+key+'"]');
+    if(box)prefs.panels[key]=box.checked
+  });
+  saveDashboardPreferences(prefs);
+  q("#dashboardPreferencesDialog").close();
+  renderOverview();
+  toast("Главный экран обновлён")
+}
+function resetDashboardPreferences(){
+  localStorage.removeItem(DASHBOARD_PREFS_KEY);S.dashboardPrefs=defaultDashboardPreferences();
+  renderDashboardPreferencesModal();renderOverview();toast("Настройки Overview сброшены")
+}
 
 function q(s){return document.querySelector(s)}
 function qa(s){return Array.prototype.slice.call(document.querySelectorAll(s))}
@@ -243,7 +381,7 @@ function renderOverview(){
   q("#alertBadge").textContent=unread.length;q("#alertBadge").classList.toggle("hidden",!unread.length);
   q("#notifyCount").textContent=unread.length;q("#notifyCount").classList.toggle("hidden",!unread.length);
 
-  renderRealtime();renderEvents();renderResourceCards();renderMap();renderOverviewTable();renderFaultPanel()
+  renderRealtime();renderEvents();renderResourceCards();renderMap();renderOverviewTable();renderFaultPanel();applyDashboardPreferences()
 }
 
 function overviewState(s,legacy,incidents){
@@ -346,7 +484,8 @@ function renderEvents(){
 function renderResourceCards(){
   var el=q("#resourceCards"),rows=S.realtime&&S.realtime.resources||[];
   if(!rows.length){el.innerHTML=empty("Нет ресурсов","Добавьте первую цель.");return}
-  var current=S.dashboard.resources||[],cards=rows.slice(0,6);
+  var current=S.dashboard.resources||[],pinned=visiblePinnedResourceIds();
+  var cards=pinned.map(function(id){return rows.find(function(r){return Number(r.id)===Number(id)})}).filter(Boolean).slice(0,6);
   el.innerHTML=cards.map(function(r,i){
     var rr=current.find(function(x){return x.id===r.id})||{},cls=diagClass(rr.diagnosis);
     var pts=(r.points||[]).filter(function(p){return p.availability!=null});
@@ -755,6 +894,9 @@ function setup(){
   q("#ackAllIncidents").onclick=acknowledgeAllIncidents;
   q("#worldButton").onclick=function(){openView("map")};
   q("#manageGroups").onclick=function(){openView("groups")};
+  q("#customizeOverview").onclick=openDashboardPreferences;
+  q("#dashboardPreferencesForm").onsubmit=submitDashboardPreferences;
+  q("#resetDashboardPreferences").onclick=resetDashboardPreferences;
   [q("#sidebarAddResource"),q("#openAddResource"),q("#overviewAddResource")].forEach(function(b){if(b)b.onclick=openResourceCatalog});
   q("#resourceCatalogForm").onsubmit=submitResourceCatalog;
   q("#catalogSearch").oninput=function(){renderCatalog(this.value)};
@@ -779,7 +921,7 @@ function setup(){
   q("#historyRange").onchange=function(){loadAll(true)};
   q("#enableNotifications").onclick=async function(){if(!("Notification" in window)){toast("Браузер не поддерживает уведомления");return}var p=await Notification.requestPermission();renderNotifications();toast(p==="granted"?"Уведомления включены":"Разрешение не выдано")};
   q("#deleteResource").onclick=deleteResource;q("#editResource").onclick=function(){var r=resourceById(S.detailId);q("#detailDialog").close();if(r)openResourceForm(r)};q("#detailCheck").onclick=function(){q("#detailDialog").close();manualCheck(S.detailId)};q("#detailTrace").onclick=function(){q("#detailDialog").close();trace(S.detailId,false)};
-  window.addEventListener("resize",function(){renderRealtime();renderHistory();renderResourceCards();renderOverviewTable()});
+  window.addEventListener("resize",function(){renderRealtime();renderHistory();renderResourceCards();renderOverviewTable();applyDashboardPreferences()});
   loadAll(false);S.poll=setInterval(function(){loadAll(true)},15000)
 }
 document.addEventListener("DOMContentLoaded",setup);
