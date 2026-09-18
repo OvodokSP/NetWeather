@@ -251,12 +251,12 @@ def agent_result(payload: AgentResult, probe_key: str = Query(min_length=1,max_l
 def agent_tasks(probe_key: str = Query(min_length=1,max_length=80), probe_name: str = Query(default="Российский probe",max_length=120)):
     register_probe(probe_key, probe_name, "DOMESTIC")
     with db() as conn:
-        rows = conn.execute("""SELECT t.id,t.resource_id,t.task_type,r.target FROM probe_tasks t
+        rows = conn.execute("""SELECT t.id,t.resource_id,t.task_type,r.target,r.expected_status_min,r.expected_status_max FROM probe_tasks t
           JOIN resources r ON r.id=t.resource_id
           WHERE t.probe_key=? AND t.status='PENDING'
           ORDER BY t.created_at LIMIT 10""", (probe_key,)).fetchall()
     return Response(
-        content="".join(f"{r['id']}\t{r['resource_id']}\t{r['task_type']}\t{r['target']}\n" for r in rows),
+        content="".join(f"{r['id']}\t{r['resource_id']}\t{r['task_type']}\t{r['target']}\t{r['expected_status_min']}\t{r['expected_status_max']}\n" for r in rows),
         media_type="text/tab-separated-values; charset=utf-8",
     )
 
