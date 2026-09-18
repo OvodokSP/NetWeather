@@ -21,13 +21,13 @@ class FrontendContractTest(unittest.TestCase):
         views = set(re.findall(r'data-view="([A-Za-z0-9_-]+)"', self.html))
         sections = set(re.findall(r'id="view-([A-Za-z0-9_-]+)"', self.html))
         self.assertTrue(views.issubset(sections))
-        self.assertEqual(sections, {"overview","resources","alerts","diagnostics","history","settings"})
+        self.assertEqual(sections, {"overview","resources","groups","alerts","diagnostics","history","settings"})
 
     def test_dashboard_core_sections_exist(self):
         required = (
             "globalSearch","topSystemStatus","kpiGlobal","kpiRu","kpiPersonal","kpiIncidents",
             "streamChart","eventFeed","resourceCards","faultMap","overviewResourceTable",
-            "faultPath","faultConclusion","faultResourceSelect"
+            "faultPath","faultConclusion","faultResourceSelect","overviewGroupsList","groupsGrid","ownerButton"
         )
         for item in required:
             self.assertIn(f'id="{item}"', self.html)
@@ -36,7 +36,7 @@ class FrontendContractTest(unittest.TestCase):
         for item in (
             "resourceDialog","detailDialog","tokenDialog","checkAll","diagTrace",
             "diagTraceDomestic","diagCheck","openAddResource","overviewAddResource",
-            "faultTraceVps","faultTraceRu"
+            "faultTraceVps","faultTraceRu","groupDialog","openAddGroup","groupForm"
         ):
             self.assertIn(f'id="{item}"', self.html)
 
