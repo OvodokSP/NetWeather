@@ -85,6 +85,7 @@ function applyDashboardPreferences(){
     node.classList.toggle("dashboard-hidden",!visible)
   });
   var kpis=qa(".kpi-grid > [data-dashboard-panel]").filter(function(n){return !n.classList.contains("dashboard-hidden")});
+  q(".kpi-grid").classList.toggle("dashboard-row-hidden",kpis.length===0);
   q(".kpi-grid").style.gridTemplateColumns=kpis.length?"repeat("+kpis.length+",minmax(0,1fr))":"1fr";
   [[".overview-row-chart"],[".overview-row-middle"],[".overview-row-bottom"]].forEach(function(entry){
     var row=q(entry[0]);if(!row)return;
@@ -871,7 +872,7 @@ function appIconMarkup(name){
 function hydrateChromeIcons(){
   qa(".side-item[data-view]").forEach(function(b){var slot=b.querySelector(":scope > span");if(slot)slot.innerHTML=appIconMarkup(b.dataset.view)});
   var brand=q(".brand-logo");if(brand)brand.innerHTML=appIconMarkup("cloud");
-  var alert=q("#openAlerts");if(alert)alert.insertAdjacentHTML("afterbegin",appIconMarkup("bell"));
+  var alert=q("#openAlerts");if(alert)alert.innerHTML=appIconMarkup("bell")+'<i id="notifyCount" class="notify-count hidden">0</i>';
   var theme=q("#themeToggle");if(theme)theme.innerHTML=appIconMarkup("theme");
   var world=q("#worldButton");if(world)world.innerHTML=appIconMarkup("world");
   var expand=q("#expandChart");if(expand)expand.innerHTML=appIconMarkup("expand")
