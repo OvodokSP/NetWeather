@@ -46,6 +46,17 @@ class NetWeatherApiTest(unittest.TestCase):
         self.assertEqual(self.client.get("/api/system").status_code, 200)
         self.assertEqual(self.client.get("/api/groups").status_code, 200)
 
+    def test_realtime_and_event_feed(self):
+        rt = self.client.get("/api/realtime?minutes=60&scope=EXTERNAL")
+        self.assertEqual(rt.status_code, 200)
+        payload = rt.json()
+        self.assertEqual(payload["scope"], "EXTERNAL")
+        self.assertIn("resources", payload)
+        self.assertEqual(len(payload["resources"]), 8)
+        events = self.client.get("/api/events?limit=10")
+        self.assertEqual(events.status_code, 200)
+        self.assertIsInstance(events.json(), list)
+
     def test_resource_crud_and_auth(self):
         denied = self.client.post("/api/resources", json={"name":"X","target":"https://example.com"})
         self.assertEqual(denied.status_code, 401)
