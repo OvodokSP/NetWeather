@@ -613,6 +613,16 @@ function probeInRegion(p,region){
   if(region==="EU")return lat>=34&&lat<=72&&lon>=-25&&lon<=45;
   return true
 }
+function appendProbePoint(map,p){
+  if(!map||!p)return;
+  var x=(Number(p.lon)+180)/360*760,y=(90-Number(p.lat))/180*320;
+  var circle=document.createElementNS("http://www.w3.org/2000/svg","circle");
+  circle.setAttribute("cx",x);circle.setAttribute("cy",y);circle.setAttribute("r",p.online?"5":"4");
+  circle.setAttribute("fill",p.online?"#42df9c":"#ff6174");circle.setAttribute("class","map-point");
+  circle.setAttribute("tabindex","0");circle.setAttribute("role","img");circle.setAttribute("aria-label",p.name+" · "+(p.online?"онлайн":"нет связи"));
+  var title=document.createElementNS("http://www.w3.org/2000/svg","title");title.textContent=p.name+" · "+(p.online?"онлайн":"нет связи");circle.appendChild(title);
+  map.appendChild(circle)
+}
 function renderMap(){
   var probes=S.dashboard&&S.dashboard.probes||[],region=q("#mapRegion")?q("#mapRegion").value:"WORLD";
   var map=q("#mapPoints"),emptyEl=q("#mapEmpty");
@@ -620,18 +630,15 @@ function renderMap(){
   var located=probes.filter(function(p){return Number.isFinite(Number(p.lat))&&Number.isFinite(Number(p.lon))&&probeInRegion(p,region)});
   if(emptyEl)emptyEl.classList.toggle("hidden",!!located.length);
   if(!map||!located.length)return;
-  located.forEach(function(p){
-    var x=(Number(p.lon)+180)/360*760,y=(90-Number(p.lat))/180*320;
-    var circle=document.createElementNS("http://www.w3.org/2000/svg","circle");
-    circle.setAttribute("cx",x);circle.setAttribute("cy",y);circle.setAttribute("r",p.online?"5":"4");
-    circle.setAttribute("fill",p.online?"#42df9c":"#ff6174");circle.setAttribute("class","map-point");
-    circle.setAttribute("tabindex","0");circle.setAttribute("role","img");circle.setAttribute("aria-label",p.name+" · "+(p.online?"онлайн":"нет связи"));
-    var title=document.createElementNS("http://www.w3.org/2000/svg","title");title.textContent=p.name+" · "+(p.online?"онлайн":"нет связи");circle.appendChild(title);
-    map.appendChild(circle)
-  })
+  located.forEach(function(p){appendProbePoint(map,p)})
 }
 
 function renderMapPage(){
+  var probes=S.dashboard&&S.dashboard.probes||[],map=q("#mapPagePoints"),emptyEl=q("#mapPageEmpty");
+  if(map)map.innerHTML="";
+  var located=probes.filter(function(p){return Number.isFinite(Number(p.lat))&&Number.isFinite(Number(p.lon))});
+  if(emptyEl)emptyEl.classList.toggle("hidden",!!located.length);
+  located.forEach(function(p){appendProbePoint(map,p)});
   renderProbeLegend()
 }
 
@@ -647,9 +654,10 @@ function renderOverviewTable(){
   var visible=rows;
   el.innerHTML='<div class="table-head"><div>Ресурс</div><div>Статус</div><div>Доступность (24ч)</div><div>Время ответа</div><div>DNS</div><div>TCP</div><div>TLS</div><div>HTTP</div><div>Тренд (1ч)</div><div></div></div>'+visible.map(function(r){
     var rt=realtimeById(r.id)||{},x=r.domestic||r.external||{};
-    return '<div class="table-row" data-resource="'+r.id+'"><div class="table-resource with-logo">'+resourceIconHtml(r.target,r.name)+'<div><b>'+esc(r.name)+'</b><span>'+esc(r.target)+'</span></div></div><div><span class="status-chip '+diagClass(r.diagnosis)+'">'+diagText(r.diagnosis)+'</span></div><div>'+pct(rt.availability_24h,1)+'</div><div>'+num(x.response_time_ms," мс")+'</div><div><i class="stage-dot '+stageState("DNS",r,x)+'"></i></div><div><i class="stage-dot '+stageState("TCP",r,x)+'"></i></div><div><i class="stage-dot '+stageState("TLS",r,x)+'"></i></div><div><i class="stage-dot '+stageState("HTTP",r,x)+'"></i></div><div><canvas class="trend-canvas" data-trend="'+r.id+'"></canvas></div><button class="row-more">⋮</button></div>'
+    return '<div class="table-row" data-resource="'+r.id+'"><div class="table-resource with-logo">'+resourceIconHtml(r.target,r.name)+'<div><b>'+esc(r.name)+'</b><span>'+esc(r.target)+'</span></div></div><div><span class="status-chip '+diagClass(r.diagnosis)+'">'+diagText(r.diagnosis)+'</span></div><div>'+pct(rt.availability_24h,1)+'</div><div>'+num(x.response_time_ms," мс")+'</div><div><i class="stage-dot '+stageState("DNS",r,x)+'"></i></div><div><i class="stage-dot '+stageState("TCP",r,x)+'"></i></div><div><i class="stage-dot '+stageState("TLS",r,x)+'"></i></div><div><i class="stage-dot '+stageState("HTTP",r,x)+'"></i></div><div><canvas class="trend-canvas" data-trend="'+r.id+'"></canvas></div><button type="button" class="row-more" data-row-more="'+r.id+'" aria-label="Открыть «'+esc(r.name)+'»">⋮</button></div>'
   }).join("");
-  qa("#overviewResourceTable .table-row").forEach(function(row){row.onclick=function(){openDetail(Number(row.dataset.resource))}});
+  qa("#overviewResourceTable .table-row").forEach(function(row){row.onclick=function(e){if(e.target.closest("[data-row-more]"))return;openDetail(Number(row.dataset.resource))}});
+  qa("#overviewResourceTable [data-row-more]").forEach(function(button){button.onclick=function(e){e.stopPropagation();openDetail(Number(button.dataset.rowMore))}});
   visible.forEach(function(r,i){var rt=realtimeById(r.id)||{},c=document.querySelector('[data-trend="'+r.id+'"]');drawSpark(c,(rt.points||[]).map(function(p){return p.availability}).filter(function(v){return v!=null}),COLORS[i%COLORS.length])});
   hydrateResourceIcons()
 }
