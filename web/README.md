@@ -1,183 +1,197 @@
 # NetWeather Web
 
-NetWeather Web — VPS-first монитор доступности интернет-ресурсов для `netweather.online`. Все сетевые проверки выполняются на VPS, браузер получает готовые измерения, историю и события.
+Web-контур NetWeather объединяет мониторинг ресурсов, probes, историю, инциденты и объяснимую сетевую диагностику в `netweather.online`.
 
-## Версия 0.3.0-web
+**Текущая линия:** `0.3.10-web`.
 
-- DNS → TCP → TLS → HTTP диагностика с отдельными таймингами каждого этапа.
-- Индекс доступности, режимы сети и группировка ресурсов.
-- Стартовый набор из 8 ресурсов создаётся автоматически только для пустой БД.
-- Любые пользовательские группы и HTTP/HTTPS-цели.
-- История за 30 дней и графики доступности/задержки.
-- Контроль срока TLS-сертификата.
-- Триггеры: N последовательных ошибок, медленный ответ, истечение TLS.
-- Журнал активных/закрытых инцидентов и подтверждение тревог.
-- Browser Notifications; опциональный серверный JSON webhook через `ALERT_WEBHOOK_URL`.
-- Ручная проверка одной цели или всех целей.
-- Traceroute до публичной цели из VPS-контейнера.
-- Карточка ресурса с последними проверками, IP, HTTP, задержкой и TLS.
-- Защита от SSRF: private/loopback/link-local/reserved targets блокируются; HTTP redirects автоматически не следуются.
-- Responsive dark/light UI без внешних JS/CSS CDN.
-- HEAD для корня поддерживается, поэтому стандартные uptime-проверки не получают 405.
+## Главное правило
 
+Production NetWeather **не разворачивается** обычным `docker compose up` из рабочего дерева.
 
-## Двухконтурная модель
+Production runtime изолирован от остальных сервисов VPS, а образ:
+1. проверяется CI;
+2. собирается на GitHub runner;
+3. передаётся по forced-command SSH;
+4. запускается root-owned helper с фиксированным security profile.
 
-Один зарубежный VPS не может отличить блокировку внутри РФ от обычной доступности ресурса снаружи. Поэтому 0.3.0 использует две независимые точки наблюдения:
+См. [DEPLOYMENT.md](DEPLOYMENT.md) и [../SECURITY.md](../SECURITY.md).
 
-- `EXTERNAL / VPS_EU` — внешний VPS: отвечает на вопрос «ресурс вообще жив?».
-- `DOMESTIC / RU_HOME` — probe внутри российского контура: отвечает на вопрос «ресурс доступен из сети РФ?».
-
-Классификация:
-
-| Внешний VPS | Российский probe | Вывод |
-| --- | --- | --- |
-| OK | OK | Доступен |
-| OK | ошибка | Вероятное ограничение / региональная проблема |
-| ошибка | ошибка | Вероятное падение ресурса |
-| ошибка | OK | Проблема внешнего маршрута/VPS |
-| любой | нет свежих данных | Недостаточно данных; вывод о блокировке запрещён |
-
-Один российский probe даёт полезную, но не абсолютную классификацию. Для высокой уверенности архитектура допускает несколько DOMESTIC probe у разных провайдеров.
-
-### Важное требование к домашнему probe
-
-Трафик probe должен идти **напрямую через российского ISP**, минуя HRNeo, AmneziaWG, VLESS и другие обходные маршруты. Иначе NetWeather будет измерять уже «исправленный» маршрут и не увидит ограничение.
-
-
-## Production-схема
+## Компоненты
 
 ```text
-Internet
-   │
-   ▼
-nginx :80/:443 на VPS 31.77.56.66
-   │
-   ▼
-127.0.0.1:18081
-   │
-   ▼
-NetWeather container :8000
-   ├── scheduler
-   ├── DNS / TCP / TLS / HTTP
-   ├── traceroute
-   ├── incidents / triggers
-   ├── SQLite WAL
-   └── static web UI
+web/
+├── backend/
+│   ├── app/                FastAPI / scheduler / monitoring / DB
+│   └── tests/              API, frontend and security contracts
+├── frontend/
+│   ├── index.html
+│   └── assets/
+│       ├── dashboard.js
+│       └── dashboard.css
+├── deploy/
+│   ├── keenetic/           Domestic Probe
+│   ├── security/           host-enforced production boundary
+│   └── smoke-test.sh
+├── Dockerfile
+├── docker-compose.yml      local/dev hardened profile
+└── DEPLOYMENT.md
 ```
 
-`127.0.0.1:18080` на текущем VPS занят другим сервисом, поэтому NetWeather использует `18081`.
+## Probe model
 
-## Обновление на VPS
+### GLOBAL
 
-Существующий `.env` не перезаписывать.
+Внешний VPS отвечает на вопросы:
+- разрешается ли DNS;
+- устанавливается ли TCP;
+- проходит ли TLS;
+- отвечает ли HTTP;
+- как выглядит внешний traceroute.
+
+### DOMESTIC
+
+Российский probe нужен для сравнения с внешним контуром.
+
+```text
+GLOBAL OK + DOMESTIC FAIL
+→ вероятна региональная / ISP-path проблема
+
+GLOBAL FAIL + DOMESTIC FAIL
+→ вероятнее проблема ресурса / общей сети
+
+GLOBAL FAIL + DOMESTIC OK
+→ проблема внешнего пути или VPS
+```
+
+### USER / BROWSER / DEVICE
+
+Следующий контур — измерения из фактической сети пользователя. Browser Probe даст базовую диагностику без установки, Native/Router Probe — глубокую.
+
+## Resource model
+
+- группы — first-class;
+- каталог содержит канонические ресурсы;
+- каталоговые ресурсы не дублируются между группами;
+- ручной URL, совпавший с каталогом, использует каталоговую identity;
+- custom target остаётся пользовательским.
+
+## UI contract
+
+Источник правил: [../docs/UI_GUIDELINES.md](../docs/UI_GUIDELINES.md).
+
+Основные требования:
+- минимум 10 px для текста;
+- capability-aware panels;
+- единое поведение dialog;
+- keyboard navigation;
+- busy/disabled/error states;
+- без dead controls;
+- Overview без лишнего пустого пространства.
+
+## Local development
+
+Для локальной разработки `docker-compose.yml` повторяет ключевые ограничения production:
+
+- non-root;
+- read-only rootfs;
+- drop capabilities;
+- no-new-privileges;
+- dedicated data volume.
+
+Перед локальным compose должна существовать внешняя сеть/volume, либо используйте эквивалентную dev-конфигурацию.
+
+## Checks
 
 ```bash
-cd /opt/NetWeather
-git checkout feature/web-vps-monitoring
-git pull --ff-only origin feature/web-vps-monitoring
-cd web
-docker compose up -d --build
+python -m py_compile backend/app/*.py
+node --check frontend/assets/dashboard.js
+PYTHONPATH=backend python -m unittest discover -s backend/tests -v
+bash -n deploy/smoke-test.sh
 ```
 
-Для новых установок:
+CI дополнительно реально собирает hardened image и запускает его с production-like ограничениями.
 
-```env
-NETWEATHER_API_TOKEN=<long-random-secret>
-DEFAULT_INTERVAL_SECONDS=60
-REQUEST_TIMEOUT_SECONDS=8
-ALLOW_PRIVATE_TARGETS=false
-NETWEATHER_SEED_DEFAULTS=true
-ALERT_WEBHOOK_URL=
-NETWEATHER_BIND_PORT=18081
+## Production deployment
+
+Workflow:
+
+```text
+.github/workflows/deploy-web.yml
 ```
 
-`ALERT_WEBHOOK_URL` необязателен. Если указан, NetWeather отправляет JSON при открытии/закрытии инцидентов.
+Путь:
 
-## Проверка после обновления
-
-```bash
-cd /opt/NetWeather/web
-chmod +x deploy/smoke-test.sh
-docker compose ps
-curl -fsS http://127.0.0.1:18081/api/health
-./deploy/smoke-test.sh
+```text
+commit
+  ↓
+Verify web
+  ↓
+Build isolated image on GitHub
+  ↓
+non-root assertion
+  ↓
+immutable image artifact
+  ↓
+forced-command SSH
+  ↓
+root-owned deploy helper
+  ↓
+health + security assertions
 ```
 
-Smoke test проверяет:
-- health/system/dashboard/groups/resources/incidents/history;
-- HEAD и frontend;
-- CRUD временного ресурса;
-- ручную проверку;
-- traceroute;
-- check-all;
-- удаление временной цели.
+Обычные изменения `web/**` деплоятся автоматически, когда repository variable:
 
-## Как работают тревоги
-
-У каждого ресурса есть:
-- `failure_threshold` — сколько последовательных неуспешных проверок открывает DOWN incident;
-- `slow_threshold_ms` — порог SLOW incident;
-- `alerts_enabled` — включение триггеров для цели;
-- TLS expiry trigger при остатке <= 14 дней.
-
-DOWN автоматически закрывается после восстановления. События хранятся в SQLite; активные можно подтвердить через UI.
-
-## API
-
-Публичные:
-- `GET /api/health`
-- `GET /api/system`
-- `GET /api/dashboard`
-- `GET /api/groups`
-- `GET /api/resources`
-- `GET /api/resources/{id}`
-- `GET /api/incidents`
-- `GET /api/history?hours=24`
-
-С Bearer token:
-- `POST /api/resources`
-- `PATCH /api/resources/{id}`
-- `DELETE /api/resources/{id}`
-- `POST /api/resources/{id}/check`
-- `POST /api/resources/{id}/trace`
-- `POST /api/check-all`
-- `POST /api/incidents/{id}/ack`
-
-## Nginx / TLS
-
-Готовый vhost: `deploy/nginx-netweather.conf`. Upstream должен оставаться `127.0.0.1:18081`.
-
-```bash
-nginx -t && systemctl reload nginx
+```text
+NETWEATHER_DEPLOY_ENABLED=true
 ```
 
-TLS выпускается и обновляется Certbot на хосте.
+Maintenance-коммит, который **не должен** попасть в production:
 
-
-## Российский probe на Keenetic
-
-Скрипт: `deploy/keenetic/netweather-probe.sh`.
-
-На сервере сначала задайте отдельный токен:
-
-```bash
-cd /opt/NetWeather/web
-printf '\nNETWEATHER_AGENT_TOKEN=%s\n' "$(openssl rand -hex 32)" >> .env
-docker compose up -d --build
+```text
+[no-deploy]
 ```
 
-Токен для probe смотрится локально на сервере:
+## Production security profile
 
-```bash
-grep '^NETWEATHER_AGENT_TOKEN=' .env
+Container:
+- `10001:10001`;
+- read-only root filesystem;
+- `CAP_DROP=ALL`;
+- `no-new-privileges`;
+- no privileged mode;
+- no Docker socket;
+- no host bind mounts;
+- only `/data` writable;
+- resource limits.
+
+Network:
+- NetWeather may reach public Internet targets;
+- NetWeather cannot initiate connections to VPS host;
+- RFC1918 / CGNAT / link-local / VPN networks are blocked by `netweather_guard`.
+
+## Secrets
+
+Production env is host-owned:
+
+```text
+/etc/netweather/netweather.env
+root:root 600
 ```
 
-На Keenetic/Entware агент использует `curl`, `awk`, `sed` и `traceroute`. Перед постоянным запуском обязательно подтвердите, что его запросы выходят через прямой WAN российского провайдера, а не через HRNeo/AWG.
+Do not put production secrets back into `/opt/NetWeather/web/.env`.
 
-Агент:
-- получает актуальный список целей с `/api/agent/config.tsv`;
-- измеряет DNS/TCP/TLS/HTTP через curl timings;
-- отправляет результат в `/api/agent/result`;
-- принимает задания российского traceroute;
-- heartbeat автоматически отражается в UI.
+## Keenetic Domestic Probe
+
+Agent:
+
+```text
+deploy/keenetic/netweather-probe.sh
+```
+
+It must use the **direct ISP path**, not HRNeo/AWG/VLESS bypass. Otherwise NetWeather measures the repaired route instead of the actual domestic network condition.
+
+The probe:
+- fetches current targets;
+- reports DNS/TCP/TLS/HTTP timings;
+- sends heartbeat/results;
+- receives domestic traceroute tasks.
