@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
+import hmac
 import subprocess
 import time
 from contextlib import asynccontextmanager
@@ -12,22 +15,46 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import (
     AGENT_TOKEN, ALERT_WEBHOOK_URL, ALLOW_PRIVATE_TARGETS, API_TOKEN, APP_VERSION, DEFAULT_INTERVAL,
-    FRONTEND_DIR, KNOWN_GROUPS, ResourceCreate, ResourcePatch, AgentResult, SCHEDULER_ENABLED, STARTED_AT,
+    FRONTEND_DIR, KNOWN_GROUPS, ResourceCreate, ResourcePatch, AgentResult, GroupCreate, GroupPatch,
+    OwnerLogin, SCHEDULER_ENABLED, SESSION_MAX_AGE, STARTED_AT, UI_PASSWORD,
     normalize_group, normalize_target,
 )
 from .database import (
     db, dual_summary, get_incidents, init_db, latest_resources, probe_statuses,
-    register_probe, resource_matrix, seed_defaults, summary,
+    register_probe, resource_groups, resource_matrix, seed_defaults, summary,
 )
 from .incidents import write_check
 from .monitor import perform_check, traceroute_to_resource
 
 
-def require_token(authorization: str | None = Header(default=None)) -> None:
-    if not API_TOKEN:
-        raise HTTPException(503, "NETWEATHER_API_TOKEN is not configured")
-    if authorization != f"Bearer {API_TOKEN}":
-        raise HTTPException(401, "Invalid API token")
+SESSION_COOKIE = "netweather_owner"
+
+
+def _owner_secret() -> str:
+    return UI_PASSWORD or API_TOKEN
+
+
+def _owner_cookie() -> str:
+    secret = _owner_secret()
+    if not secret:
+        return ""
+    digest = hmac.new(secret.encode("utf-8"), b"netweather-owner-session-v1", hashlib.sha256).digest()
+    return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+
+
+def _is_owner(request: Request, authorization: str | None) -> bool:
+    if API_TOKEN and authorization == f"Bearer {API_TOKEN}":
+        return True
+    cookie = request.cookies.get(SESSION_COOKIE, "")
+    expected = _owner_cookie()
+    return bool(cookie and expected and hmac.compare_digest(cookie, expected))
+
+
+def require_token(request: Request, authorization: str | None = Header(default=None)) -> None:
+    if not _owner_secret():
+        raise HTTPException(503, "Owner authentication is not configured")
+    if not _is_owner(request, authorization):
+        raise HTTPException(401, "Owner session required")
 
 
 def require_agent(x_netweather_agent: str | None = Header(default=None)) -> None:
@@ -113,6 +140,36 @@ def verify_token():
     return {"ok":True}
 
 
+@app.get("/api/session")
+def session_status(request: Request, authorization: str | None = Header(default=None)):
+    return {"authenticated": _is_owner(request, authorization), "password_configured": bool(_owner_secret())}
+
+
+@app.post("/api/session/login")
+def session_login(payload: OwnerLogin, response: Response):
+    secret = _owner_secret()
+    if not secret:
+        raise HTTPException(503, "Owner authentication is not configured")
+    if not hmac.compare_digest(payload.password, secret):
+        raise HTTPException(401, "Неверный пароль владельца")
+    response.set_cookie(
+        SESSION_COOKIE,
+        _owner_cookie(),
+        max_age=SESSION_MAX_AGE,
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        path="/",
+    )
+    return {"ok":True,"expires_in":SESSION_MAX_AGE}
+
+
+@app.post("/api/session/logout")
+def session_logout(response: Response):
+    response.delete_cookie(SESSION_COOKIE, path="/")
+    return {"ok":True}
+
+
 @app.get("/api/dashboard")
 def dashboard():
     return {
@@ -131,8 +188,47 @@ def probes():
 
 @app.get("/api/groups")
 def groups():
-    values=sorted(set(KNOWN_GROUPS)|{r["group_name"] for r in latest_resources()})
-    return [{"id":v,"title":KNOWN_GROUPS.get(v,v)} for v in values]
+    rows = resource_groups()
+    return [{"id":r["group_key"],"title":r["title"],"color":r["color"],"sort_order":r["sort_order"],"resource_count":r["resource_count"]} for r in rows]
+
+
+@app.post("/api/groups", dependencies=[Depends(require_token)])
+def create_group(payload: GroupCreate):
+    key = normalize_group(payload.key or payload.title)
+    now = int(time.time())
+    with db() as conn:
+        if conn.execute("SELECT 1 FROM resource_groups WHERE group_key=?", (key,)).fetchone():
+            raise HTTPException(409, "Группа уже существует")
+        conn.execute("""INSERT INTO resource_groups(group_key,title,color,sort_order,created_at,updated_at)
+          VALUES(?,?,?,?,?,?)""",(key,payload.title.strip(),payload.color,100,now,now))
+    return {"id":key,"title":payload.title.strip(),"color":payload.color}
+
+
+@app.patch("/api/groups/{group_key}", dependencies=[Depends(require_token)])
+def patch_group(group_key: str, payload: GroupPatch):
+    values = payload.model_dump(exclude_none=True)
+    if not values:
+        return {"ok":True}
+    values["updated_at"] = int(time.time())
+    columns = ", ".join(f"{k}=?" for k in values)
+    with db() as conn:
+        cur = conn.execute(f"UPDATE resource_groups SET {columns} WHERE group_key=?", (*values.values(), group_key))
+    if cur.rowcount == 0:
+        raise HTTPException(404, "Группа не найдена")
+    return {"ok":True}
+
+
+@app.delete("/api/groups/{group_key}", dependencies=[Depends(require_token)])
+def delete_group(group_key: str):
+    if group_key == "CUSTOM":
+        raise HTTPException(400, "Системную группу CUSTOM удалить нельзя")
+    now = int(time.time())
+    with db() as conn:
+        conn.execute("UPDATE resources SET group_name='CUSTOM',updated_at=? WHERE group_name=?", (now,group_key))
+        cur = conn.execute("DELETE FROM resource_groups WHERE group_key=?", (group_key,))
+    if cur.rowcount == 0:
+        raise HTTPException(404, "Группа не найдена")
+    return {"ok":True,"reassigned_to":"CUSTOM"}
 
 
 @app.get("/api/resources")
@@ -154,10 +250,13 @@ def create_resource(payload:ResourceCreate):
     target=normalize_target(payload.target)
     if payload.expected_status_min>payload.expected_status_max: raise HTTPException(400,"Expected status min must be <= max")
     now=int(time.time())
+    group_name=normalize_group(payload.group_name)
     with db() as conn:
+        conn.execute("""INSERT INTO resource_groups(group_key,title,color,sort_order,created_at,updated_at)
+          VALUES(?,?,?,?,?,?) ON CONFLICT(group_key) DO NOTHING""",(group_name,KNOWN_GROUPS.get(group_name,group_name),"#8A96A3",100,now,now))
         cur=conn.execute("""INSERT INTO resources(name,target,group_name,interval_seconds,enabled,created_at,updated_at,last_checked_at,
           expected_status_min,expected_status_max,slow_threshold_ms,failure_threshold,alerts_enabled,last_success_at,last_failure_at)
-          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",(payload.name,target,normalize_group(payload.group_name),payload.interval_seconds,int(payload.enabled),now,now,0,
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",(payload.name,target,group_name,payload.interval_seconds,int(payload.enabled),now,now,0,
           payload.expected_status_min,payload.expected_status_max,payload.slow_threshold_ms,payload.failure_threshold,int(payload.alerts_enabled),0,0))
     return {"id":cur.lastrowid}
 
