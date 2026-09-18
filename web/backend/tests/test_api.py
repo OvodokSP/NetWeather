@@ -12,6 +12,7 @@ class NetWeatherApiTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         os.environ["NETWEATHER_DB"] = str(Path(self.tmp.name) / "test.db")
         os.environ["NETWEATHER_API_TOKEN"] = "test-token"
+        os.environ["NETWEATHER_AGENT_TOKEN"] = "agent-token"
         os.environ["NETWEATHER_SEED_DEFAULTS"] = "true"
         os.environ["NETWEATHER_SCHEDULER_ENABLED"] = "false"
         os.environ["FRONTEND_DIR"] = str(Path(__file__).resolve().parents[2] / "frontend")
@@ -39,7 +40,8 @@ class NetWeatherApiTest(unittest.TestCase):
         payload = dash.json()
         self.assertEqual(len(payload["resources"]), 8)
         self.assertIn("RUSSIAN", payload["summary"]["groups"])
-        self.assertIn(payload["summary"]["mode"], {"INITIALIZING","NORMAL","PARTIAL_DEGRADATION","NO_INTERNET","RESTRICTED_ACCESS"})
+        self.assertEqual(payload["summary"]["mode"], "NO_DOMESTIC_PROBE")
+        self.assertFalse(payload["summary"]["domestic_probe_online"])
         self.assertEqual(self.client.head("/").status_code, 200)
         self.assertEqual(self.client.get("/api/system").status_code, 200)
         self.assertEqual(self.client.get("/api/groups").status_code, 200)
@@ -56,6 +58,27 @@ class NetWeatherApiTest(unittest.TestCase):
         self.assertEqual(detail["resource"]["slow_threshold_ms"], 1200)
         deleted = self.client.delete("/api/resources/%d" % rid, headers=self.auth)
         self.assertEqual(deleted.status_code, 200)
+
+    def test_domestic_probe_classification(self):
+        dash = self.client.get("/api/dashboard").json()
+        rid = dash["resources"][0]["id"]
+        # External result is created directly, then domestic probe reports a failure.
+        good = {"status":"OK","response_time_ms":120,"dns_ms":10,"tcp_ms":20,"tls_ms":30,"http_ms":60,
+                "http_status":200,"resolved_ip":"93.184.216.34","tls_days_left":90,
+                "final_url":"https://example.com","location":None,"message":"HTTP 200"}
+        self.main.write_check(rid, good)
+        headers = {"X-NetWeather-Agent":"agent-token"}
+        payload = {"resource_id":rid,"status":"TIMEOUT","response_time_ms":8000,"dns_ms":10,"tcp_ms":20,
+                   "tls_ms":30,"http_ms":None,"http_status":None,"resolved_ip":"93.184.216.34","message":"timeout"}
+        for _ in range(2):
+            r = self.client.post("/api/agent/result?probe_key=RU_TEST&probe_name=RU%20test", headers=headers, json=payload)
+            self.assertEqual(r.status_code, 200)
+        dash = self.client.get("/api/dashboard").json()
+        row = next(x for x in dash["resources"] if x["id"] == rid)
+        self.assertEqual(row["diagnosis"], "LIKELY_RESTRICTION")
+        self.assertTrue(dash["summary"]["domestic_probe_online"])
+        self.assertGreaterEqual(dash["summary"]["likely_restriction"], 1)
+        self.assertEqual(len(self.client.get("/api/incidents?active=true").json()), 1)
 
     def test_incident_trigger_and_recovery(self):
         created = self.client.post("/api/resources", headers=self.auth, json={"name":"Trigger","target":"https://example.com","failure_threshold":2})
