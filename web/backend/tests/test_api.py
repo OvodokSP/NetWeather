@@ -108,6 +108,11 @@ class NetWeatherApiTest(unittest.TestCase):
         self.assertGreater(latest, 98.0)
         self.assertLess(latest, 99.0)
 
+    def test_target_metadata_blocks_private_targets(self):
+        response = self.client.get("/api/target-meta", params={"target":"http://127.0.0.1/"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Private", response.json()["detail"])
+
     def test_resource_crud_and_auth(self):
         created = self.client.post("/api/resources", json={"name":"X","target":"https://example.com","group_name":"TEST"})
         self.assertEqual(created.status_code, 200)
