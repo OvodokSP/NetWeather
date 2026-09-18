@@ -7,7 +7,7 @@
   <meta name="description" content="NetWeather — мониторинг доступности интернет-ресурсов, диагностика DNS/TCP/TLS/HTTP, инциденты и traceroute.">
   <title>NetWeather — Network Observatory</title>
   <link rel="stylesheet" href="/assets/app.css">
-  <link rel="stylesheet" href="/assets/v2.css?v=0.2.1">
+  <link rel="stylesheet" href="/assets/v2.css?v=0.3.0">
 </head>
 <body>
 <div class="app-shell">
@@ -50,16 +50,33 @@
           </div>
         </article>
         <div class="metrics-grid">
-          <article class="metric card"><span>Доступно</span><strong id="availableCount">0</strong><small id="availableHint">из 0 проверенных</small></article>
-          <article class="metric card"><span>Проблемы</span><strong id="problemCount">0</strong><small>по последним проверкам</small></article>
-          <article class="metric card"><span>Средний отклик</span><strong id="avgLatency">—</strong><small>полный цикл проверки</small></article>
-          <article class="metric card"><span>Активные тревоги</span><strong id="activeIncidentCount">0</strong><small id="incidentHint">нет активных</small></article>
+          <article class="metric card"><span>Доступно в РФ</span><strong id="availableCount">—</strong><small id="availableHint">нужен российский probe</small></article>
+          <article class="metric card"><span>Вероятно ограничено</span><strong id="problemCount">—</strong><small>VPS: OK · РФ: ошибка</small></article>
+          <article class="metric card"><span>Недоступно везде</span><strong id="avgLatency">—</strong><small>VPS: ошибка · РФ: ошибка</small></article>
+          <article class="metric card"><span>Без данных РФ</span><strong id="activeIncidentCount">—</strong><small id="incidentHint">контур РФ не подключён</small></article>
         </div>
+      </div>
+
+      <div class="probe-strip">
+        <article class="probe-card" id="externalProbeCard">
+          <div class="probe-icon">↗</div><div><span>ВНЕШНИЙ КОНТРОЛЬ</span><b id="externalProbeName">Внешний VPS</b><small id="externalProbeState">проверка…</small></div>
+        </article>
+        <div class="probe-compare">сравнение двух независимых путей</div>
+        <article class="probe-card" id="domesticProbeCard">
+          <div class="probe-icon">⌂</div><div><span>РОССИЙСКИЙ КОНТУР</span><b id="domesticProbeName">Российский probe</b><small id="domesticProbeState">не подключён</small></div>
+        </article>
+      </div>
+      <div class="diagnosis-help">
+        <b>Как читать результат:</b>
+        <span><i class="dot ok"></i>VPS OK + РФ OK → доступен</span>
+        <span><i class="dot restriction"></i>VPS OK + РФ ошибка → вероятное ограничение / региональная проблема</span>
+        <span><i class="dot outage"></i>VPS ошибка + РФ ошибка → вероятное падение ресурса</span>
+        <span><i class="dot unknown"></i>нет российского probe → блокировки определить нельзя</span>
       </div>
 
       <div class="nw-grid nw-grid-2">
         <article class="card">
-          <div class="card-head"><div><span class="card-label">ДИНАМИКА</span><h3>Доступность за 24 часа</h3></div><span class="chart-legend"><i></i> доступность</span></div>
+          <div class="card-head"><div><span class="card-label">ДИНАМИКА</span><h3>Внешняя доступность за 24 часа</h3></div><span class="chart-legend"><i></i> доступность</span></div>
           <div class="nw-chart"><canvas id="availabilityChart"></canvas><div class="chart-empty" id="availabilityEmpty">История появится после первых проверок</div></div>
         </article>
         <article class="card">
@@ -83,13 +100,13 @@
     <section class="view" id="view-resources">
       <article class="card nw-page-card">
         <div class="card-head">
-          <div><span class="card-label">МОНИТОРИНГ</span><h3>Все ресурсы</h3><p class="subcopy">HTTP(S)-цели проверяются с VPS по цепочке DNS → TCP → TLS → HTTP.</p></div>
+          <div><span class="card-label">МОНИТОРИНГ</span><h3>Все ресурсы</h3><p class="subcopy">Каждая цель сравнивается между внешним VPS и российским probe. Только это позволяет отличать вероятное ограничение от падения ресурса.</p></div>
           <button class="btn primary" id="openAddResource">+ Добавить ресурс</button>
         </div>
         <div class="nw-filters">
           <input class="input" id="searchInput" placeholder="Поиск по имени, адресу или IP">
           <select class="input" id="groupFilter"><option value="ALL">Все группы</option></select>
-          <select class="input" id="statusFilter"><option value="ALL">Все состояния</option><option value="OK">Доступные</option><option value="PROBLEM">С проблемами</option><option value="PENDING">Без данных</option></select>
+          <select class="input" id="statusFilter"><option value="ALL">Все состояния</option><option value="AVAILABLE">Доступны в РФ</option><option value="RESTRICTION">Вероятно ограничены</option><option value="OUTAGE">Вероятно упали</option><option value="UNKNOWN">Нет данных РФ</option></select>
         </div>
         <div id="resourcesTable" class="nw-resources-table"></div>
       </article>
@@ -110,11 +127,12 @@
 
     <section class="view" id="view-diagnostics">
       <article class="card nw-page-card">
-        <div class="card-head"><div><span class="card-label">ДИАГНОСТИКА</span><h3>Разбор соединения</h3><p class="subcopy">Проверка этапов и маршрут до выбранного ресурса с самого VPS.</p></div></div>
+        <div class="card-head"><div><span class="card-label">ДИАГНОСТИКА</span><h3>Сравнение двух маршрутов</h3><p class="subcopy">Проверяйте один и тот же ресурс с внешнего VPS и из российского контура. Разница между результатами важнее одиночного статуса.</p></div></div>
         <div class="diag-controls">
           <select class="input" id="diagResource"></select>
           <button class="btn primary" id="diagCheck">Запустить проверку</button>
-          <button class="btn secondary" id="diagTrace">Traceroute</button>
+          <button class="btn secondary" id="diagTrace">Traceroute VPS</button>
+          <button class="btn secondary" id="diagTraceDomestic">Traceroute РФ</button>
         </div>
         <div id="diagSummary" class="diag-summary"></div>
         <div class="diag-pipeline">
@@ -126,7 +144,7 @@
           <div class="diag-arrow">→</div>
           <div class="diag-step" id="stageHttp"><span>HTTP</span><b>—</b><small>ответ сервера</small></div>
         </div>
-        <div class="trace-head"><h4>Маршрут</h4><span id="traceMeta">Traceroute ещё не запускался</span></div>
+        <div class="trace-head"><h4>Маршрут</h4><span id="traceMeta">Выберите внешний или российский traceroute</span></div>
         <div id="traceOutput" class="trace-output"><div class="empty">Выберите ресурс и нажмите «Traceroute».</div></div>
       </article>
     </section>
@@ -148,7 +166,7 @@
         <article class="card setting-card"><span class="card-label">ДОСТУП</span><h3>API-токен</h3><p>Нужен только для изменения конфигурации, ручных проверок, traceroute и подтверждения тревог.</p><div id="tokenState" class="setting-status"></div><button class="btn primary" id="openToken2">Указать токен</button></article>
         <article class="card setting-card"><span class="card-label">ТРЕВОГИ</span><h3>Триггеры</h3><p>Для каждого ресурса настраиваются число последовательных ошибок, порог медленного ответа и контроль срока TLS-сертификата. Опционально сервер отправляет JSON webhook.</p><div id="alertSystemState" class="setting-status"></div></article>
         <article class="card setting-card"><span class="card-label">СИСТЕМА</span><h3>Runtime</h3><div id="systemInfo" class="system-info"></div></article>
-        <article class="card setting-card"><span class="card-label">БЕЗОПАСНОСТЬ</span><h3>VPS-first</h3><p>Приватные, loopback, link-local и reserved IP блокируются. HTTP redirect не проходится автоматически, поэтому цель не может перенаправить probe во внутреннюю сеть.</p><div id="securityState" class="setting-status"></div></article>
+        <article class="card setting-card"><span class="card-label">ТОЧКИ НАБЛЮДЕНИЯ</span><h3>Внешний + российский контур</h3><p>Внешний VPS отвечает на вопрос «ресурс вообще жив?». Российский probe отвечает на вопрос «он доступен из сети РФ?». Без второго контура NetWeather не делает вывод о блокировке.</p><div id="securityState" class="setting-status"></div></article>
       </div>
     </section>
   </main>
@@ -189,6 +207,6 @@
 </dialog>
 
 <div id="toast" class="toast"></div>
-<script src="/assets/v2.js?v=0.2.1"></script>
+<script src="/assets/v2.js?v=0.3.0"></script>
 </body>
 </html>
