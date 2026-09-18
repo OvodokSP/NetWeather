@@ -103,9 +103,9 @@ CATALOG_RESOURCES: tuple[CatalogResource, ...] = (
     CatalogResource("msg-reddit", "Reddit", "https://www.reddit.com", "MESSENGERS", 5, ("reddit.com",)),
     CatalogResource("msg-tiktok", "TikTok", "https://www.tiktok.com", "MESSENGERS", 6, ("tiktok.com",)),
     CatalogResource("msg-whatsapp", "WhatsApp", "https://www.whatsapp.com", "MESSENGERS", 7, ("whatsapp.com", "web.whatsapp.com")),
-    CatalogResource("msg-telegram", "Telegram", "https://telegram.org", "MESSENGERS", 8, ("telegram.org", "t.me")),
-    CatalogResource("msg-discord", "Discord", "https://discord.com", "MESSENGERS", 9, ("discord.com",)),
-    CatalogResource("msg-twitch", "Twitch", "https://www.twitch.tv", "MESSENGERS", 10, ("twitch.tv",)),
+    CatalogResource("msg-vk", "VK", "https://vk.ru", "MESSENGERS", 8, ("vk.ru", "vk.com")),
+    CatalogResource("msg-telegram", "Telegram", "https://telegram.org", "MESSENGERS", 9, ("telegram.org", "t.me")),
+    CatalogResource("msg-discord", "Discord", "https://discord.com", "MESSENGERS", 10, ("discord.com",)),
 
     # W3Techs reverse-proxy/CDN ranking, September 2026.
     CatalogResource("infra-cloudflare", "Cloudflare", "https://www.cloudflare.com", "INFRASTRUCTURE", 1, ("cloudflare.com", "1.1.1.1")),
