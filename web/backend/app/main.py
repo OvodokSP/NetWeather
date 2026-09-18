@@ -24,7 +24,7 @@ from .database import (
     register_probe, resource_groups, resource_matrix, seed_defaults, summary,
 )
 from .incidents import write_check
-from .monitor import perform_check, traceroute_to_resource
+from .monitor import discover_target_metadata, perform_check, traceroute_to_resource
 
 
 SESSION_COOKIE = "netweather_owner"
@@ -238,6 +238,11 @@ def delete_group(group_key: str):
     if cur.rowcount == 0:
         raise HTTPException(404, "Группа не найдена")
     return {"ok":True,"reassigned_to":"CUSTOM"}
+
+
+@app.get("/api/target-meta")
+async def target_metadata(target:str=Query(min_length=1,max_length=2048)):
+    return await discover_target_metadata(target)
 
 
 @app.get("/api/resources")
