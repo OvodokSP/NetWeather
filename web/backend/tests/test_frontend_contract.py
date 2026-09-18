@@ -55,6 +55,8 @@ class FrontendContractTest(unittest.TestCase):
             "ackAllIncidents","resourceIdentityPreview","resourceTargetHint",
             "resourceCatalogForm","catalogSearch","resourceCatalogGroups","customResourceTarget",
             "customResourceName","customResourceGroup","customCatalogMatch","addCatalogResources","resourceEditDialog",
+            "customizeOverview","dashboardPreferencesDialog","dashboardPreferencesForm","pinnedResourceGroups",
+            "pinnedResourceCount","dashboardPanelChoices","resetDashboardPreferences",
         ):
             self.assertIn(f'id="{item}"', self.html)
 
@@ -88,8 +90,25 @@ class FrontendContractTest(unittest.TestCase):
         self.assertIn("var visible=rows;", self.js)
         self.assertNotIn("var visible=rows.slice(0,6)", self.js)
 
+    def test_dashboard_preferences_and_capability_gating(self):
+        for token in (
+            "DASHBOARD_PREFS_KEY", "function dashboardCapabilities(", "function visiblePinnedResourceIds(",
+            "function applyDashboardPreferences(", "function renderDashboardPreferencesModal(",
+            "data-dashboard-panel", "data-pin-resource", "pinned_resource_ids",
+        ):
+            self.assertTrue(token in self.js or token in self.html)
+        self.assertIn(".dashboard-hidden", self.css)
+        self.assertIn(".overview-row.single-panel", self.css)
+
+    def test_font_sizes_never_drop_below_ten_pixels(self):
+        values = [float(v) for v in re.findall(r'font-size:\s*(\d+(?:\.\d+)?)px', self.css)]
+        shorthand = [float(v) for v in re.findall(r'font:\s*(\d+(?:\.\d+)?)px', self.css)]
+        too_small = sorted(v for v in values + shorthand if v < 10)
+        self.assertEqual(too_small, [], "Font sizes below 10px: %s" % too_small)
+
     def test_reference_typography_tokens_are_global(self):
         self.assertIn('--nw-font:"Inter","Segoe UI",Roboto,Arial,sans-serif', self.css)
+        self.assertIn("--nw-fs-2xs:10px", self.css)
         self.assertIn("html,body,button,input,select,textarea{font-family:var(--nw-font)}", self.css)
 
     def test_overview_is_desktop_no_scroll(self):
