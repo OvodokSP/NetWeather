@@ -1,6 +1,7 @@
 import importlib
 import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -88,6 +89,24 @@ class NetWeatherApiTest(unittest.TestCase):
         events = self.client.get("/api/events?limit=10")
         self.assertEqual(events.status_code, 200)
         self.assertIsInstance(events.json(), list)
+
+    def test_realtime_uses_rolling_availability(self):
+        rid = self.client.get("/api/dashboard").json()["resources"][0]["id"]
+        now = int(time.time())
+        with self.main.db() as conn:
+            for idx in range(60):
+                status = "TIMEOUT" if idx == 30 else "OK"
+                conn.execute(
+                    "INSERT INTO checks(resource_id,checked_at,status,response_time_ms,probe_scope) VALUES(?,?,?,?,?)",
+                    (rid, now - (59 - idx) * 60, status, 120 if status == "OK" else 8000, "EXTERNAL"),
+                )
+        payload = self.client.get("/api/realtime?minutes=60&scope=EXTERNAL").json()
+        self.assertEqual(payload["availability_window_seconds"], 3600)
+        row = next(r for r in payload["resources"] if r["id"] == rid)
+        self.assertTrue(row["points"])
+        latest = row["points"][-1]["availability"]
+        self.assertGreater(latest, 98.0)
+        self.assertLess(latest, 99.0)
 
     def test_resource_crud_and_auth(self):
         created = self.client.post("/api/resources", json={"name":"X","target":"https://example.com","group_name":"TEST"})
