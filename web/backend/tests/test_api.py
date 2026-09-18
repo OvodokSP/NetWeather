@@ -121,6 +121,20 @@ class NetWeatherApiTest(unittest.TestCase):
         self.assertGreaterEqual(dash["summary"]["likely_restriction"], 1)
         self.assertEqual(len(self.client.get("/api/incidents?active=true").json()), 1)
 
+    def test_bulk_incident_acknowledgement(self):
+        created = self.client.post("/api/resources", json={"name":"Bulk Ack","target":"https://example.com","failure_threshold":1})
+        rid = created.json()["id"]
+        bad = {"status":"TIMEOUT","response_time_ms":8000,"dns_ms":10,"tcp_ms":20,"tls_ms":30,"http_ms":None,"http_status":None,"resolved_ip":"93.184.216.34","tls_days_left":90,"final_url":"https://example.com","location":None,"message":"timeout"}
+        self.main.write_check(rid, bad)
+        incidents = self.client.get("/api/incidents?active=true").json()
+        self.assertTrue(any(i["resource_id"] == rid and i["acknowledged_at"] is None for i in incidents))
+        result = self.client.post("/api/incidents/ack-all")
+        self.assertEqual(result.status_code, 200)
+        self.assertGreaterEqual(result.json()["acknowledged"], 1)
+        incidents = self.client.get("/api/incidents?active=true").json()
+        row = next(i for i in incidents if i["resource_id"] == rid)
+        self.assertIsNotNone(row["acknowledged_at"])
+
     def test_incident_trigger_and_recovery(self):
         created = self.client.post("/api/resources", headers=self.auth, json={"name":"Trigger","target":"https://example.com","failure_threshold":2})
         rid = created.json()["id"]
@@ -130,6 +144,15 @@ class NetWeatherApiTest(unittest.TestCase):
         self.main.write_check(rid, bad)
         active = self.client.get("/api/incidents?active=true").json()
         self.assertEqual(len(active), 1)
+        incident_id = active[0]["id"]
+        self.assertIsNone(active[0]["acknowledged_at"])
+        ack = self.client.post("/api/incidents/%d/ack" % incident_id)
+        self.assertEqual(ack.status_code, 200)
+        active = self.client.get("/api/incidents?active=true").json()
+        self.assertIsNotNone(active[0]["acknowledged_at"])
+        events = self.client.get("/api/events?limit=20").json()
+        incident_event = next(e for e in events if e.get("incident_id") == incident_id)
+        self.assertEqual(incident_event["acknowledged_at"], active[0]["acknowledged_at"])
         good = dict(bad, status="OK", response_time_ms=120, http_ms=60, http_status=200, message="HTTP 200")
         self.main.write_check(rid, good)
         self.assertEqual(len(self.client.get("/api/incidents?active=true").json()), 0)
