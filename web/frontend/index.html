@@ -7,7 +7,7 @@
   <meta name="description" content="NetWeather — мониторинг доступности интернет-ресурсов, диагностика DNS/TCP/TLS/HTTP, инциденты и traceroute.">
   <title>NetWeather — Network Observatory</title>
   <link rel="stylesheet" href="/assets/app.css">
-  <link rel="stylesheet" href="/assets/v2.css">
+  <link rel="stylesheet" href="/assets/v2.css?v=0.2.1">
 </head>
 <body>
 <div class="app-shell">
@@ -52,14 +52,14 @@
         <div class="metrics-grid">
           <article class="metric card"><span>Доступно</span><strong id="availableCount">0</strong><small id="availableHint">из 0 проверенных</small></article>
           <article class="metric card"><span>Проблемы</span><strong id="problemCount">0</strong><small>по последним проверкам</small></article>
-          <article class="metric card"><span>Средний отклик</span><strong id="avgLatency">—</strong><small>DNS + TCP + TLS + HTTP</small></article>
+          <article class="metric card"><span>Средний отклик</span><strong id="avgLatency">—</strong><small>полный цикл проверки</small></article>
           <article class="metric card"><span>Активные тревоги</span><strong id="activeIncidentCount">0</strong><small id="incidentHint">нет активных</small></article>
         </div>
       </div>
 
       <div class="nw-grid nw-grid-2">
         <article class="card">
-          <div class="card-head"><div><span class="card-label">ДИНАМИКА</span><h3>Доступность за 24 часа</h3></div><span class="chart-legend"><i></i> availability</span></div>
+          <div class="card-head"><div><span class="card-label">ДИНАМИКА</span><h3>Доступность за 24 часа</h3></div><span class="chart-legend"><i></i> доступность</span></div>
           <div class="nw-chart"><canvas id="availabilityChart"></canvas><div class="chart-empty" id="availabilityEmpty">История появится после первых проверок</div></div>
         </article>
         <article class="card">
@@ -189,6 +189,6 @@
 </dialog>
 
 <div id="toast" class="toast"></div>
-<script src="/assets/v2.js"></script>
+<script src="/assets/v2.js?v=0.2.1"></script>
 </body>
 </html>
