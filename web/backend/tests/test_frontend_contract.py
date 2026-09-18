@@ -49,7 +49,7 @@ class FrontendContractTest(unittest.TestCase):
 
     def test_actions_and_dialogs_exist(self):
         for item in (
-            "resourceDialog","detailDialog","tokenDialog","diagTrace","diagTraceDomestic",
+            "resourceDialog","detailDialog","diagTrace","diagTraceDomestic",
             "diagCheck","openAddResource","overviewAddResource","groupDialog","openAddGroup","groupForm",
             "sidebarAddResource","manageGroups","expandChart","enableNotifications",
             "ackAllIncidents","resourceIdentityPreview","resourceTargetHint",
@@ -74,6 +74,13 @@ class FrontendContractTest(unittest.TestCase):
         self.assertIn('.btn.is-busy', self.css)
         self.assertIn('role="status" aria-live="polite"', self.html)
         self.assertIn('aria-controls="searchResults"', self.html)
+
+    def test_open_development_mode_has_no_fake_login_controls(self):
+        for obsolete in ("tokenDialog","tokenForm","tokenInput","openToken2","clearToken"):
+            self.assertNotIn(f'id="{obsolete}"', self.html)
+            self.assertNotIn(obsolete, self.js)
+        self.assertIn("Локальный режим", self.html)
+        self.assertIn("без авторизации", self.html)
 
     def test_ranked_catalog_picker_contract(self):
         for token in (
