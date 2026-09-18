@@ -84,6 +84,7 @@ run_locked() {
     --publish 127.0.0.1:18081:8000 \
     --mount type=volume,source="${VOLUME}",target=/data \
     --env-file "${ENV_FILE}" \
+    --env ALLOW_PRIVATE_TARGETS=false \
     --log-driver local \
     --log-opt max-size=10m \
     --log-opt max-file=3 \
