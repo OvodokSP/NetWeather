@@ -27,6 +27,8 @@ if [[ ! -s /etc/netweather/netweather.env ]]; then
 fi
 chmod 0600 /etc/netweather/netweather.env
 chown root:root /etc/netweather/netweather.env
+sed -i '/^ALLOW_PRIVATE_TARGETS=/d' /etc/netweather/netweather.env
+printf '%s\n' 'ALLOW_PRIVATE_TARGETS=false' >> /etc/netweather/netweather.env
 rm -f "${PROJECT}/.env"
 
 echo "=== INSTALL ROOT-OWNED SECURITY BOUNDARY ==="
