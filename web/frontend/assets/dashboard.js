@@ -6,7 +6,7 @@ var S={
   dashboard:null,incidents:[],system:null,groups:[],realtime:null,events:[],
   historyExt:[],historyDom:[],streamMinutes:60,detailId:null,diagId:null,
   faultId:null,view:"overview",poll:null,streamMeta:null,authRequired:false,
-  owner:true,mapScale:1,metaCache:{},catalog:null,catalogSelected:{},customCatalogMatch:null
+  owner:true,mapScale:1,metaCache:{},catalog:null,catalogSelected:{},customCatalogMatch:null,customAutoCatalogKey:null
 };
 
 function q(s){return document.querySelector(s)}
@@ -609,7 +609,6 @@ function renderCatalog(filter){
   }).join("");
   el.innerHTML=html||empty("Ничего не найдено","Измените запрос.");
   qa("[data-catalog-check]").forEach(function(box){box.onchange=function(){if(box.checked)S.catalogSelected[box.dataset.catalogCheck]=true;else delete S.catalogSelected[box.dataset.catalogCheck];updateCatalogSelection()}});
-  hydrateResourceIcons();
   updateCatalogSelection()
 }
 function updateCatalogSelection(){
@@ -626,7 +625,7 @@ function fillCustomGroupOptions(){
   sel.innerHTML=groups.map(function(g){return '<option value="'+esc(g.id)+'" '+(g.id==="CUSTOM"?"selected":"")+'>'+esc(g.title)+'</option>'}).join("")
 }
 async function openResourceCatalog(){
-  S.catalogSelected={};S.customCatalogMatch=null;
+  S.catalogSelected={};S.customCatalogMatch=null;S.customAutoCatalogKey=null;
   q("#catalogSearch").value="";q("#customResourceTarget").value="";q("#customResourceName").value="";q("#customResourceName").dataset.autoSuggested="1";
   q("#customCatalogMatch").className="custom-match hidden";q("#customCatalogMatch").innerHTML="";
   fillCustomGroupOptions();q("#resourceCatalogGroups").innerHTML='<div class="catalog-loading">Загружаем каталог…</div>';
@@ -636,8 +635,9 @@ async function openResourceCatalog(){
 }
 async function inspectCustomResource(){
   var input=q("#customResourceTarget"),raw=String(input.value||"").trim(),notice=q("#customCatalogMatch"),name=q("#customResourceName");
+  if(S.customAutoCatalogKey){delete S.catalogSelected[S.customAutoCatalogKey];S.customAutoCatalogKey=null}
   S.customCatalogMatch=null;
-  if(!raw){notice.className="custom-match hidden";notice.innerHTML="";updateCatalogSelection();return}
+  if(!raw){notice.className="custom-match hidden";notice.innerHTML="";renderCatalog(q("#catalogSearch").value);updateCatalogSelection();return}
   try{
     var match=await api("/api/resource-catalog/match?target="+encodeURIComponent(raw));
     if(input.value.trim()!==raw)return;
@@ -647,8 +647,8 @@ async function inspectCustomResource(){
       name.value=item.name;name.dataset.autoSuggested="1";
       notice.className="custom-match catalog-match-found";
       notice.innerHTML='<div>'+resourceIconHtml(item.target,item.name)+'</div><div><b>Этот ресурс уже есть в каталоге</b><span>'+esc(item.name)+' · '+esc(groupTitle(item.group_key))+'</span><small>'+(match.already_added?"Он уже добавлен в мониторинг. Дубликат создан не будет.":"Будет использован каталоговый вариант вместо ручного.")+'</small></div>';
-      if(!match.already_added)S.catalogSelected[item.key]=true;
-      hydrateResourceIcons();renderCatalog(q("#catalogSearch").value);updateCatalogSelection();return
+      if(!match.already_added&&!S.catalogSelected[item.key]){S.catalogSelected[item.key]=true;S.customAutoCatalogKey=item.key}
+      renderCatalog(q("#catalogSearch").value);updateCatalogSelection();return
     }
     notice.className="custom-match custom-match-new";notice.innerHTML='<div class="custom-match-icon">+</div><div><b>Новый пользовательский ресурс</b><span>Совпадений в каталоге нет.</span><small>Название и логотип определяются автоматически.</small></div>';
     var meta=await getTargetMetadata(raw);
