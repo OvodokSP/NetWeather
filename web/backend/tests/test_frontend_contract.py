@@ -95,6 +95,14 @@ class FrontendContractTest(unittest.TestCase):
         self.assertIn("data-ack", self.js)
         self.assertIn("resource-logo-img", self.css)
 
+    def test_stale_core_and_live_map_contract(self):
+        for token in (
+            "core-offline", "lastSuccessAt", "function probeInRegion(",
+            "function appendProbePoint(", "mapPagePoints", "mapPageEmpty",
+        ):
+            self.assertTrue(token in self.js or token in self.html or token in self.css)
+        self.assertNotIn('toast("Фильтр карты:', self.js)
+
     def test_availability_axis_matches_reference_bands(self):
         self.assertIn("var ticks=[100,99,98,95,90]", self.js)
         self.assertIn("function availabilityY(", self.js)
