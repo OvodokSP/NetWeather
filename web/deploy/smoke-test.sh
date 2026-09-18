@@ -21,7 +21,8 @@ get /api/resources
 get /api/incidents
 get '/api/history?hours=24'
 curl -fsSI "$BASE_URL/" >/dev/null; ok 'HEAD /'
-curl -fsS "$BASE_URL/" | grep -q 'Network Observatory'; ok 'GET / frontend'
+FRONTEND_HTML="$(curl -fsS "$BASE_URL/")"
+grep -Fq 'Network Observatory' <<<"$FRONTEND_HTML"; ok 'GET / frontend'
 
 if [[ -z "$TOKEN" ]]; then
   echo 'SKIP  write/diagnostic tests: NETWEATHER_API_TOKEN is unavailable'
