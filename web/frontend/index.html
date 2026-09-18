@@ -43,8 +43,8 @@
 
     <div class="user-card">
       <div class="user-avatar">NW</div>
-      <div><b>NetWeather</b><span>Administrator</span></div>
-      <button type="button" title="Настройки" data-view-jump="settings">⋮</button>
+      <div><b>Локальный режим</b><span>без авторизации</span></div>
+      <button type="button" title="Открыть настройки" aria-label="Открыть настройки" data-view-jump="settings">⋮</button>
     </div>
     <div class="side-version">netweather.online · <span id="versionLabel">—</span></div>
   </aside>
@@ -308,7 +308,7 @@
       <section class="view" id="view-settings">
         <div class="page-head"><div><h1>Настройки</h1><p>Состояние Core и параметры development-режима.</p></div></div>
         <div class="settings-grid">
-          <article class="panel setting-card"><span>ДОСТУП</span><h2>Открытый режим разработки</h2><p>Все функции интерфейса доступны без пароля и API-токена.</p><div id="tokenState" class="setting-box"></div><button class="btn secondary" id="openToken2" type="button">Открытый доступ</button></article>
+          <article class="panel setting-card"><span>ДОСТУП</span><h2>Открытый режим разработки</h2><p>Все функции интерфейса сейчас доступны без пользовательской авторизации. Разделение прав будет добавлено после завершения базовой диагностики.</p><div id="tokenState" class="setting-box"></div></article>
           <article class="panel setting-card"><span>ТОЧКИ НАБЛЮДЕНИЯ</span><h2>Probes</h2><div id="probeSettings" class="probe-settings"></div></article>
           <article class="panel setting-card"><span>ТРЕВОГИ</span><h2>Триггеры</h2><p>Последовательные ошибки, высокая задержка и срок TLS.</p><div id="alertSystemState" class="setting-box"></div></article>
           <article class="panel setting-card"><span>CORE</span><h2>Runtime</h2><div id="systemInfo" class="system-info"></div></article>
@@ -408,15 +408,6 @@
   <div class="modal-head"><div><span>РЕСУРС</span><h2 id="detailTitle">—</h2></div><button type="button" class="modal-close" aria-label="Закрыть окно">×</button></div>
   <div id="detailBody"></div>
   <div class="modal-actions split"><button class="btn danger" id="deleteResource">Удалить</button><div><button class="btn secondary" id="editResource">Изменить</button><button class="btn secondary" id="detailTrace">Traceroute</button><button class="btn primary" id="detailCheck">Проверить</button></div></div>
-</dialog>
-
-<dialog id="tokenDialog" class="modal small-modal">
-  <form id="tokenForm">
-    <div class="modal-head"><div><span>РЕЖИМ ВЛАДЕЛЬЦА</span><h2>Вход в управление</h2></div><button type="button" class="modal-close" aria-label="Закрыть окно">×</button></div>
-    <p class="muted">Авторизация отключена в development-mode.</p>
-    <label class="field-label">Пароль владельца<input class="input" type="password" id="tokenInput" autocomplete="current-password"></label>
-    <div class="modal-actions"><button type="button" class="btn secondary" id="clearToken">Выйти</button><button type="submit" class="btn primary">Войти</button></div>
-  </form>
 </dialog>
 
 <dialog id="groupDialog" class="modal small-modal">
