@@ -126,7 +126,7 @@ function showDiagnostic(r){
   S.diagId=r.id;q("#diagResource").value=String(r.id);var ext=r.external,dom=r.domestic,active=dom||ext;
   q("#diagSummary").innerHTML='<div class="diag-summary-card"><div><span>Вывод</span><b class="'+diagClass(r.diagnosis)+'">'+diagText(r.diagnosis)+'</b></div><div><span>VPS</span><b>'+stText(ext&&ext.status)+(ext&&ext.response_time_ms!=null?" · "+ext.response_time_ms+" мс":"")+'</b></div><div><span>Российский контур</span><b>'+stText(dom&&dom.status)+(dom&&dom.response_time_ms!=null?" · "+dom.response_time_ms+" мс":"")+'</b></div><div><span>IP РФ</span><b>'+esc(dom&&dom.resolved_ip||"—")+'</b></div><div><span>Пояснение</span><b>'+esc(r.diagnosis_text||"—")+'</b></div></div>';
   if(!active){resetStages();return}
-  setStage("Dns",active.dns_ms,active.status!=="DNS_ERROR"&&active.status!=="BLOCKED_TARGET);setStage("Tcp",active.tcp_ms,active.tcp_ms!=null);setStage("Tls",active.tls_ms,r.target.indexOf("https://")!==0||active.tls_ms!=null);setStage("Http",active.http_ms,active.status==="OK")
+  setStage("Dns",active.dns_ms,active.status!=="DNS_ERROR"&&active.status!=="BLOCKED_TARGET");setStage("Tcp",active.tcp_ms,active.tcp_ms!=null);setStage("Tls",active.tls_ms,r.target.indexOf("https://")!==0||active.tls_ms!=null);setStage("Http",active.http_ms,active.status==="OK")
 }
 function setStage(name,val,good){var e=q("#stage"+name);e.querySelector("b").textContent=val==null?"—":val+" мс";e.className="diag-step "+(val==null?"":good?"good":"bad")}
 
