@@ -7,7 +7,8 @@ class NetworkAnalyzer {
         if (resources.isEmpty()) return 0
         fun ratio(group: ResourceGroup?): Double {
             val scoped = if (group == null) resources else resources.filter { it.group == group }
-            if (scoped.isEmpty()) return 1.0
+            // An empty segment must not inflate the score: it contributes no evidence.
+            if (scoped.isEmpty()) return 0.0
             val map = results.associateBy { it.resourceId }
             return scoped.count { map[it.id]?.isOk == true }.toDouble() / scoped.size.toDouble()
         }
