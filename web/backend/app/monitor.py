@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import html
 import ipaddress
 import re
 import socket
 import ssl
 import time
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import httpx
 from fastapi import HTTPException
@@ -92,3 +93,102 @@ async def traceroute_to_resource(resource_id:int)->dict[str,Any]:
         m=re.match(r"\s*(\d+)\s+(\S+)(?:\s+([0-9.]+)\s+ms)?",line)
         if m: hops.append({"hop":int(m.group(1)),"ip":None if m.group(2)=="*" else m.group(2),"latency_ms":float(m.group(3)) if m.group(3) else None})
     return {"resource_id":resource_id,"name":resource["name"],"host":host,"resolved_ip":ip,"dns_ms":round(dns),"hops":hops,"raw":raw,"time":int(time.time())}
+
+
+def _attr(tag:str,name:str)->str|None:
+    m=re.search(r"\b"+re.escape(name)+r"\s*=\s*([\"'])(.*?)\1",tag,re.I|re.S)
+    if m: return html.unescape(m.group(2).strip())
+    m=re.search(r"\b"+re.escape(name)+r"\s*=\s*([^\s>]+)",tag,re.I)
+    return html.unescape(m.group(1).strip()) if m else None
+
+
+def _fallback_name(host:str)->str:
+    known=[
+        (r"^(?:www\.)?(?:youtube\.com|youtu\.be)$","YouTube"),
+        (r"^(?:www\.)?(?:telegram\.org|t\.me)$","Telegram"),
+        (r"^(?:www\.)?github\.com$","GitHub"),
+        (r"^(?:www\.)?(?:cloudflare\.com|1\.1\.1\.1)$","Cloudflare"),
+        (r"^(?:www\.)?google\.","Google"),
+        (r"^(?:www\.)?mail\.ru$","Mail.ru"),
+        (r"^(?:www\.)?vk\.com$","VK"),
+        (r"^(?:www\.)?wikipedia\.org$","Wikipedia"),
+        (r"^(?:www\.)?yandex\.","Яндекс"),
+        (r"^(?:www\.)?whatsapp\.com$","WhatsApp"),
+        (r"^(?:www\.)?openai\.com$","OpenAI"),
+        (r"^(?:www\.)?netweather\.online$","NetWeather"),
+    ]
+    for pattern,title in known:
+        if re.search(pattern,host,re.I): return title
+    label=host.lower().removeprefix("www.").split(".")[0]
+    return re.sub(r"[-_]+"," ",label).title() or host
+
+
+async def discover_target_metadata(value:str)->dict[str,Any]:
+    target=normalize_target(value)
+    current=target
+    page_text=""
+    response_url=target
+    content_type=""
+    try:
+        for _ in range(2):
+            parsed=urlparse(current); host=parsed.hostname or ""
+            if not host: raise HTTPException(400,"Target host is missing")
+            try: await resolve_host(host)
+            except PermissionError as exc: raise HTTPException(400,str(exc)) from exc
+            async with httpx.AsyncClient(timeout=min(REQUEST_TIMEOUT,5),follow_redirects=False,headers={
+                "User-Agent":f"NetWeather/{APP_VERSION} metadata",
+                "Accept":"text/html,application/xhtml+xml;q=0.9,*/*;q=0.1",
+                "Range":"bytes=0-131071",
+            }) as client:
+                async with client.stream("GET",current) as response:
+                    response_url=str(response.url)
+                    content_type=response.headers.get("content-type","")
+                    if response.status_code in {301,302,303,307,308} and response.headers.get("location"):
+                        nxt=urljoin(current,response.headers["location"])
+                        parsed_next=urlparse(nxt)
+                        if parsed_next.scheme not in {"http","https"}: break
+                        try: await resolve_host(parsed_next.hostname or "")
+                        except PermissionError as exc: raise HTTPException(400,str(exc)) from exc
+                        current=nxt
+                        continue
+                    if "html" in content_type.lower():
+                        chunks=[]
+                        size=0
+                        async for chunk in response.aiter_text():
+                            chunks.append(chunk);size+=len(chunk)
+                            if size>=131072: break
+                        page_text="".join(chunks)[:131072]
+                    break
+    except HTTPException:
+        raise
+    except Exception:
+        page_text=""
+
+    parsed=urlparse(response_url or target);host=(parsed.hostname or urlparse(target).hostname or "").lower()
+    title=""
+    if page_text:
+        m=re.search(r"<title[^>]*>(.*?)</title>",page_text,re.I|re.S)
+        if m:
+            title=html.unescape(re.sub(r"\s+"," ",re.sub(r"<[^>]+>"," ",m.group(1)))).strip()
+            if len(title)>120: title=title[:117].rstrip()+"…"
+    name=title or _fallback_name(host)
+    icon=""
+    if page_text:
+        for tag in re.findall(r"<link\b[^>]*>",page_text,re.I|re.S):
+            rel=(_attr(tag,"rel") or "").lower()
+            if "icon" not in rel: continue
+            href=_attr(tag,"href")
+            if href:
+                candidate=urljoin(response_url,href)
+                p=urlparse(candidate)
+                if p.scheme in {"http","https"} and p.hostname:
+                    try:
+                        await resolve_host(p.hostname)
+                        icon=candidate
+                        break
+                    except Exception:
+                        pass
+    if not icon and host:
+        base=urlparse(response_url)
+        icon=f"{base.scheme or 'https'}://{base.netloc}/favicon.ico"
+    return {"target":target,"resolved_url":response_url,"host":host,"name":name,"favicon_url":icon}
