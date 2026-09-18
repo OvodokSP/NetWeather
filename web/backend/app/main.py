@@ -227,14 +227,11 @@ def agent_result(payload: AgentResult, probe_key: str = Query(min_length=1,max_l
 @app.get("/api/agent/tasks.tsv", dependencies=[Depends(require_agent)])
 def agent_tasks(probe_key: str = Query(min_length=1,max_length=80), probe_name: str = Query(default="Российский probe",max_length=120)):
     register_probe(probe_key, probe_name, "DOMESTIC")
-    now = int(time.time())
     with db() as conn:
         rows = conn.execute("""SELECT t.id,t.resource_id,r.target FROM probe_tasks t
           JOIN resources r ON r.id=t.resource_id
           WHERE t.probe_key=? AND t.status='PENDING'
           ORDER BY t.created_at LIMIT 5""", (probe_key,)).fetchall()
-        for r in rows:
-            conn.execute("UPDATE probe_tasks SET status='RUNNING',started_at=? WHERE id=?", (now,r["id"]))
     return Response(
         content="".join(f"{r['id']}\t{r['resource_id']}\t{r['target']}\n" for r in rows),
         media_type="text/tab-separated-values; charset=utf-8",
