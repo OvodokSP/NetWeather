@@ -91,7 +91,7 @@ jobs:
   deploy:
     name: Deploy isolated image to VPS
     needs: build
-    if: vars.NETWEATHER_DEPLOY_ENABLED == 'true'
+    if: vars.NETWEATHER_DEPLOY_ENABLED == 'true' && !contains(github.event.head_commit.message, '[no-deploy]')
     runs-on: ubuntu-latest
     environment: netweather-web
     env:
