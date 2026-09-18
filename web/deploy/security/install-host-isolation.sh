@@ -85,6 +85,62 @@ systemctl daemon-reload
 systemctl enable --now netweather-egress-guard.service
 nft list table inet netweather_guard >/dev/null
 
+echo "=== RESTART CURRENT NETWEATHER UNDER LOCKED RUNTIME ==="
+CURRENT_IMAGE=""
+for old_name in netweather-web web-netweather-1; do
+  if docker container inspect "${old_name}" >/dev/null 2>&1; then
+    CURRENT_IMAGE="$(docker container inspect -f '{{.Image}}' "${old_name}")"
+    docker rm -f "${old_name}" >/dev/null
+  fi
+done
+if [[ -n "${CURRENT_IMAGE}" ]]; then
+  docker run -d \
+    --name netweather-web \
+    --hostname netweather-app \
+    --restart unless-stopped \
+    --init \
+    --read-only \
+    --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m \
+    --cap-drop ALL \
+    --security-opt no-new-privileges=true \
+    --pids-limit 256 \
+    --memory 512m \
+    --memory-swap 512m \
+    --cpus 0.75 \
+    --ulimit nofile=1024:4096 \
+    --user 10001:10001 \
+    --network netweather-isolated \
+    --ip 172.30.250.2 \
+    --sysctl net.ipv6.conf.all.disable_ipv6=1 \
+    --publish 127.0.0.1:18081:8000 \
+    --mount type=volume,source=web_netweather_data,target=/data \
+    --env-file /etc/netweather/netweather.env \
+    --env ALLOW_PRIVATE_TARGETS=false \
+    --log-driver local \
+    --log-opt max-size=10m \
+    --log-opt max-file=3 \
+    --health-cmd="python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3).read()\"" \
+    --health-interval=10s \
+    --health-timeout=5s \
+    --health-retries=5 \
+    --health-start-period=5s \
+    --label netweather.security-profile=isolated-v1 \
+    "${CURRENT_IMAGE}" >/dev/null
+
+  ready=0
+  for _ in $(seq 1 30); do
+    if curl -fsS --max-time 4 http://127.0.0.1:18081/api/health >/tmp/netweather-isolation-health.json; then
+      ready=1
+      break
+    fi
+    sleep 2
+  done
+  [[ "${ready}" == 1 ]] || { docker logs --tail=100 netweather-web >&2 || true; exit 70; }
+  cat /tmp/netweather-isolation-health.json
+  echo
+  rm -f /tmp/netweather-isolation-health.json
+fi
+
 echo "=== REMOVE DEPLOY USER WRITE ACCESS TO APPLICATION TREE ==="
 chown -R root:root /opt/NetWeather/web
 chmod -R o-w,g-w /opt/NetWeather/web
