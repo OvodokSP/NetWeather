@@ -98,7 +98,12 @@ def system_info():
       "default_interval_seconds":DEFAULT_INTERVAL,"scheduler_enabled":SCHEDULER_ENABLED}
 
 
-@app.get("/api/auth/verify", dependencies=[Depends(require_token)])\ndef verify_token():\n    return {"ok":True}\n\n\n@app.get("/api/dashboard")
+@app.get("/api/auth/verify", dependencies=[Depends(require_token)])
+def verify_token():
+    return {"ok":True}
+
+
+@app.get("/api/dashboard")
 def dashboard():
     return {"summary":summary(),"resources":latest_resources(),"incidents":get_incidents(True,20)}
 
