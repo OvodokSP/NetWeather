@@ -6,7 +6,7 @@
 [![Android build](https://github.com/OvodokSP/NetWeather/actions/workflows/build.yml/badge.svg?branch=feature%2Fweb-vps-monitoring)](https://github.com/OvodokSP/NetWeather/actions/workflows/build.yml)
 
 **Рабочий сайт:** https://netweather.online  
-**Текущий web-контур:** `0.3.9-web`  
+**Текущий web-контур:** `0.3.10-web`  
 **Статус:** активная разработка; интерфейс и диагностика стабилизируются до введения аккаунтов/тарифов.
 
 ## Что такое NetWeather
