@@ -59,6 +59,8 @@ class FrontendContractTest(unittest.TestCase):
     def test_resource_identity_and_incident_read_handlers_exist(self):
         self.assertIn("function targetMeta(", self.js)
         self.assertIn("syncResourceIdentity", self.js)
+        self.assertIn("/api/target-meta?target=", self.js)
+        self.assertIn("hydrateResourceIcons", self.js)
         self.assertIn("/api/incidents/ack-all", self.js)
         self.assertIn("data-ack", self.js)
         self.assertIn("resource-logo-img", self.css)
