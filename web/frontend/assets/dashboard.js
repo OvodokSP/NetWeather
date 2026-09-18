@@ -6,7 +6,7 @@ var S={
   dashboard:null,incidents:[],system:null,groups:[],realtime:null,events:[],
   historyExt:[],historyDom:[],streamMinutes:60,detailId:null,diagId:null,
   faultId:null,view:"overview",poll:null,streamMeta:null,authRequired:false,
-  owner:true,mapScale:1
+  owner:true,mapScale:1,metaCache:{}
 };
 
 function q(s){return document.querySelector(s)}
@@ -32,7 +32,7 @@ function targetUrl(value){
   try{return new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)?raw:"https://"+raw)}catch(_e){return null}
 }
 function targetMeta(value){
-  var u=targetUrl(value);if(!u)return{name:"",host:"",favicon:""};
+  var u=targetUrl(value);if(!u)return{name:"",host:"",favicon:"",known:false};
   var host=u.hostname.toLowerCase().replace(/^www\./,"");
   var known=[
     [/^(youtube\.com|youtu\.be)$/,"YouTube"],[/^(telegram\.org|t\.me)$/,"Telegram"],
@@ -40,30 +40,55 @@ function targetMeta(value){
     [/^google\./,"Google"],[/^mail\.ru$/,"Mail.ru"],[/^vk\.com$/,"VK"],
     [/^wikipedia\.org$/,"Wikipedia"],[/^yandex\./,"Яндекс"],[/^whatsapp\.com$/,"WhatsApp"],
     [/^openai\.com$/,"OpenAI"],[/^netweather\.online$/,"NetWeather"],[/^apple\.com$/,"Apple"],
-    [/^microsoft\.com$/,"Microsoft"],[/^discord\.com$/,"Discord"]
+    [/^microsoft\.com$/,"Microsoft"],[/^discord\.com$/,"Discord"],[/^4pda\./i,"4PDA"]
   ];
-  var name="";
-  for(var i=0;i<known.length;i++){if(known[i][0].test(host)){name=known[i][1];break}}
-  if(!name){
-    var part=host.split(".")[0]||host;
-    name=part.replace(/[-_]+/g," ").replace(/\b\w/g,function(c){return c.toUpperCase()})
-  }
+  var name="",isKnown=false;
+  for(var i=0;i<known.length;i++){if(known[i][0].test(host)){name=known[i][1];isKnown=true;break}}
+  if(!name){var part=host.split(".")[0]||host;name=part.replace(/[-_]+/g," ").replace(/\b\w/g,function(c){return c.toUpperCase()})}
   var isLocal=host==="localhost"||/^127\./.test(host)||/^10\./.test(host)||/^192\.168\./.test(host)||/^172\.(1[6-9]|2\d|3[01])\./.test(host)||/^\[?::1\]?$/.test(host);
-  return{name:name,host:host,favicon:isLocal?"":u.protocol+"//"+u.host+"/favicon.ico"}
+  return{name:name,host:host,favicon:isLocal?"":u.protocol+"//"+u.host+"/favicon.ico",known:isKnown}
+}
+function getTargetMetadata(value){
+  var local=targetMeta(value),u=targetUrl(value);
+  if(!u||!local.host)return Promise.resolve({name:local.name,host:local.host,favicon_url:local.favicon});
+  var key=u.href;
+  if(!S.metaCache[key]){
+    S.metaCache[key]=api("/api/target-meta?target="+encodeURIComponent(value)).then(function(remote){
+      return{name:local.known?local.name:(remote.name||local.name),host:remote.host||local.host,favicon_url:remote.favicon_url||local.favicon}
+    }).catch(function(){return{name:local.name,host:local.host,favicon_url:local.favicon}})
+  }
+  return S.metaCache[key]
 }
 function resourceIconHtml(target,name){
   var m=targetMeta(target),fallback=esc((name||m.name||"?").slice(0,2).toUpperCase());
-  return '<i class="resource-glyph">'+(m.favicon?'<img class="resource-logo-img" src="'+esc(m.favicon)+'" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove();this.parentElement.querySelector(\'.resource-logo-fallback\').style.display=\'grid\'">':'')+'<span class="resource-logo-fallback"'+(m.favicon?' style="display:none"':'')+'>'+fallback+'</span></i>'
+  return '<i class="resource-glyph" data-icon-target="'+esc(target)+'" data-icon-name="'+esc(name||m.name||"")+'">'+(m.favicon?'<img class="resource-logo-img" src="'+esc(m.favicon)+'" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove();this.parentElement.querySelector(\'.resource-logo-fallback\').style.display=\'grid\'">':'')+'<span class="resource-logo-fallback"'+(m.favicon?' style="display:none"':'')+'>'+fallback+'</span></i>'
 }
-function syncResourceIdentity(force){
+function paintResourceIcon(node,meta){
+  if(!node||!meta)return;
+  var fallback=esc((node.dataset.iconName||meta.name||"?").slice(0,2).toUpperCase()),src=meta.favicon_url||"";
+  node.innerHTML=(src?'<img class="resource-logo-img" src="'+esc(src)+'" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove();this.parentElement.querySelector(\'.resource-logo-fallback\').style.display=\'grid\'">':'')+'<span class="resource-logo-fallback"'+(src?' style="display:none"':'')+'>'+fallback+'</span>'
+}
+function hydrateResourceIcons(){
+  qa("[data-icon-target]").forEach(function(node){
+    var value=node.dataset.iconTarget;if(!value)return;
+    getTargetMetadata(value).then(function(meta){if(node.isConnected)paintResourceIcon(node,meta)})
+  })
+}
+async function syncResourceIdentity(force){
   var target=q("#resourceTarget"),name=q("#resourceName"),preview=q("#resourceIdentityPreview"),hint=q("#resourceTargetHint");
   if(!target||!name||!preview)return;
-  var m=targetMeta(target.value);
+  var raw=target.value,m=targetMeta(raw);
   if(!m.host){preview.innerHTML="<span>NW</span>";if(hint)hint.textContent="После ввода ссылки NetWeather предложит название и логотип ресурса.";return}
   var canFill=force||!name.value.trim()||name.dataset.autoSuggested==="1";
   if(canFill&&m.name){name.value=m.name;name.dataset.autoSuggested="1"}
   preview.innerHTML=(m.favicon?'<img src="'+esc(m.favicon)+'" alt="" referrerpolicy="no-referrer" onerror="this.remove();this.parentElement.innerHTML=\'<span>'+esc((m.name||"?").slice(0,2).toUpperCase())+'</span>\'">':'<span>'+esc((m.name||"?").slice(0,2).toUpperCase())+'</span>');
-  if(hint)hint.textContent=m.host+(m.name?" · определено как «"+m.name+"»":"")
+  if(hint)hint.textContent=m.host+" · определяем название и логотип…";
+  var remote=await getTargetMetadata(raw);
+  if(target.value!==raw)return;
+  if((force||!name.value.trim()||name.dataset.autoSuggested==="1")&&remote.name){name.value=remote.name;name.dataset.autoSuggested="1"}
+  var icon=remote.favicon_url||m.favicon,fallback=esc((remote.name||m.name||"?").slice(0,2).toUpperCase());
+  preview.innerHTML=icon?'<img src="'+esc(icon)+'" alt="" referrerpolicy="no-referrer" onerror="this.remove();this.parentElement.innerHTML=\'<span>'+fallback+'</span>\'">':'<span>'+fallback+'</span>';
+  if(hint)hint.textContent=(remote.host||m.host)+(remote.name?" · «"+remote.name+"»":"")
 }
 
 function realtimeById(id){return(S.realtime&&S.realtime.resources||[]).find(function(r){return r.id===Number(id)})}
@@ -284,7 +309,8 @@ function renderResourceCards(){
     return '<article class="resource-card" data-resource="'+r.id+'"><div class="resource-card-top"><div class="resource-card-name">'+resourceIconHtml(r.target,r.name)+'<b>'+esc(r.name)+'</b></div><span class="resource-state '+(cls==="bad"?"bad":cls==="warn"?"warn":"")+'">'+(delta>=0?"↑ ":"↓ ")+Math.abs(delta).toFixed(1)+'%</span></div><div class="resource-card-metrics"><strong>'+pct(r.availability_24h,1)+'</strong><span>'+num(latency," мс")+'</span></div><canvas data-card-spark="'+r.id+'"></canvas><div class="resource-card-foot"><span>◴ '+num(latency," мс")+'</span><span>'+esc(groupTitle(r.group_name))+'</span></div></article>'
   }).join("");
   qa(".resource-card").forEach(function(card){card.onclick=function(){openDetail(Number(card.dataset.resource))}});
-  cards.forEach(function(r,i){var c=document.querySelector('[data-card-spark="'+r.id+'"]');drawSpark(c,(r.points||[]).map(function(p){return p.availability}).filter(function(v){return v!=null}),COLORS[i%COLORS.length])})
+  cards.forEach(function(r,i){var c=document.querySelector('[data-card-spark="'+r.id+'"]');drawSpark(c,(r.points||[]).map(function(p){return p.availability}).filter(function(v){return v!=null}),COLORS[i%COLORS.length])});
+  hydrateResourceIcons()
 }
 
 function renderMap(){
@@ -322,7 +348,8 @@ function renderOverviewTable(){
     return '<div class="table-row" data-resource="'+r.id+'"><div class="table-resource with-logo">'+resourceIconHtml(r.target,r.name)+'<div><b>'+esc(r.name)+'</b><span>'+esc(r.target)+'</span></div></div><div><span class="status-chip '+diagClass(r.diagnosis)+'">'+diagText(r.diagnosis)+'</span></div><div>'+pct(rt.availability_24h,1)+'</div><div>'+num(x.response_time_ms," мс")+'</div><div><i class="stage-dot '+stageState("DNS",r,x)+'"></i></div><div><i class="stage-dot '+stageState("TCP",r,x)+'"></i></div><div><i class="stage-dot '+stageState("TLS",r,x)+'"></i></div><div><i class="stage-dot '+stageState("HTTP",r,x)+'"></i></div><div><canvas class="trend-canvas" data-trend="'+r.id+'"></canvas></div><button class="row-more">⋮</button></div>'
   }).join("");
   qa("#overviewResourceTable .table-row").forEach(function(row){row.onclick=function(){openDetail(Number(row.dataset.resource))}});
-  visible.forEach(function(r,i){var rt=realtimeById(r.id)||{},c=document.querySelector('[data-trend="'+r.id+'"]');drawSpark(c,(rt.points||[]).map(function(p){return p.availability}).filter(function(v){return v!=null}),COLORS[i%COLORS.length])})
+  visible.forEach(function(r,i){var rt=realtimeById(r.id)||{},c=document.querySelector('[data-trend="'+r.id+'"]');drawSpark(c,(rt.points||[]).map(function(p){return p.availability}).filter(function(v){return v!=null}),COLORS[i%COLORS.length])});
+  hydrateResourceIcons()
 }
 
 function stageState(stage,r,x){
