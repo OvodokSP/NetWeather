@@ -72,6 +72,7 @@ class SecurityContractTest(unittest.TestCase):
 
     def test_kernel_guard_blocks_host_and_private_networks(self):
         self.assertIn("chain input", self.guard)
+        self.assertIn("ct state established,related", self.guard)
         self.assertIn("chain forward", self.guard)
         for subnet in ("10.0.0.0/8", "100.64.0.0/10", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16"):
             self.assertIn(subnet, self.guard)
