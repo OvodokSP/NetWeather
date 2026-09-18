@@ -99,7 +99,10 @@ def init_db() -> None:
             match = catalog_match(row["target"])
             if match:
                 try:
-                    conn.execute("UPDATE resources SET catalog_key=? WHERE id=?", (match.key, row["id"]))
+                    conn.execute(
+                        "UPDATE resources SET catalog_key=?,target=?,group_name=? WHERE id=?",
+                        (match.key, match.target, match.group_key, row["id"]),
+                    )
                 except sqlite3.IntegrityError:
                     pass
         now = int(time.time())
