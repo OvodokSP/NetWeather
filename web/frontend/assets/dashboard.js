@@ -5,7 +5,7 @@ var COLORS=["#55c7ff","#ff6374","#ffad4d","#55e0d0","#6b85ff","#72df8e","#a67cff
 var S={
   dashboard:null, incidents:[], system:null, groups:[], realtime:null, events:[],
   historyExt:[], historyDom:[], streamMinutes:60, detailId:null, diagId:null,
-  faultId:null, view:"overview", poll:null, streamMeta:null, owner:false
+  faultId:null, view:"overview", poll:null, streamMeta:null, owner:true, authRequired:false
 };
 
 function q(s){return document.querySelector(s)}
@@ -30,7 +30,7 @@ function empty(title,text){return '<div class="empty-state"><div><b>'+esc(title)
 
 async function api(path,opt,secure){
   opt=opt||{};
-  if(secure&&!S.owner&&!token()){q("#tokenInput").value="";q("#tokenDialog").showModal();throw new Error("Войдите в режим владельца")}
+  if(secure&&S.authRequired&&!S.owner&&!token()){q("#tokenInput").value="";q("#tokenDialog").showModal();throw new Error("Войдите в режим владельца")}
   var headers={"Content-Type":"application/json"};Object.assign(headers,opt.headers||{});if(secure)Object.assign(headers,auth());
   var res=await fetch(path,Object.assign({},opt,{headers:headers}));
   if(!res.ok){var msg="HTTP "+res.status;try{var j=await res.json();msg=j.detail||msg}catch(_e){}if(res.status===401)toast("Неверный API-токен");throw new Error(msg)}
@@ -66,7 +66,7 @@ async function loadAll(silent){
       api("/api/history?hours="+hours+"&scope=DOMESTIC"),
       api("/api/session")
     ]);
-    S.dashboard=a[0];S.incidents=a[1];S.system=a[2];S.groups=a[3];S.realtime=a[4];S.events=a[5];S.historyExt=a[6];S.historyDom=a[7];S.owner=!!a[8].authenticated;
+    S.dashboard=a[0];S.incidents=a[1];S.system=a[2];S.groups=a[3];S.realtime=a[4];S.events=a[5];S.historyExt=a[6];S.historyDom=a[7];S.authRequired=!!a[8].auth_required;S.owner=!S.authRequired||!!a[8].authenticated;
     renderAll();
     setCoreOnline(true)
   }catch(e){
@@ -183,6 +183,7 @@ async function deleteGroup(key){
 
 function renderOwnerState(){
   var b=q("#ownerButton"),t=q("#ownerButtonText");if(!b||!t)return;
+  if(!S.authRequired){b.classList.add("active");t.textContent="DEV · Открыто";return}
   b.classList.toggle("active",S.owner);t.textContent=S.owner?"Владелец":"Войти";
 }
 
@@ -337,7 +338,7 @@ function drawSpark(canvas,values,color){
 
 function renderSettings(){
   if(!S.system||!S.dashboard)return;
-  q("#tokenState").textContent=S.owner?"Режим владельца активен. Повторный ввод пароля не требуется.":"Сейчас открыт режим просмотра. Для изменения ресурсов и групп войдите как владелец.";
+  q("#tokenState").textContent=S.authRequired?(S.owner?"Режим владельца активен.":"Сейчас открыт режим просмотра."):"Development mode: все действия доступны без авторизации.";
   q("#alertSystemState").textContent=S.system.webhook_configured?"Server webhook настроен.":"Webhook не настроен; инциденты сохраняются в журнале.";
   q("#securityState").textContent=S.system.private_targets_allowed?"Private targets разрешены.":"Private/loopback/link-local цели заблокированы.";
   var vals=[["Версия",S.system.version],["Uptime",duration(S.system.uptime_seconds)],["Ресурсы",S.system.resources],["Проверки",S.system.checks],["Инциденты",S.system.active_incidents],["Traceroute",S.system.traceroute_available?"готов":"нет"],["База",S.system.database],["Scheduler",S.system.scheduler_enabled?"включён":"выключен"]];
@@ -381,11 +382,12 @@ function setup(){
   document.addEventListener("click",function(e){if(!e.target.closest(".search-wrap"))q("#searchResults").classList.add("hidden")});
   q("#themeToggle").onclick=function(){var light=document.documentElement.dataset.theme==="light";document.documentElement.dataset.theme=light?"dark":"light";localStorage.setItem("netweather_theme",light?"dark":"light");renderAll()};
   document.documentElement.dataset.theme=localStorage.getItem("netweather_theme")||"dark";
-  [q("#ownerButton"),q("#openToken2")].forEach(function(b){b.onclick=function(){if(S.owner){openView("settings");return}q("#tokenInput").value="";q("#tokenDialog").showModal()}});
+  q("#ownerButton").onclick=function(){if(!S.authRequired){toast("Открытый режим разработки: авторизация отключена");return}if(S.owner){openView("settings");return}q("#tokenInput").value="";q("#tokenDialog").showModal()};
+  q("#openToken2").onclick=function(){if(!S.authRequired){toast("Все функции уже доступны без авторизации");return}q("#tokenInput").value="";q("#tokenDialog").showModal()};
   q("#overviewGroups").onclick=function(){openView("groups")};q("#manageGroups").onclick=function(){openView("groups")};
   q("#openAlerts").onclick=function(){openView("alerts")};
-  q("#tokenForm").onsubmit=async function(e){e.preventDefault();var password=q("#tokenInput").value;if(!password){toast("Введите пароль владельца");return}try{await api("/api/session/login",{method:"POST",body:JSON.stringify({password:password})});localStorage.removeItem("netweather_token");S.owner=true;q("#tokenDialog").close();q("#tokenInput").value="";renderOwnerState();renderSettings();toast("Режим владельца включён")}catch(err){toast(err.message)}};
-  q("#clearToken").onclick=async function(){try{await api("/api/session/logout",{method:"POST"});localStorage.removeItem("netweather_token");S.owner=false;q("#tokenDialog").close();renderOwnerState();renderSettings();toast("Вы вышли из режима владельца")}catch(err){toast(err.message)}};
+  q("#tokenForm").onsubmit=async function(e){e.preventDefault();if(!S.authRequired){q("#tokenDialog").close();return}var password=q("#tokenInput").value;if(!password){toast("Введите пароль владельца");return}try{await api("/api/session/login",{method:"POST",body:JSON.stringify({password:password})});localStorage.removeItem("netweather_token");S.owner=true;q("#tokenDialog").close();q("#tokenInput").value="";renderOwnerState();renderSettings();toast("Режим владельца включён")}catch(err){toast(err.message)}};
+  q("#clearToken").onclick=async function(){if(!S.authRequired){q("#tokenDialog").close();return}try{await api("/api/session/logout",{method:"POST"});localStorage.removeItem("netweather_token");S.owner=false;q("#tokenDialog").close();renderOwnerState();renderSettings();toast("Вы вышли из режима владельца")}catch(err){toast(err.message)}};
   qa(".modal-close").forEach(function(b){b.onclick=function(){b.closest("dialog").close()}});
   q("#resourceForm").onsubmit=saveResource;q("#groupForm").onsubmit=saveGroup;
   q("#openAddResource").onclick=function(){openResourceForm(null)};q("#overviewAddResource").onclick=function(){openResourceForm(null)};q("#openAddGroup").onclick=function(){openGroupForm(null)};
