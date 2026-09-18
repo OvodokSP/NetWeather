@@ -29,6 +29,8 @@ if [[ -z "$TOKEN" ]]; then
   exit 0
 fi
 
+curl -fsS "${AUTH[@]}" "$BASE_URL/api/auth/verify" >/dev/null; ok 'GET /api/auth/verify'
+
 TMP_JSON="$(curl -fsS -X POST "${AUTH[@]}" -H 'Content-Type: application/json' "$BASE_URL/api/resources" -d '{"name":"__NetWeather self-test__","target":"https://example.com","group_name":"SELFTEST","interval_seconds":86400,"alerts_enabled":false}')"
 RID="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$TMP_JSON")"
 cleanup(){ curl -fsS -X DELETE "${AUTH[@]}" "$BASE_URL/api/resources/$RID" >/dev/null 2>&1 || true; }
