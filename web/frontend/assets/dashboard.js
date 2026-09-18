@@ -27,6 +27,45 @@ function diagText(d){return({AVAILABLE:"Доступен",LIKELY_RESTRICTION:"В
 function diagClass(d){return d==="AVAILABLE"?"ok":d==="LIKELY_RESTRICTION"||d==="LIKELY_OUTAGE"?"bad":d==="EXTERNAL_PATH_ISSUE"?"warn":"neutral"}
 function groupTitle(v){var found=S.groups.find(function(g){return g.id===v});return found?found.title:({"RUSSIAN":"Российские","INTERNATIONAL":"Международные","MESSENGERS":"Мессенджеры и соцсети","INFRASTRUCTURE":"Инфраструктура","CUSTOM":"Пользовательские"})[v]||v}
 function resourceById(id){return(S.dashboard&&S.dashboard.resources||[]).find(function(r){return r.id===Number(id)})}
+function targetUrl(value){
+  var raw=String(value||"").trim();if(!raw)return null;
+  try{return new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)?raw:"https://"+raw)}catch(_e){return null}
+}
+function targetMeta(value){
+  var u=targetUrl(value);if(!u)return{name:"",host:"",favicon:""};
+  var host=u.hostname.toLowerCase().replace(/^www\./,"");
+  var known=[
+    [/^(youtube\.com|youtu\.be)$/,"YouTube"],[/^(telegram\.org|t\.me)$/,"Telegram"],
+    [/^github\.com$/,"GitHub"],[/^(cloudflare\.com|1\.1\.1\.1)$/,"Cloudflare"],
+    [/^google\./,"Google"],[/^mail\.ru$/,"Mail.ru"],[/^vk\.com$/,"VK"],
+    [/^wikipedia\.org$/,"Wikipedia"],[/^yandex\./,"Яндекс"],[/^whatsapp\.com$/,"WhatsApp"],
+    [/^openai\.com$/,"OpenAI"],[/^netweather\.online$/,"NetWeather"],[/^apple\.com$/,"Apple"],
+    [/^microsoft\.com$/,"Microsoft"],[/^discord\.com$/,"Discord"]
+  ];
+  var name="";
+  for(var i=0;i<known.length;i++){if(known[i][0].test(host)){name=known[i][1];break}}
+  if(!name){
+    var part=host.split(".")[0]||host;
+    name=part.replace(/[-_]+/g," ").replace(/\b\w/g,function(c){return c.toUpperCase()})
+  }
+  var isLocal=host==="localhost"||/^127\./.test(host)||/^10\./.test(host)||/^192\.168\./.test(host)||/^172\.(1[6-9]|2\d|3[01])\./.test(host)||/^\[?::1\]?$/.test(host);
+  return{name:name,host:host,favicon:isLocal?"":u.protocol+"//"+u.host+"/favicon.ico"}
+}
+function resourceIconHtml(target,name){
+  var m=targetMeta(target),fallback=esc((name||m.name||"?").slice(0,2).toUpperCase());
+  return '<i class="resource-glyph">'+(m.favicon?'<img class="resource-logo-img" src="'+esc(m.favicon)+'" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove();this.parentElement.querySelector(\'.resource-logo-fallback\').style.display=\'grid\'">':'')+'<span class="resource-logo-fallback"'+(m.favicon?' style="display:none"':'')+'>'+fallback+'</span></i>'
+}
+function syncResourceIdentity(force){
+  var target=q("#resourceTarget"),name=q("#resourceName"),preview=q("#resourceIdentityPreview"),hint=q("#resourceTargetHint");
+  if(!target||!name||!preview)return;
+  var m=targetMeta(target.value);
+  if(!m.host){preview.innerHTML="<span>NW</span>";if(hint)hint.textContent="После ввода ссылки NetWeather предложит название и логотип ресурса.";return}
+  var canFill=force||!name.value.trim()||name.dataset.autoSuggested==="1";
+  if(canFill&&m.name){name.value=m.name;name.dataset.autoSuggested="1"}
+  preview.innerHTML=(m.favicon?'<img src="'+esc(m.favicon)+'" alt="" referrerpolicy="no-referrer" onerror="this.remove();this.parentElement.innerHTML=\'<span>'+esc((m.name||"?").slice(0,2).toUpperCase())+'</span>\'">':'<span>'+esc((m.name||"?").slice(0,2).toUpperCase())+'</span>');
+  if(hint)hint.textContent=m.host+(m.name?" · определено как «"+m.name+"»":"")
+}
+
 function realtimeById(id){return(S.realtime&&S.realtime.resources||[]).find(function(r){return r.id===Number(id)})}
 function empty(title,text){return '<div class="empty-state"><div><b>'+esc(title)+'</b><div style="margin-top:5px">'+esc(text||"")+'</div></div></div>'}
 function getCss(name){return getComputedStyle(document.documentElement).getPropertyValue(name).trim()||"#92a8c2"}
@@ -127,11 +166,10 @@ function renderAll(){
 function renderOverview(){
   if(!S.dashboard)return;
   var summary=S.dashboard.summary||{},legacy=S.dashboard.legacy_summary||{};
-  var globalAvail=historyAverage(S.historyExt,"availability");
-  var ruAvail=historyAverage(S.historyDom,"availability");
-  var globalDelta=historyDelta(S.historyExt,"availability");
-  var ruDelta=historyDelta(S.historyDom,"availability");
+  var globalAvail=historyAverage(S.historyExt,"availability"),ruAvail=historyAverage(S.historyDom,"availability");
+  var globalDelta=historyDelta(S.historyExt,"availability"),ruDelta=historyDelta(S.historyDom,"availability");
   var active=S.incidents.filter(function(i){return !i.closed_at});
+  var unread=active.filter(function(i){return !i.acknowledged_at});
 
   q("#kpiGlobal").textContent=pct(globalAvail,2);
   q("#kpiGlobalDelta").textContent=globalDelta==null?"внешний VPS":((globalDelta>=0?"▲ +":"▼ ")+Math.abs(globalDelta).toFixed(2)+"%");
@@ -146,9 +184,9 @@ function renderOverview(){
   q("#kpiPersonal").textContent="—";
   q("#kpiPersonalHint").textContent="device-probe ещё не подключён";
   q("#kpiIncidents").textContent=active.length;
-  q("#kpiIncidentDelta").textContent=active.length?"▲ "+active.length:"спокойно";
-  q("#kpiIncidentDelta").style.color=active.length?"var(--red)":"var(--muted)";
-  q("#kpiIncidentHint").textContent=active.length?"есть активные события":"критических событий нет";
+  q("#kpiIncidentDelta").textContent=unread.length?unread.length+" новых":"спокойно";
+  q("#kpiIncidentDelta").style.color=unread.length?"var(--red)":"var(--muted)";
+  q("#kpiIncidentHint").textContent=active.length?(unread.length+" непрочитанных из "+active.length):"критических событий нет";
 
   drawSpark(q("#kpiGlobalSpark"),S.historyExt.map(function(x){return x.availability}),COLORS[1]);
   drawSpark(q("#kpiRuSpark"),S.historyDom.map(function(x){return x.availability}),COLORS[0]);
@@ -156,21 +194,13 @@ function renderOverview(){
   drawBars(q("#kpiIncidentSpark"),incidentSpark(),COLORS[0]);
 
   var state=overviewState(summary,legacy,active.length);
-  q("#welcomeTitle").textContent=state.title;
-  q("#welcomeSubtitle").textContent=state.text;
-  var health=q("#topSystemStatus");health.className="health-pill "+state.cls;
-  health.querySelector("b").textContent=state.short;
-  health.querySelector("span").textContent=state.healthText;
+  q("#welcomeTitle").textContent=state.title;q("#welcomeSubtitle").textContent=state.text;
+  var health=q("#topSystemStatus");health.className="health-pill "+state.cls;health.querySelector("b").textContent=state.short;health.querySelector("span").textContent=state.healthText;
 
-  q("#alertBadge").textContent=active.length;q("#alertBadge").classList.toggle("hidden",!active.length);
-  q("#notifyCount").textContent=active.length;q("#notifyCount").classList.toggle("hidden",!active.length);
+  q("#alertBadge").textContent=unread.length;q("#alertBadge").classList.toggle("hidden",!unread.length);
+  q("#notifyCount").textContent=unread.length;q("#notifyCount").classList.toggle("hidden",!unread.length);
 
-  renderRealtime();
-  renderEvents();
-  renderResourceCards();
-  renderMap();
-  renderOverviewTable();
-  renderFaultPanel()
+  renderRealtime();renderEvents();renderResourceCards();renderMap();renderOverviewTable();renderFaultPanel()
 }
 
 function overviewState(s,legacy,incidents){
@@ -201,17 +231,18 @@ function drawAvailabilityChart(canvas,series){
   var rect=canvas.getBoundingClientRect(),dpr=Math.min(2,window.devicePixelRatio||1);
   canvas.width=Math.max(420,Math.floor(rect.width*dpr));canvas.height=Math.max(180,Math.floor(rect.height*dpr));
   var ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);
-  var w=rect.width,h=rect.height,p={l:39,r:10,t:9,b:24};ctx.clearRect(0,0,w,h);
+  var w=rect.width,h=rect.height,p={l:46,r:10,t:12,b:27};ctx.clearRect(0,0,w,h);
   if(!series.length){S.streamMeta=null;return}
-  var points=[];series.forEach(function(s){s.points.forEach(function(x){if(x.availability!=null)points.push(Number(x.availability))})});
+  var points=[];series.forEach(function(row){row.points.forEach(function(x){if(x.availability!=null)points.push(Number(x.availability))})});
   if(!points.length){S.streamMeta=null;return}
-  var minVal=Math.min.apply(null,points),min=minVal>=95?95:minVal>=90?90:Math.max(0,Math.floor(minVal/5)*5),max=100;
-  var ticks=[100,99,98,95,90].filter(function(v){return v>=min});
-  ctx.font="8px system-ui";ctx.fillStyle=getCss("--muted");ctx.strokeStyle=getCss("--line-soft");ctx.lineWidth=1;
-  ticks.forEach(function(v){var y=p.t+(h-p.t-p.b)*(1-(v-min)/(max-min));ctx.beginPath();ctx.moveTo(p.l,y);ctx.lineTo(w-p.r,y);ctx.stroke();ctx.fillText(v+"%",3,y+3)});
-  var allTs=[];series.forEach(function(s){s.points.forEach(function(x){allTs.push(x.timestamp)})});var tmin=Math.min.apply(null,allTs),tmax=Math.max.apply(null,allTs);if(tmax===tmin)tmax=tmin+1;
-  series.slice(0,7).forEach(function(s,si){ctx.strokeStyle=COLORS[si%COLORS.length];ctx.lineWidth=1.45;ctx.beginPath();var started=false;s.points.forEach(function(pt){if(pt.availability==null)return;var x=p.l+(w-p.l-p.r)*(pt.timestamp-tmin)/(tmax-tmin);var y=p.t+(h-p.t-p.b)*(1-(Number(pt.availability)-min)/(max-min));if(!started){ctx.moveTo(x,y);started=true}else ctx.lineTo(x,y)});ctx.stroke()});
-  for(var j=0;j<=6;j++){var ts=tmin+(tmax-tmin)*j/6,x=p.l+(w-p.l-p.r)*j/6;ctx.fillStyle=getCss("--muted");ctx.fillText(shortTime(ts),Math.min(x,w-32),h-6)}
+  var minVal=Math.min.apply(null,points),min=minVal>=90?90:minVal>=75?75:0,max=100;
+  var ticks=[];for(var ti=0;ti<=4;ti++)ticks.push(max-(max-min)*ti/4);
+  ctx.font="10px system-ui";ctx.fillStyle=getCss("--muted");ctx.strokeStyle=getCss("--line-soft");ctx.lineWidth=1;
+  ticks.forEach(function(v){var y=p.t+(h-p.t-p.b)*(1-(v-min)/(max-min));ctx.beginPath();ctx.moveTo(p.l,y);ctx.lineTo(w-p.r,y);ctx.stroke();ctx.fillText((Math.round(v*10)/10).toString().replace(".0","")+"%",3,y+3)});
+  var allTs=[];series.forEach(function(row){row.points.forEach(function(x){allTs.push(x.timestamp)})});
+  var tmin=Math.min.apply(null,allTs),tmax=Math.max.apply(null,allTs);if(tmax===tmin)tmax=tmin+1;
+  series.slice(0,7).forEach(function(row,si){ctx.strokeStyle=COLORS[si%COLORS.length];ctx.lineWidth=1.6;ctx.beginPath();var started=false;row.points.forEach(function(pt){if(pt.availability==null)return;var x=p.l+(w-p.l-p.r)*(pt.timestamp-tmin)/(tmax-tmin),y=p.t+(h-p.t-p.b)*(1-(Number(pt.availability)-min)/(max-min));if(!started){ctx.moveTo(x,y);started=true}else ctx.lineTo(x,y)});ctx.stroke()});
+  for(var j=0;j<=6;j++){var ts=tmin+(tmax-tmin)*j/6,x=p.l+(w-p.l-p.r)*j/6;ctx.fillStyle=getCss("--muted");ctx.fillText(shortTime(ts),Math.min(x,w-36),h-7)}
   S.streamMeta={series:series,tmin:tmin,tmax:tmax,min:min,max:max,p:p,w:w,h:h,key:"availability"}
 }
 
@@ -233,11 +264,12 @@ function renderEvents(){
   var el=q("#eventFeed"),rows=S.events||[];
   if(!rows.length){el.innerHTML=empty("Событий пока нет","Изменения состояния появятся здесь.");return}
   el.innerHTML=rows.slice(0,7).map(function(ev){
-    var sev=ev.severity==="critical"?"critical":ev.severity==="warning"?"warning":"";
-    var label=sev==="critical"?"Критический":sev==="warning"?"Предупреждение":"Информация";
-    return '<div class="event-item" data-event-resource="'+(ev.resource_id||"")+'"><time class="event-time">'+shortTime(ev.time)+'</time><i class="event-dot '+sev+'"></i><div class="event-main"><b>'+esc(ev.title)+'</b><span>'+esc(ev.message||"")+'</span></div><span class="event-tag '+sev+'">'+label+'</span></div>'
+    var sev=ev.severity==="critical"?"critical":ev.severity==="warning"?"warning":"",label=sev==="critical"?"Критический":sev==="warning"?"Предупреждение":"Информация";
+    var unread=ev.incident_id&&!ev.acknowledged_at;
+    return '<div class="event-item '+(unread?"unread":"")+'" data-event-resource="'+(ev.resource_id||"")+'"><time class="event-time">'+shortTime(ev.time)+'</time><i class="event-dot '+sev+'"></i><div class="event-main"><b>'+esc(ev.title)+'</b><span>'+esc(ev.message||"")+'</span>'+(unread?'<button class="event-ack" data-ack="'+ev.incident_id+'">✓ Отметить прочитанным</button>':'')+'</div><span class="event-tag '+sev+'">'+label+'</span></div>'
   }).join("");
-  qa("[data-event-resource]").forEach(function(row){row.onclick=function(){if(row.dataset.eventResource)openDetail(Number(row.dataset.eventResource))}})
+  qa("[data-event-resource]").forEach(function(row){row.onclick=function(e){if(e.target.closest("[data-ack]"))return;if(row.dataset.eventResource)openDetail(Number(row.dataset.eventResource))}});
+  bindIncidentActions()
 }
 
 function renderResourceCards(){
@@ -247,10 +279,9 @@ function renderResourceCards(){
   el.innerHTML=cards.map(function(r,i){
     var rr=current.find(function(x){return x.id===r.id})||{},cls=diagClass(rr.diagnosis);
     var pts=(r.points||[]).filter(function(p){return p.availability!=null});
-    var last=pts.length?pts[pts.length-1]:null;
     var latency=(rr.domestic||rr.external||{}).response_time_ms;
     var delta=pts.length>2?Number(pts[pts.length-1].availability)-Number(pts[0].availability):0;
-    return '<article class="resource-card" data-resource="'+r.id+'"><div class="resource-card-top"><div class="resource-card-name"><i class="resource-glyph">'+esc((r.name||"?").slice(0,2).toUpperCase())+'</i><b>'+esc(r.name)+'</b></div><span class="resource-state '+(cls==="bad"?"bad":cls==="warn"?"warn":"")+'">'+(delta>=0?"↑ ":"↓ ")+Math.abs(delta).toFixed(1)+'%</span></div><div class="resource-card-metrics"><strong>'+pct(r.availability_24h,1)+'</strong><span>'+num(latency," мс")+'</span></div><canvas data-card-spark="'+r.id+'"></canvas><div class="resource-card-foot"><span>◴ '+num(latency," мс")+'</span><span>'+esc(groupTitle(r.group_name))+'</span></div></article>'
+    return '<article class="resource-card" data-resource="'+r.id+'"><div class="resource-card-top"><div class="resource-card-name">'+resourceIconHtml(r.target,r.name)+'<b>'+esc(r.name)+'</b></div><span class="resource-state '+(cls==="bad"?"bad":cls==="warn"?"warn":"")+'">'+(delta>=0?"↑ ":"↓ ")+Math.abs(delta).toFixed(1)+'%</span></div><div class="resource-card-metrics"><strong>'+pct(r.availability_24h,1)+'</strong><span>'+num(latency," мс")+'</span></div><canvas data-card-spark="'+r.id+'"></canvas><div class="resource-card-foot"><span>◴ '+num(latency," мс")+'</span><span>'+esc(groupTitle(r.group_name))+'</span></div></article>'
   }).join("");
   qa(".resource-card").forEach(function(card){card.onclick=function(){openDetail(Number(card.dataset.resource))}});
   cards.forEach(function(r,i){var c=document.querySelector('[data-card-spark="'+r.id+'"]');drawSpark(c,(r.points||[]).map(function(p){return p.availability}).filter(function(v){return v!=null}),COLORS[i%COLORS.length])})
@@ -288,7 +319,7 @@ function renderOverviewTable(){
   var visible=rows.slice(0,6);
   el.innerHTML='<div class="table-head"><div>Ресурс</div><div>Статус</div><div>Доступность (24ч)</div><div>Время ответа</div><div>DNS</div><div>TCP</div><div>TLS</div><div>HTTP</div><div>Тренд (1ч)</div><div></div></div>'+visible.map(function(r){
     var rt=realtimeById(r.id)||{},x=r.domestic||r.external||{};
-    return '<div class="table-row" data-resource="'+r.id+'"><div class="table-resource"><b>'+esc(r.name)+'</b><span>'+esc(r.target)+'</span></div><div><span class="status-chip '+diagClass(r.diagnosis)+'">'+diagText(r.diagnosis)+'</span></div><div>'+pct(rt.availability_24h,1)+'</div><div>'+num(x.response_time_ms," мс")+'</div><div><i class="stage-dot '+stageState("DNS",r,x)+'"></i></div><div><i class="stage-dot '+stageState("TCP",r,x)+'"></i></div><div><i class="stage-dot '+stageState("TLS",r,x)+'"></i></div><div><i class="stage-dot '+stageState("HTTP",r,x)+'"></i></div><div><canvas class="trend-canvas" data-trend="'+r.id+'"></canvas></div><button class="row-more">⋮</button></div>'
+    return '<div class="table-row" data-resource="'+r.id+'"><div class="table-resource with-logo">'+resourceIconHtml(r.target,r.name)+'<div><b>'+esc(r.name)+'</b><span>'+esc(r.target)+'</span></div></div><div><span class="status-chip '+diagClass(r.diagnosis)+'">'+diagText(r.diagnosis)+'</span></div><div>'+pct(rt.availability_24h,1)+'</div><div>'+num(x.response_time_ms," мс")+'</div><div><i class="stage-dot '+stageState("DNS",r,x)+'"></i></div><div><i class="stage-dot '+stageState("TCP",r,x)+'"></i></div><div><i class="stage-dot '+stageState("TLS",r,x)+'"></i></div><div><i class="stage-dot '+stageState("HTTP",r,x)+'"></i></div><div><canvas class="trend-canvas" data-trend="'+r.id+'"></canvas></div><button class="row-more">⋮</button></div>'
   }).join("");
   qa("#overviewResourceTable .table-row").forEach(function(row){row.onclick=function(){openDetail(Number(row.dataset.resource))}});
   visible.forEach(function(r,i){var rt=realtimeById(r.id)||{},c=document.querySelector('[data-trend="'+r.id+'"]');drawSpark(c,(rt.points||[]).map(function(p){return p.availability}).filter(function(v){return v!=null}),COLORS[i%COLORS.length])})
@@ -383,13 +414,26 @@ function renderResources(){
 }
 
 function incidentHtml(i){
-  var cls=i.severity==="critical"?"critical":i.closed_at?"info":"";
-  return '<div class="incident-row '+cls+'"><i></i><div><b>'+esc(i.resource_name||"Событие")+'</b><p>'+esc(i.message||"")+'</p></div><time>'+ago(i.opened_at||i.closed_at)+'</time></div>'
+  var severity=i.severity==="critical"?"critical":i.closed_at?"info":"";
+  var read=!!i.acknowledged_at;
+  return '<div class="incident-row '+severity+' '+(read?"read":"unread")+'" data-incident="'+i.id+'"><i></i><div><b>'+esc(i.resource_name||"Событие")+'</b><p>'+esc(i.message||"")+'</p></div><div class="incident-row-actions"><time>'+ago(i.opened_at||i.closed_at)+'</time>'+(read?'<span class="incident-read-mark">✓ Прочитано</span>':'<button class="incident-read-btn" data-ack="'+i.id+'">✓ Прочитать</button>')+'</div></div>'
+}
+async function acknowledgeIncident(id){
+  try{await api("/api/incidents/"+id+"/ack",{method:"POST"},true);await loadAll(true);toast("Инцидент отмечен прочитанным")}catch(e){toast(e.message)}
+}
+async function acknowledgeAllIncidents(){
+  try{var r=await api("/api/incidents/ack-all",{method:"POST"},true);await loadAll(true);toast("Отмечено прочитанными: "+r.acknowledged)}catch(e){toast(e.message)}
+}
+function bindIncidentActions(){
+  qa("[data-ack]").forEach(function(b){b.onclick=function(e){e.stopPropagation();acknowledgeIncident(Number(b.dataset.ack))}})
 }
 function renderIncidents(){
   var a=S.incidents.filter(function(i){return !i.closed_at}),h=S.incidents.filter(function(i){return i.closed_at});
   q("#activeIncidents").innerHTML=a.length?a.map(incidentHtml).join(""):empty("Активных инцидентов нет","Система не видит открытых тревог.");
-  q("#incidentHistory").innerHTML=h.length?h.map(incidentHtml).join(""):empty("История пуста","Закрытые события появятся здесь.")
+  q("#incidentHistory").innerHTML=h.length?h.map(incidentHtml).join(""):empty("История пуста","Закрытые события появятся здесь.");
+  bindIncidentActions();
+  var unread=S.incidents.filter(function(i){return !i.acknowledged_at}).length,button=q("#ackAllIncidents");
+  if(button){button.disabled=!unread;button.textContent=unread?"✓ Отметить все прочитанными ("+unread+")":"✓ Всё прочитано"}
 }
 
 function renderProbes(){
@@ -462,7 +506,7 @@ async function traceDomestic(id){
 }
 
 function formPayload(){return{name:q("#resourceName").value.trim(),target:q("#resourceTarget").value.trim(),group_name:q("#resourceGroup").value.trim()||"CUSTOM",interval_seconds:Number(q("#resourceInterval").value),expected_status_min:Number(q("#statusMin").value),expected_status_max:Number(q("#statusMax").value),slow_threshold_ms:Number(q("#slowThreshold").value),failure_threshold:Number(q("#failureThreshold").value),enabled:q("#resourceEnabled").checked,alerts_enabled:q("#alertsEnabled").checked}}
-function openResourceForm(r){q("#resourceForm").reset();q("#resourceId").value=r?r.id:"";q("#resourceDialogLabel").textContent=r?"РЕДАКТИРОВАНИЕ":"НОВАЯ ЦЕЛЬ";q("#resourceDialogTitle").textContent=r?"Изменить ресурс":"Добавить ресурс";q("#resourceName").value=r?r.name:"";q("#resourceTarget").value=r?r.target:"";q("#resourceGroup").value=r?r.group_name:"CUSTOM";q("#resourceInterval").value=String(r?r.interval_seconds:60);q("#statusMin").value=r?r.expected_status_min:200;q("#statusMax").value=r?r.expected_status_max:399;q("#slowThreshold").value=r?r.slow_threshold_ms:1500;q("#failureThreshold").value=r?r.failure_threshold:2;q("#resourceEnabled").checked=r?!!r.enabled:true;q("#alertsEnabled").checked=r?!!r.alerts_enabled:true;q("#resourceDialog").showModal()}
+function openResourceForm(r){q("#resourceForm").reset();q("#resourceId").value=r?r.id:"";q("#resourceDialogLabel").textContent=r?"РЕДАКТИРОВАНИЕ":"НОВАЯ ЦЕЛЬ";q("#resourceDialogTitle").textContent=r?"Изменить ресурс":"Добавить ресурс";q("#resourceName").value=r?r.name:"";q("#resourceName").dataset.autoSuggested=r?"0":"1";q("#resourceTarget").value=r?r.target:"";q("#resourceGroup").value=r?r.group_name:"CUSTOM";q("#resourceInterval").value=String(r?r.interval_seconds:60);q("#statusMin").value=r?r.expected_status_min:200;q("#statusMax").value=r?r.expected_status_max:399;q("#slowThreshold").value=r?r.slow_threshold_ms:1500;q("#failureThreshold").value=r?r.failure_threshold:2;q("#resourceEnabled").checked=r?!!r.enabled:true;q("#alertsEnabled").checked=r?!!r.alerts_enabled:true;syncResourceIdentity(false);q("#resourceDialog").showModal()}
 async function saveResource(e){e.preventDefault();var id=q("#resourceId").value,p=formPayload();if(!p.name||!p.target){toast("Заполните название и адрес");return}try{if(id)await api("/api/resources/"+id,{method:"PATCH",body:JSON.stringify(p)},true);else await api("/api/resources",{method:"POST",body:JSON.stringify(p)},true);q("#resourceDialog").close();await loadAll(true);toast(id?"Ресурс обновлён":"Ресурс добавлен")}catch(err){toast(err.message)}}
 
 async function openDetail(id){
@@ -475,11 +519,15 @@ function setup(){
   qa(".side-item[data-view]").forEach(function(b){b.onclick=function(){openView(b.dataset.view)}});
   qa("[data-view-jump]").forEach(function(b){b.onclick=function(){openView(b.dataset.viewJump)}});
   q("#globalSearch").oninput=function(){renderSearch(this.value)};
+  var identityTimer=null;
+  q("#resourceTarget").addEventListener("input",function(){clearTimeout(identityTimer);identityTimer=setTimeout(function(){syncResourceIdentity(false)},180)});
+  q("#resourceName").addEventListener("input",function(){this.dataset.autoSuggested="0"});
   document.addEventListener("keydown",function(e){if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){e.preventDefault();q("#globalSearch").focus()}});
   document.addEventListener("click",function(e){if(!e.target.closest(".search-wrap"))q("#searchResults").classList.add("hidden")});
   q("#themeToggle").onclick=function(){var light=document.documentElement.dataset.theme==="light";document.documentElement.dataset.theme=light?"dark":"light";localStorage.setItem("netweather_theme",light?"dark":"light");renderAll()};
   document.documentElement.dataset.theme=localStorage.getItem("netweather_theme")||"dark";
   q("#openAlerts").onclick=function(){openView("alerts")};
+  q("#ackAllIncidents").onclick=acknowledgeAllIncidents;
   q("#worldButton").onclick=function(){openView("map")};
   q("#manageGroups").onclick=function(){openView("groups")};
   [q("#sidebarAddResource"),q("#openAddResource"),q("#overviewAddResource")].forEach(function(b){if(b)b.onclick=function(){openResourceForm(null)}});
