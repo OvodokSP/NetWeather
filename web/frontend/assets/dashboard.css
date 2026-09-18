@@ -828,3 +828,5 @@ body.core-offline .overview-view .kpi-card::after{
 .map-status.neutral i{background:var(--muted2)}
 .map-status.ok span{color:var(--green)}
 .map-status.bad span{color:var(--red)}
+
+.capability-hidden{display:none!important}
