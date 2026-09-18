@@ -145,10 +145,10 @@ function drawChart(id,data,key,percent,emptyId){
 }
 
 async function manualCheck(id){
-  try{toast("Проверяем ресурс…");await api("/api/resources/"+id+"/check",{method:"POST"},true);await loadAll(true);toast("Проверка завершена");var r=resourceById(id);if(S.view==="diagnostics"&&r)showDiagnostic(r)}catch(e){toast(e.message)}
+  try{toast("Проверяем ресурс…");var result=await api("/api/resources/"+id+"/check",{method:"POST"},true);await loadAll(true);toast(result.scheduled_domestic?"VPS проверен · проверка РФ поставлена в очередь":"VPS проверен · российский probe не подключён");var r=resourceById(id);if(S.view==="diagnostics"&&r)showDiagnostic(r)}catch(e){toast(e.message)}
 }
 async function checkAll(){
-  var b=q("#checkAll"),old=b.textContent;b.disabled=true;b.textContent="Проверяем…";try{var r=await api("/api/check-all",{method:"POST"},true);await loadAll(true);toast("Проверено: "+r.checked+" · OK: "+r.ok+" · ошибок: "+r.failed)}catch(e){toast(e.message)}finally{b.disabled=false;b.textContent=old}
+  var b=q("#checkAll"),old=b.textContent;b.disabled=true;b.textContent="Проверяем…";try{var r=await api("/api/check-all",{method:"POST"},true);await loadAll(true);toast("VPS: "+r.checked+" · OK: "+r.ok+" · ошибок: "+r.failed+" · заданий РФ: "+(r.scheduled_domestic||0))}catch(e){toast(e.message)}finally{b.disabled=false;b.textContent=old}
 }
 async function trace(id){
   try{q("#traceOutput").innerHTML=empty("Traceroute","Выполняем маршрут с VPS…");var r=await api("/api/resources/"+id+"/trace",{method:"POST"},true);q("#traceMeta").textContent=r.host+" → "+r.resolved_ip+" · DNS "+r.dns_ms+" мс";q("#traceOutput").innerHTML=r.hops.length?r.hops.map(function(h){return '<div class="trace-hop"><span>'+h.hop+'</span><span>'+esc(h.ip||"*")+'</span><span>'+(h.latency_ms==null?"*":h.latency_ms+" ms")+'</span></div>'}).join(""):'<pre class="trace-raw">'+esc(r.raw)+'</pre>';openView("diagnostics");q("#diagResource").value=String(id);S.diagId=id}catch(e){q("#traceOutput").innerHTML=empty("Traceroute не выполнен",e.message);toast(e.message)}
