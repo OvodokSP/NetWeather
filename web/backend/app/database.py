@@ -107,6 +107,9 @@ def init_db() -> None:
               VALUES(?,?,?,?,?,?)
               ON CONFLICT(group_key) DO NOTHING""",
               (key,key,"#8A96A3",100,now,now))
+        conn.execute("""DELETE FROM resource_groups
+          WHERE group_key='SELFTEST'
+            AND NOT EXISTS(SELECT 1 FROM resources WHERE group_name='SELFTEST')""")
         conn.execute("""INSERT INTO probes(probe_key,name,scope,last_seen_at,created_at,updated_at)
           VALUES(?,?,?,?,?,?)
           ON CONFLICT(probe_key) DO UPDATE SET name=excluded.name,scope=excluded.scope,last_seen_at=excluded.last_seen_at,updated_at=excluded.updated_at""",
