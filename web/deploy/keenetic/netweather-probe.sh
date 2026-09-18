@@ -103,18 +103,29 @@ run_checks() {
 }
 
 run_tasks() {
-  tasks="$("$CURL_BIN" -fsS --max-time 10     -H "X-NetWeather-Agent: $TOKEN"     "$BASE_URL/api/agent/tasks.tsv?probe_key=$PROBE_KEY&probe_name=$(printf '%s' "$PROBE_NAME" | sed 's/ /%20/g')" 2>/dev/null)" || return 0
+  tasks="$("$CURL_BIN" -fsS --max-time 10 \
+    -H "X-NetWeather-Agent: $TOKEN" \
+    "$BASE_URL/api/agent/tasks.tsv?probe_key=$PROBE_KEY&probe_name=$(printf '%s' "$PROBE_NAME" | sed 's/ /%20/g')" 2>/dev/null)" || return 0
 
-  printf '%s\n' "$tasks" | while IFS="$TAB" read -r task_id resource_id target; do
+  printf '%s\n' "$tasks" | while IFS="$TAB" read -r task_id resource_id task_type target; do
     [ -z "${task_id:-}" ] && continue
-    host="$(printf '%s' "$target" | sed -E 's#^[A-Za-z]+://##; s#/.*##; s/:.*##')"
-    outfile="$TMP/trace.$task_id"
-    if command -v "$TRACEROUTE_BIN" >/dev/null 2>&1; then
-      "$TRACEROUTE_BIN" -n -w 1 -q 1 -m 15 "$host" >"$outfile" 2>&1 || true
+    outfile="$TMP/task.$task_id"
+    if [ "$task_type" = "CHECK" ]; then
+      probe_one "$resource_id" "$target" "200" "399"
+      echo "domestic check completed" >"$outfile"
     else
-      echo "traceroute is not available on this probe" >"$outfile"
+      host="$(printf '%s' "$target" | sed -E 's#^[A-Za-z]+://##; s#/.*##; s/:.*##')"
+      if command -v "$TRACEROUTE_BIN" >/dev/null 2>&1; then
+        "$TRACEROUTE_BIN" -n -w 1 -q 1 -m 15 "$host" >"$outfile" 2>&1 || true
+      else
+        echo "traceroute is not available on this probe" >"$outfile"
+      fi
     fi
-    "$CURL_BIN" -fsS --max-time 15       -H "X-NetWeather-Agent: $TOKEN"       -H "Content-Type: text/plain; charset=utf-8"       -X POST --data-binary "@$outfile"       "$BASE_URL/api/agent/tasks/$task_id/complete?probe_key=$PROBE_KEY" >/dev/null || true
+    "$CURL_BIN" -fsS --max-time 15 \
+      -H "X-NetWeather-Agent: $TOKEN" \
+      -H "Content-Type: text/plain; charset=utf-8" \
+      -X POST --data-binary "@$outfile" \
+      "$BASE_URL/api/agent/tasks/$task_id/complete?probe_key=$PROBE_KEY" >/dev/null || true
   done
 }
 
