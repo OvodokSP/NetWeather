@@ -822,3 +822,9 @@ body.core-offline .overview-view .kpi-card::after{
   color:var(--blue);
   background:rgba(88,199,255,.08);
 }
+
+.map-status.ok i{background:var(--green)}
+.map-status.bad i{background:var(--red)}
+.map-status.neutral i{background:var(--muted2)}
+.map-status.ok span{color:var(--green)}
+.map-status.bad span{color:var(--red)}
