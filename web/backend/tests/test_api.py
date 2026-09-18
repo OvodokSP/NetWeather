@@ -108,6 +108,59 @@ class NetWeatherApiTest(unittest.TestCase):
         self.assertGreater(latest, 98.0)
         self.assertLess(latest, 99.0)
 
+    def test_ranked_resource_catalog_and_batch_add(self):
+        response = self.client.get("/api/resource-catalog")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(len(payload["groups"]), 4)
+        all_items = []
+        for group in payload["groups"]:
+            self.assertEqual(len(group["items"]), 10)
+            ranks = [item["rank"] for item in group["items"]]
+            self.assertEqual(ranks, list(range(1, 11)))
+            all_items.extend(group["items"])
+        self.assertEqual(len({item["key"] for item in all_items}), 40)
+        self.assertEqual(len({item["target"] for item in all_items}), 40)
+        self.assertTrue(any(item["already_added"] for item in all_items))
+
+        add = self.client.post("/api/resource-catalog/add", json={"resource_keys":["int-chatgpt","msg-youtube"]})
+        self.assertEqual(add.status_code, 200)
+        self.assertEqual(len(add.json()["added"]), 2)
+        again = self.client.post("/api/resource-catalog/add", json={"resource_keys":["int-chatgpt","msg-youtube"]})
+        self.assertEqual(again.status_code, 200)
+        self.assertEqual(len(again.json()["added"]), 0)
+        self.assertEqual(len(again.json()["existing"]), 2)
+
+    def test_manual_catalog_match_uses_catalog_resource_without_duplicate(self):
+        match = self.client.get("/api/resource-catalog/match", params={"target":"https://github.com/openai"}).json()
+        self.assertTrue(match["matched"])
+        self.assertEqual(match["resource"]["key"], "int-github")
+        self.assertTrue(match["already_added"])
+
+        first = self.client.post("/api/resources", json={
+            "name":"ручной YouTube",
+            "target":"https://youtu.be/",
+            "group_name":"CUSTOM",
+        })
+        self.assertEqual(first.status_code, 200)
+        body = first.json()
+        self.assertTrue(body["used_catalog"])
+        self.assertTrue(body["created"])
+        rid = body["id"]
+        detail = self.client.get("/api/resources/%d" % rid).json()["resource"]
+        self.assertEqual(detail["name"], "YouTube")
+        self.assertEqual(detail["group_name"], "MESSENGERS")
+        self.assertEqual(detail["catalog_key"], "msg-youtube")
+
+        second = self.client.post("/api/resources", json={
+            "name":"ещё YouTube",
+            "target":"https://www.youtube.com/watch?v=test",
+            "group_name":"RUSSIAN",
+        })
+        self.assertEqual(second.status_code, 200)
+        self.assertTrue(second.json()["already_exists"])
+        self.assertEqual(second.json()["id"], rid)
+
     def test_target_metadata_blocks_private_targets(self):
         response = self.client.get("/api/target-meta", params={"target":"http://127.0.0.1/"})
         self.assertEqual(response.status_code, 400)
