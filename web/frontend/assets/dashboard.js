@@ -348,8 +348,7 @@ function getCss(name){return getComputedStyle(document.documentElement).getPrope
 async function api(path,opt,secure){
   opt=opt||{};
   if(secure&&S.authRequired&&!S.owner&&!token()){
-    var dlg=q("#tokenDialog");if(dlg)openDialog(dlg,"#tokenInput");
-    throw new Error("Войдите в режим владельца");
+    throw new Error("Управление требует авторизации")
   }
   var headers={"Content-Type":"application/json"};
   Object.assign(headers,opt.headers||{});
@@ -1100,9 +1099,6 @@ function setup(){
   q("#customResourceName").oninput=function(){this.dataset.autoSuggested="0"};
   q("#resourceForm").onsubmit=saveResource;q("#groupForm").onsubmit=saveGroup;q("#openAddGroup").onclick=function(){openGroupForm(null)};
   qa(".modal-close").forEach(function(b){b.onclick=function(){closeDialog(b.closest("dialog"))}});
-  q("#openToken2").onclick=function(){toast("Development mode: авторизация отключена")};
-  q("#tokenForm").onsubmit=function(e){e.preventDefault();q("#tokenDialog").close()};
-  q("#clearToken").onclick=function(){q("#tokenDialog").close()};
   qa(".seg").forEach(function(b){b.onclick=async function(){if(b.dataset.busy==="1")return;qa(".seg").forEach(function(x){x.classList.remove("active")});b.classList.add("active");S.streamMinutes=Number(b.dataset.minutes);try{await withBusy(b,"…",async function(){S.realtime=await api("/api/realtime?minutes="+S.streamMinutes+"&scope=EXTERNAL");renderRealtime();renderResourceCards();renderOverviewTable()})}catch(e){toast(e.message)}}});
   q("#streamChart").addEventListener("mousemove",handleChartMove);q("#streamChart").addEventListener("mouseleave",function(){q("#chartTooltip").classList.add("hidden")});
   q("#expandChart").onclick=function(){var panel=q(".streams-panel"),expanded=panel.classList.toggle("chart-expanded");this.setAttribute("aria-expanded",expanded?"true":"false");this.setAttribute("title",expanded?"Свернуть график":"Развернуть график")};
