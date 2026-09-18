@@ -206,3 +206,8 @@ html[data-theme="light"] .panel{background:var(--panel)}
   .kpi-body strong{font-size:25px}
   .resource-card-name b{font-size:9px}
 }
+
+.table-resource.with-logo{display:grid;grid-template-columns:22px minmax(0,1fr);gap:7px;align-items:center}
+.table-resource.with-logo .resource-glyph{width:20px;height:20px;border-radius:6px}
+.incident-row{grid-template-columns:9px minmax(0,1fr) auto}
+.incident-row-actions{justify-content:flex-end}
