@@ -21,24 +21,39 @@ class FrontendContractTest(unittest.TestCase):
         views = set(re.findall(r'data-view="([A-Za-z0-9_-]+)"', self.html))
         sections = set(re.findall(r'id="view-([A-Za-z0-9_-]+)"', self.html))
         self.assertTrue(views.issubset(sections))
-        self.assertEqual(sections, {"overview","resources","groups","alerts","diagnostics","history","settings"})
+        self.assertEqual(
+            sections,
+            {"overview","resources","groups","alerts","map","probes","diagnostics","history","notifications","integrations","settings"},
+        )
 
-    def test_dashboard_core_sections_exist(self):
+    def test_reference_overview_sections_exist(self):
         required = (
             "globalSearch","topSystemStatus","kpiGlobal","kpiRu","kpiPersonal","kpiIncidents",
             "streamChart","eventFeed","resourceCards","faultMap","overviewResourceTable",
-            "faultPath","faultConclusion","faultResourceSelect","overviewGroupsList","groupsGrid","ownerButton"
+            "faultPath","faultConclusion","faultResourceSelect","mapRegion","mapZoomIn","mapZoomOut",
         )
         for item in required:
             self.assertIn(f'id="{item}"', self.html)
 
+    def test_reference_navigation_items_exist(self):
+        for label in (
+            "Обзор","Мониторинг","Инциденты","Карта сбоев","Точки наблюдения",
+            "Отчёты","Уведомления","Интеграции","Настройки",
+        ):
+            self.assertIn(label, self.html)
+
     def test_actions_and_dialogs_exist(self):
         for item in (
-            "resourceDialog","detailDialog","tokenDialog","checkAll","diagTrace",
-            "diagTraceDomestic","diagCheck","openAddResource","overviewAddResource",
-            "faultTraceVps","faultTraceRu","groupDialog","openAddGroup","groupForm"
+            "resourceDialog","detailDialog","tokenDialog","diagTrace","diagTraceDomestic",
+            "diagCheck","openAddResource","overviewAddResource","groupDialog","openAddGroup","groupForm",
+            "sidebarAddResource","manageGroups","expandChart","enableNotifications",
         ):
             self.assertIn(f'id="{item}"', self.html)
+
+    def test_overview_is_desktop_no_scroll(self):
+        self.assertIn("html,body{margin:0;width:100%;height:100%;overflow:hidden", self.css)
+        self.assertIn(".overview-view{height:100%;overflow:hidden}", self.css)
+        self.assertIn(".overview-grid{height:100%;display:grid", self.css)
 
     def test_no_runtime_cdn_dependency(self):
         lower = self.html.lower()
