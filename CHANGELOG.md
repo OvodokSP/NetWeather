@@ -13,6 +13,22 @@
 - Browser Probe;
 - unified fault-domain.
 
+## 0.3.10-web — Interaction contract & GitHub structure
+
+- обновлены README, Roadmap, Security и contributing docs;
+- добавлены architecture/UI/status docs и ADR;
+- добавлены GitHub issue/PR templates;
+- единое поведение dialog: focus, backdrop, Escape, return focus;
+- единый busy-state для async actions;
+- защита от double-submit;
+- собственное подтверждение destructive actions;
+- keyboard navigation глобального поиска;
+- явное stale-состояние при потере связи с Core;
+- фильтр карты регионов теперь реально работает;
+- большая карта показывает живые probe points;
+- улучшены accessibility labels и focus-visible;
+- добавлена поддержка prefers-reduced-motion.
+
 ## 0.3.9-web — Isolated production boundary
 
 - NetWeather production container переведён на dedicated UID/GID 10001.
