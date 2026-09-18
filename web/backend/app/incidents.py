@@ -118,6 +118,10 @@ def write_check(
         if not resource:
             return
         conn.execute(
+            "UPDATE probes SET last_seen_at=?,updated_at=? WHERE probe_key=?",
+            (now, now, probe_key),
+        )
+        conn.execute(
             """INSERT INTO checks(
                  resource_id,checked_at,status,response_time_ms,dns_ms,tcp_ms,tls_ms,http_ms,
                  http_status,resolved_ip,message,tls_days_left,final_url,location,probe_key,probe_scope
