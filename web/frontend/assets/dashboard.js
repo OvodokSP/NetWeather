@@ -59,10 +59,28 @@ function getTargetMetadata(value){
   }
   return S.metaCache[key]
 }
+function brandIconMarkup(target,name){
+  var text=String(name||"").toLowerCase(),host=(targetMeta(target).host||"").toLowerCase();
+  if(text.indexOf("youtube")>=0||host.indexOf("youtube.")>=0||host==="youtu.be")
+    return '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="7" width="28" height="18" rx="6" fill="#ff2738"/><path d="M13 11.5l8 4.5-8 4.5z" fill="#fff"/></svg>';
+  if(text.indexOf("telegram")>=0||host.indexOf("telegram.")>=0||host==="t.me")
+    return '<svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="#35aee2"/><path d="M8.5 15.4l14-5.4-2.4 12.2c-.2 1-1 1.2-1.8.7l-3.7-2.7-1.8 1.7c-.2.2-.4.4-.8.4l.3-3.8 7-6.3c.3-.3-.1-.5-.5-.2l-8.6 5.4-3.7-1.2c-.8-.3-.8-.8.1-1.1z" fill="#fff"/></svg>';
+  if(text.indexOf("github")>=0||host==="github.com")
+    return '<svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="#f4f7fb"/><path fill="#111827" d="M16 6.3a9.9 9.9 0 00-3.1 19.3c.5.1.7-.2.7-.5v-1.9c-2.8.6-3.4-1.2-3.4-1.2-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.6 1.1 1.6 1.1.9 1.6 2.4 1.1 3 .9.1-.7.4-1.1.7-1.3-2.2-.3-4.6-1.1-4.6-4.9 0-1.1.4-2 1.1-2.7-.1-.3-.5-1.3.1-2.7 0 0 .9-.3 2.8 1a9.8 9.8 0 015.1 0c1.9-1.3 2.8-1 2.8-1 .6 1.4.2 2.4.1 2.7.7.8 1.1 1.7 1.1 2.7 0 3.8-2.3 4.6-4.6 4.9.4.3.7.9.7 1.8v2.7c0 .3.2.6.7.5A9.9 9.9 0 0016 6.3z"/></svg>';
+  if(text.indexOf("cloudflare")>=0||host.indexOf("cloudflare.")>=0)
+    return '<svg viewBox="0 0 32 32" aria-hidden="true"><path fill="#f48120" d="M10.2 22.7h14.9a4.5 4.5 0 00.5-8.9 7.6 7.6 0 00-14.4-1.9 5.5 5.5 0 00-6.6 5.4 5.4 5.4 0 005.6 5.4z"/><path fill="#faae40" d="M18.2 22.7h9.4a3.3 3.3 0 00.4-6.6 5.7 5.7 0 00-9.8 6.6z"/></svg>';
+  if(text.indexOf("whatsapp")>=0||host.indexOf("whatsapp.")>=0)
+    return '<svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="#25d366"/><path fill="#fff" d="M23.3 8.7A10.3 10.3 0 007 21.1l-1.4 5.1 5.2-1.4a10.3 10.3 0 0012.5-16.1zm-7.2 15.4c-1.6 0-3.2-.4-4.5-1.2l-.3-.2-3.1.8.8-3-.2-.3a8.3 8.3 0 1114.9-5 8.3 8.3 0 01-7.6 8.9zm4.6-6.2c-.2-.1-1.5-.8-1.7-.8-.2-.1-.4-.1-.6.1-.2.3-.7.9-.9 1-.1.2-.3.2-.6.1-2.1-1-3.5-3-3.6-3.2-.2-.3 0-.4.1-.6l.4-.5c.1-.2.2-.3.2-.5s0-.4-.1-.5l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.5.1-.7.4-.2.2-1 1-1 2.5s1 2.9 1.2 3.1c.1.2 2.1 3.2 5 4.4.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.6-.7 1.9-1.3.2-.7.2-1.2.2-1.3-.1-.2-.3-.3-.5-.4z"/></svg>';
+  if(text.indexOf("server")>=0||text.indexOf("сервер")>=0)
+    return '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 4l10 5.5v13L16 28 6 22.5v-13z" fill="#8196b5"/><path d="M16 4v24M6 9.5l10 5.5 10-5.5" fill="none" stroke="#dbe5f2" stroke-width="1.6"/></svg>';
+  return ""
+}
 function resourceIconHtml(target,name){
-  var m=targetMeta(target),fallback=esc((name||m.name||"?").slice(0,2).toUpperCase());
+  var canonical=brandIconMarkup(target,name),m=targetMeta(target),fallback=esc((name||m.name||"?").slice(0,2).toUpperCase());
+  if(canonical)return '<i class="resource-glyph brand-glyph">'+canonical+'</i>';
   return '<i class="resource-glyph" data-icon-target="'+esc(target)+'" data-icon-name="'+esc(name||m.name||"")+'">'+(m.favicon?'<img class="resource-logo-img" src="'+esc(m.favicon)+'" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove();this.parentElement.querySelector(\'.resource-logo-fallback\').style.display=\'grid\'">':'')+'<span class="resource-logo-fallback"'+(m.favicon?' style="display:none"':'')+'>'+fallback+'</span></i>'
 }
+
 function paintResourceIcon(node,meta){
   if(!node||!meta)return;
   var fallback=esc((node.dataset.iconName||meta.name||"?").slice(0,2).toUpperCase()),src=meta.favicon_url||"";
@@ -251,24 +269,52 @@ function renderRealtime(){
   q("#streamLegend").innerHTML=withPoints.slice(0,7).map(function(r,i){return '<span class="legend-item"><i class="legend-dot" style="background:'+COLORS[i%COLORS.length]+'"></i>'+esc(r.name)+'</span>'}).join("")
 }
 
+function availabilityY(value,top,bottom){
+  var v=Math.max(0,Math.min(100,Number(value))),ticks=[100,99,98,95,90];
+  if(v>=100)return top;
+  if(v<=90)return bottom;
+  for(var i=0;i<ticks.length-1;i++){
+    var hi=ticks[i],lo=ticks[i+1];
+    if(v<=hi&&v>=lo){
+      var band=(bottom-top)/(ticks.length-1),ratio=(hi-v)/(hi-lo);
+      return top+(i+ratio)*band
+    }
+  }
+  return bottom
+}
 function drawAvailabilityChart(canvas,series){
   if(!canvas)return;
   var rect=canvas.getBoundingClientRect(),dpr=Math.min(2,window.devicePixelRatio||1);
-  canvas.width=Math.max(420,Math.floor(rect.width*dpr));canvas.height=Math.max(180,Math.floor(rect.height*dpr));
+  canvas.width=Math.max(480,Math.floor(rect.width*dpr));canvas.height=Math.max(190,Math.floor(rect.height*dpr));
   var ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);
-  var w=rect.width,h=rect.height,p={l:46,r:10,t:12,b:27};ctx.clearRect(0,0,w,h);
+  var w=rect.width,h=rect.height,p={l:54,r:12,t:13,b:29};ctx.clearRect(0,0,w,h);
   if(!series.length){S.streamMeta=null;return}
-  var points=[];series.forEach(function(row){row.points.forEach(function(x){if(x.availability!=null)points.push(Number(x.availability))})});
-  if(!points.length){S.streamMeta=null;return}
-  var minVal=Math.min.apply(null,points),min=minVal>=90?90:minVal>=75?75:0,max=100;
-  var ticks=[];for(var ti=0;ti<=4;ti++)ticks.push(max-(max-min)*ti/4);
-  ctx.font="10px system-ui";ctx.fillStyle=getCss("--muted");ctx.strokeStyle=getCss("--line-soft");ctx.lineWidth=1;
-  ticks.forEach(function(v){var y=p.t+(h-p.t-p.b)*(1-(v-min)/(max-min));ctx.beginPath();ctx.moveTo(p.l,y);ctx.lineTo(w-p.r,y);ctx.stroke();ctx.fillText((Math.round(v*10)/10).toString().replace(".0","")+"%",3,y+3)});
-  var allTs=[];series.forEach(function(row){row.points.forEach(function(x){allTs.push(x.timestamp)})});
+  var allTs=[];series.forEach(function(row){row.points.forEach(function(x){if(x.availability!=null)allTs.push(x.timestamp)})});
+  if(!allTs.length){S.streamMeta=null;return}
+  var ticks=[100,99,98,95,90],plotBottom=h-p.b;
+  ctx.font='600 11px "Inter","Segoe UI",system-ui,sans-serif';
+  ctx.textBaseline="middle";ctx.fillStyle=getCss("--muted");ctx.strokeStyle=getCss("--line-soft");ctx.lineWidth=1;
+  ticks.forEach(function(v,i){
+    var y=p.t+(plotBottom-p.t)*i/(ticks.length-1);
+    ctx.beginPath();ctx.moveTo(p.l,y);ctx.lineTo(w-p.r,y);ctx.stroke();
+    ctx.fillText(v+"%",5,y)
+  });
   var tmin=Math.min.apply(null,allTs),tmax=Math.max.apply(null,allTs);if(tmax===tmin)tmax=tmin+1;
-  series.slice(0,7).forEach(function(row,si){ctx.strokeStyle=COLORS[si%COLORS.length];ctx.lineWidth=1.6;ctx.beginPath();var started=false;row.points.forEach(function(pt){if(pt.availability==null)return;var x=p.l+(w-p.l-p.r)*(pt.timestamp-tmin)/(tmax-tmin),y=p.t+(h-p.t-p.b)*(1-(Number(pt.availability)-min)/(max-min));if(!started){ctx.moveTo(x,y);started=true}else ctx.lineTo(x,y)});ctx.stroke()});
-  for(var j=0;j<=6;j++){var ts=tmin+(tmax-tmin)*j/6,x=p.l+(w-p.l-p.r)*j/6;ctx.fillStyle=getCss("--muted");ctx.fillText(shortTime(ts),Math.min(x,w-36),h-7)}
-  S.streamMeta={series:series,tmin:tmin,tmax:tmax,min:min,max:max,p:p,w:w,h:h,key:"availability"}
+  series.slice(0,7).forEach(function(row,si){
+    ctx.strokeStyle=COLORS[si%COLORS.length];ctx.lineWidth=1.75;ctx.lineJoin="round";ctx.lineCap="round";ctx.beginPath();
+    var started=false;
+    row.points.forEach(function(pt){
+      if(pt.availability==null)return;
+      var x=p.l+(w-p.l-p.r)*(pt.timestamp-tmin)/(tmax-tmin),y=availabilityY(pt.availability,p.t,plotBottom);
+      if(!started){ctx.moveTo(x,y);started=true}else ctx.lineTo(x,y)
+    });ctx.stroke()
+  });
+  ctx.font='500 10px "Inter","Segoe UI",system-ui,sans-serif';ctx.textBaseline="alphabetic";
+  for(var j=0;j<=6;j++){
+    var ts=tmin+(tmax-tmin)*j/6,x=p.l+(w-p.l-p.r)*j/6;
+    ctx.fillStyle=getCss("--muted");ctx.fillText(shortTime(ts),Math.max(p.l-2,Math.min(x,w-42)),h-7)
+  }
+  S.streamMeta={series:series,tmin:tmin,tmax:tmax,min:90,max:100,p:p,w:w,h:h,key:"availability"}
 }
 
 function handleChartMove(e){
@@ -342,7 +388,7 @@ function renderProbeLegend(){
 function renderOverviewTable(){
   var rows=S.dashboard.resources||[],el=q("#overviewResourceTable");
   if(!rows.length){el.innerHTML=empty("Нет ресурсов","Добавьте первую цель.");return}
-  var visible=rows.slice(0,6);
+  var visible=rows;
   el.innerHTML='<div class="table-head"><div>Ресурс</div><div>Статус</div><div>Доступность (24ч)</div><div>Время ответа</div><div>DNS</div><div>TCP</div><div>TLS</div><div>HTTP</div><div>Тренд (1ч)</div><div></div></div>'+visible.map(function(r){
     var rt=realtimeById(r.id)||{},x=r.domestic||r.external||{};
     return '<div class="table-row" data-resource="'+r.id+'"><div class="table-resource with-logo">'+resourceIconHtml(r.target,r.name)+'<div><b>'+esc(r.name)+'</b><span>'+esc(r.target)+'</span></div></div><div><span class="status-chip '+diagClass(r.diagnosis)+'">'+diagText(r.diagnosis)+'</span></div><div>'+pct(rt.availability_24h,1)+'</div><div>'+num(x.response_time_ms," мс")+'</div><div><i class="stage-dot '+stageState("DNS",r,x)+'"></i></div><div><i class="stage-dot '+stageState("TCP",r,x)+'"></i></div><div><i class="stage-dot '+stageState("TLS",r,x)+'"></i></div><div><i class="stage-dot '+stageState("HTTP",r,x)+'"></i></div><div><canvas class="trend-canvas" data-trend="'+r.id+'"></canvas></div><button class="row-more">⋮</button></div>'
