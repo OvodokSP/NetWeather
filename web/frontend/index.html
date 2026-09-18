@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#08111f">
   <meta name="description" content="NetWeather — мониторинг доступности ресурсов и диагностика сетевых проблем в реальном времени.">
   <title>NetWeather</title>
-  <link rel="stylesheet" href="/assets/dashboard.css?v=0.3.6">
+  <link rel="stylesheet" href="/assets/dashboard.css?v=0.3.7">
 </head>
 <body>
 <div class="shell">
@@ -321,14 +321,50 @@
   </div>
 </div>
 
-<dialog id="resourceDialog" class="modal">
+<dialog id="resourceDialog" class="modal resource-picker-modal">
+  <form id="resourceCatalogForm">
+    <div class="modal-head catalog-modal-head">
+      <div><span>КАТАЛОГ МОНИТОРИНГА</span><h2>Добавить ресурсы</h2><p>Выберите популярные сервисы или добавьте свой адрес.</p></div>
+      <button type="button" class="modal-close">×</button>
+    </div>
+    <div class="catalog-toolbar">
+      <div class="catalog-search-wrap"><span>⌕</span><input class="input" id="catalogSearch" placeholder="Найти ресурс в каталоге…"></div>
+      <div class="catalog-selection-pill"><b id="catalogSelectedCount">0</b><span>выбрано</span></div>
+    </div>
+    <div id="resourceCatalogGroups" class="resource-catalog-groups">
+      <div class="catalog-loading">Загружаем каталог…</div>
+    </div>
+
+    <section class="custom-resource-block">
+      <div class="custom-resource-head">
+        <div><span>СВОЙ РЕСУРС</span><h3>Не нашли нужный сервис?</h3><p>Вставьте URL — NetWeather определит название и проверит, нет ли его уже в каталоге.</p></div>
+      </div>
+      <div class="custom-resource-grid">
+        <label>URL или домен<input class="input" id="customResourceTarget" maxlength="2048" placeholder="https://example.com"></label>
+        <label>Название<input class="input" id="customResourceName" maxlength="120" placeholder="Определится автоматически"></label>
+        <label>Группа<select class="select" id="customResourceGroup"></select></label>
+      </div>
+      <div id="customCatalogMatch" class="custom-match hidden"></div>
+    </section>
+
+    <div class="catalog-modal-actions">
+      <div id="catalogSelectionSummary" class="catalog-selection-summary">Ничего не выбрано</div>
+      <div class="catalog-action-buttons">
+        <button type="button" class="btn secondary modal-close">Отмена</button>
+        <button type="submit" class="btn primary" id="addCatalogResources">Добавить выбранные</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="resourceEditDialog" class="modal edit-resource-modal">
   <form id="resourceForm">
-    <div class="modal-head"><div><span id="resourceDialogLabel">НОВАЯ ЦЕЛЬ</span><h2 id="resourceDialogTitle">Добавить ресурс</h2></div><button type="button" class="modal-close">×</button></div>
+    <div class="modal-head"><div><span>РЕСУРС</span><h2 id="resourceDialogTitle">Изменить ресурс</h2></div><button type="button" class="modal-close">×</button></div>
     <input type="hidden" id="resourceId">
     <div class="form-grid">
-      <label>Название<div class="resource-name-field"><span id="resourceIdentityPreview" class="resource-identity-preview"><span>NW</span></span><input class="input" id="resourceName" required maxlength="120" placeholder="Определится по ссылке"></div></label>
-      <label>URL или домен<input class="input" id="resourceTarget" required maxlength="2048" placeholder="https://github.com"><small id="resourceTargetHint" class="field-hint">После ввода ссылки NetWeather предложит название и логотип ресурса.</small></label>
-      <label>Группа<input class="input" id="resourceGroup" list="groupOptions" required placeholder="CUSTOM"><datalist id="groupOptions"></datalist></label>
+      <label>Название<div class="resource-name-field"><span id="resourceIdentityPreview" class="resource-identity-preview"><span>NW</span></span><input class="input" id="resourceName" required maxlength="120"></div></label>
+      <label>URL или домен<input class="input" id="resourceTarget" required maxlength="2048"><small id="resourceTargetHint" class="field-hint"></small></label>
+      <label>Группа<input class="input" id="resourceGroup" list="groupOptions" required><datalist id="groupOptions"></datalist></label>
       <label>Интервал<select class="select" id="resourceInterval"><option value="30">30 сек</option><option value="60">1 мин</option><option value="300">5 мин</option><option value="900">15 мин</option><option value="3600">1 час</option></select></label>
       <label>HTTP от<input class="input" id="statusMin" type="number" min="100" max="599" value="200"></label>
       <label>HTTP до<input class="input" id="statusMax" type="number" min="100" max="599" value="399"></label>
@@ -336,7 +372,7 @@
       <label>Ошибок до тревоги<input class="input" id="failureThreshold" type="number" min="1" max="10" value="2"></label>
     </div>
     <div class="switch-row"><label><input type="checkbox" id="resourceEnabled" checked> Мониторинг включён</label><label><input type="checkbox" id="alertsEnabled" checked> Тревоги включены</label></div>
-    <div class="modal-actions"><button type="button" class="btn secondary modal-close">Отмена</button><button type="submit" class="btn primary">Сохранить</button></div>
+    <div class="modal-actions"><button type="button" class="btn secondary modal-close">Отмена</button><button type="submit" class="btn primary">Сохранить изменения</button></div>
   </form>
 </dialog>
 
@@ -366,6 +402,6 @@
 </dialog>
 
 <div id="toast" class="toast"></div>
-<script src="/assets/dashboard.js?v=0.3.6"></script>
+<script src="/assets/dashboard.js?v=0.3.7"></script>
 </body>
 </html>
