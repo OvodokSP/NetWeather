@@ -445,13 +445,14 @@ def realtime(minutes:int=Query(default=60,ge=5,le=10080), scope:str=Query(defaul
     now=int(time.time())
     since=now-minutes*60
     bucket=max(30,(minutes*60)//240)
+    availability_window=3600
     with db() as conn:
         resources=[dict(r) for r in conn.execute(
             "SELECT id,name,target,group_name FROM resources WHERE enabled=1 ORDER BY name"
         ).fetchall()]
         rows=conn.execute("""SELECT resource_id,checked_at,status,response_time_ms,dns_ms,tcp_ms,tls_ms,http_ms,http_status
           FROM checks WHERE checked_at>=? AND probe_scope=? ORDER BY checked_at ASC,id ASC""",
-          (since,scope)).fetchall()
+          (since-availability_window,scope)).fetchall()
         stats24=conn.execute("""SELECT resource_id,
           COUNT(*) total,
           SUM(CASE WHEN status='OK' THEN 1 ELSE 0 END) ok,
@@ -474,11 +475,22 @@ def realtime(minutes:int=Query(default=60,ge=5,le=10080), scope:str=Query(defaul
     result=[]
     for resource in resources:
         rid=int(resource["id"])
+        ordered=sorted(by_resource.get(rid,{}).values(),key=lambda x:x["timestamp"])
         points=[]
-        for p in sorted(by_resource.get(rid,{}).values(),key=lambda x:x["timestamp"]):
+        for idx,p in enumerate(ordered):
+            if p["timestamp"] < since:
+                continue
+            window_start=p["timestamp"]-availability_window
+            rolling_total=0
+            rolling_ok=0
+            j=idx
+            while j>=0 and ordered[j]["timestamp"]>=window_start:
+                rolling_total+=ordered[j]["total"]
+                rolling_ok+=ordered[j]["ok"]
+                j-=1
             points.append({
                 "timestamp":p["timestamp"],
-                "availability":round(p["ok"]/p["total"]*100,1) if p["total"] else None,
+                "availability":round(rolling_ok/rolling_total*100,1) if rolling_total else None,
                 "latency_ms":round(p["latency_sum"]/p["latency_count"]) if p["latency_count"] else None,
                 "checks":p["total"],
             })
@@ -492,7 +504,11 @@ def realtime(minutes:int=Query(default=60,ge=5,le=10080), scope:str=Query(defaul
             "last_checked_at":st.get("last_checked"),
             "points":points,
         })
-    return {"scope":scope,"minutes":minutes,"bucket_seconds":bucket,"from":since,"to":now,"resources":result}
+    return {
+        "scope":scope,"minutes":minutes,"bucket_seconds":bucket,
+        "availability_window_seconds":availability_window,
+        "from":since,"to":now,"resources":result,
+    }
 
 
 @app.get("/api/events")
