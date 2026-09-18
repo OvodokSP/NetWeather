@@ -265,7 +265,13 @@ def create_resource(payload:ResourceCreate):
 def patch_resource(resource_id:int,payload:ResourcePatch):
     values=payload.model_dump(exclude_none=True)
     if "target" in values: values["target"]=normalize_target(values["target"])
-    if "group_name" in values: values["group_name"]=normalize_group(values["group_name"])
+    if "group_name" in values:
+        values["group_name"]=normalize_group(values["group_name"])
+        now_group=int(time.time())
+        with db() as conn:
+            conn.execute("""INSERT INTO resource_groups(group_key,title,color,sort_order,created_at,updated_at)
+              VALUES(?,?,?,?,?,?) ON CONFLICT(group_key) DO NOTHING""",
+              (values["group_name"],KNOWN_GROUPS.get(values["group_name"],values["group_name"]),"#8A96A3",100,now_group,now_group))
     for key in ("enabled","alerts_enabled"):
         if key in values: values[key]=int(values[key])
     if "expected_status_min" in values or "expected_status_max" in values:
