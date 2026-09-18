@@ -315,6 +315,105 @@ def acknowledge_incident(incident_id:int):
     return {"ok":True}
 
 
+@app.get("/api/realtime")
+def realtime(minutes:int=Query(default=60,ge=5,le=10080), scope:str=Query(default="EXTERNAL")):
+    scope=scope.upper()
+    if scope not in {"EXTERNAL","DOMESTIC"}:
+        raise HTTPException(400,"scope must be EXTERNAL or DOMESTIC")
+    now=int(time.time())
+    since=now-minutes*60
+    bucket=max(30,(minutes*60)//240)
+    with db() as conn:
+        resources=[dict(r) for r in conn.execute(
+            "SELECT id,name,target,group_name FROM resources WHERE enabled=1 ORDER BY name"
+        ).fetchall()]
+        rows=conn.execute("""SELECT resource_id,checked_at,status,response_time_ms,dns_ms,tcp_ms,tls_ms,http_ms,http_status
+          FROM checks WHERE checked_at>=? AND probe_scope=? ORDER BY checked_at ASC,id ASC""",
+          (since,scope)).fetchall()
+        stats24=conn.execute("""SELECT resource_id,
+          COUNT(*) total,
+          SUM(CASE WHEN status='OK' THEN 1 ELSE 0 END) ok,
+          AVG(response_time_ms) avg_latency,
+          MAX(checked_at) last_checked
+          FROM checks WHERE checked_at>=? AND probe_scope=? GROUP BY resource_id""",
+          (now-86400,scope)).fetchall()
+    stats={int(r["resource_id"]):dict(r) for r in stats24}
+    by_resource={}
+    for row in rows:
+        rid=int(row["resource_id"])
+        b=(int(row["checked_at"])//bucket)*bucket
+        target=by_resource.setdefault(rid,{})
+        point=target.setdefault(b,{"timestamp":b,"total":0,"ok":0,"latency_sum":0,"latency_count":0})
+        point["total"]+=1
+        point["ok"]+=int(row["status"]=="OK")
+        if row["response_time_ms"] is not None:
+            point["latency_sum"]+=int(row["response_time_ms"])
+            point["latency_count"]+=1
+    result=[]
+    for resource in resources:
+        rid=int(resource["id"])
+        points=[]
+        for p in sorted(by_resource.get(rid,{}).values(),key=lambda x:x["timestamp"]):
+            points.append({
+                "timestamp":p["timestamp"],
+                "availability":round(p["ok"]/p["total"]*100,1) if p["total"] else None,
+                "latency_ms":round(p["latency_sum"]/p["latency_count"]) if p["latency_count"] else None,
+                "checks":p["total"],
+            })
+        st=stats.get(rid,{})
+        total=int(st.get("total") or 0)
+        ok=int(st.get("ok") or 0)
+        result.append({
+            **resource,
+            "availability_24h":round(ok/total*100,2) if total else None,
+            "avg_latency_24h_ms":round(st.get("avg_latency")) if st.get("avg_latency") is not None else None,
+            "last_checked_at":st.get("last_checked"),
+            "points":points,
+        })
+    return {"scope":scope,"minutes":minutes,"bucket_seconds":bucket,"from":since,"to":now,"resources":result}
+
+
+@app.get("/api/events")
+def recent_events(limit:int=Query(default=30,ge=1,le=100)):
+    with db() as conn:
+        incidents=[dict(r) for r in conn.execute("""SELECT i.id,i.resource_id,i.kind,i.severity,i.opened_at,i.closed_at,i.acknowledged_at,i.message,
+          r.name resource_name FROM incidents i JOIN resources r ON r.id=i.resource_id
+          ORDER BY COALESCE(i.closed_at,i.opened_at) DESC LIMIT ?""",(limit,)).fetchall()]
+        checks=[dict(r) for r in conn.execute("""SELECT c.id,c.resource_id,c.checked_at,c.status,c.response_time_ms,c.http_status,c.message,c.probe_scope,
+          r.name resource_name FROM checks c JOIN resources r ON r.id=c.resource_id
+          ORDER BY c.checked_at DESC,c.id DESC LIMIT ?""",(max(limit*8,80),)).fetchall()]
+    events=[]
+    for inc in incidents:
+        events.append({
+            "type":"incident_closed" if inc["closed_at"] else "incident_open",
+            "time":inc["closed_at"] or inc["opened_at"],
+            "resource_id":inc["resource_id"],
+            "resource_name":inc["resource_name"],
+            "severity":inc["severity"],
+            "title":("Восстановление: " if inc["closed_at"] else "Инцидент: ")+inc["resource_name"],
+            "message":inc["message"],
+            "kind":inc["kind"],
+        })
+    previous={}
+    for row in reversed(checks):
+        key=(row["resource_id"],row["probe_scope"])
+        old=previous.get(key)
+        if old is not None and old!=row["status"]:
+            events.append({
+                "type":"status_change",
+                "time":row["checked_at"],
+                "resource_id":row["resource_id"],
+                "resource_name":row["resource_name"],
+                "severity":"info" if row["status"]=="OK" else "warning",
+                "title":("Восстановление " if row["status"]=="OK" else "Изменение состояния ")+row["resource_name"],
+                "message":f"{row['probe_scope']}: {old} → {row['status']} · {row['message'] or ''}",
+                "kind":"STATUS_CHANGE",
+            })
+        previous[key]=row["status"]
+    events.sort(key=lambda x:int(x["time"] or 0),reverse=True)
+    return events[:limit]
+
+
 @app.get("/api/history")
 def history(hours:int=24, scope:str=Query(default="EXTERNAL")):
     hours=max(1,min(hours,720)); since=int(time.time())-hours*3600
