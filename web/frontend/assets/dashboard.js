@@ -153,7 +153,7 @@ function qa(s){return Array.prototype.slice.call(document.querySelectorAll(s))}
 
 function focusableIn(root){
   if(!root)return[];
-  return qa.call?Array.prototype.slice.call(root.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href],[tabindex]:not([tabindex="-1"])')):[]
+  return Array.prototype.slice.call(root.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href],[tabindex]:not([tabindex="-1"])'))
 }
 function openDialog(dialog,focusSelector){
   if(!dialog)return;
@@ -727,7 +727,7 @@ function renderResources(){
   if(!rows.length){el.innerHTML=empty(all.length?"Ничего не найдено":"Список пуст",all.length?"Измените фильтры.":"Добавьте ресурс.");return}
   el.innerHTML='<div class="table-head"><div>Ресурс</div><div>Вывод</div><div>VPS</div><div>РФ</div><div>DNS</div><div>HTTP</div><div>Действия</div></div>'+rows.map(function(r){var ext=r.external||{},dom=r.domestic||{};return '<div class="table-row" data-resource="'+r.id+'"><div class="table-resource"><b>'+esc(r.name)+'</b><span>'+esc(r.target)+' · '+esc(groupTitle(r.group_name))+'</span></div><div><span class="status-chip '+diagClass(r.diagnosis)+'">'+diagText(r.diagnosis)+'</span></div><div>'+stText(ext.status)+'</div><div>'+stText(dom.status)+'</div><div>'+num((dom.dns_ms!=null?dom.dns_ms:ext.dns_ms)," мс")+'</div><div>'+((dom.http_status!=null?dom.http_status:ext.http_status)||"—")+'</div><div><button class="btn tiny secondary row-check" data-check="'+r.id+'">Проверить</button></div></div>'}).join("");
   qa("#resourcesTable .table-row").forEach(function(row){row.onclick=function(e){if(e.target.closest(".row-check"))return;openDetail(Number(row.dataset.resource))}});
-  qa(".row-check").forEach(function(b){b.onclick=function(e){e.stopPropagation();manualCheck(Number(b.dataset.check))}})
+  qa(".row-check").forEach(function(b){b.onclick=function(e){e.stopPropagation();manualCheck(Number(b.dataset.check),b)}})
 }
 
 function incidentHtml(i){
@@ -810,17 +810,42 @@ function renderSettings(){
   renderNotifications()
 }
 
-async function manualCheck(id){
-  try{toast("Проверяем ресурс…");var r=await api("/api/resources/"+id+"/check",{method:"POST"},true);await loadAll(true);toast(r.scheduled_domestic?"VPS проверен · проверка РФ поставлена в очередь":"Проверка VPS завершена")}catch(e){toast(e.message)}
+async function manualCheck(id,button){
+  try{await withBusy(button,"Проверяем…",async function(){
+    toast("Проверяем ресурс…");
+    var r=await api("/api/resources/"+id+"/check",{method:"POST"},true);
+    await loadAll(true);
+    toast(r.scheduled_domestic?"VPS проверен · проверка РФ поставлена в очередь":"Проверка VPS завершена")
+  })}catch(e){toast(e.message)}
 }
-async function trace(id,domestic){
-  if(domestic)return traceDomestic(id);
-  try{q("#traceOutput").innerHTML=empty("Traceroute","Выполняем маршрут с VPS…");var r=await api("/api/resources/"+id+"/trace",{method:"POST"},true);q("#traceMeta").textContent=r.host+" → "+r.resolved_ip+" · DNS "+r.dns_ms+" мс";q("#traceOutput").innerHTML=r.hops.length?r.hops.map(function(h){return '<div class="trace-hop"><span>'+h.hop+'</span><span>'+esc(h.ip||"*")+'</span><span>'+(h.latency_ms==null?"*":h.latency_ms+" ms")+'</span></div>'}).join(""):'<pre class="trace-raw">'+esc(r.raw)+'</pre>';openView("diagnostics");q("#diagResource").value=String(id);S.diagId=id}catch(e){q("#traceOutput").innerHTML=empty("Traceroute не выполнен",e.message);toast(e.message)}
+async function trace(id,domestic,button){
+  if(domestic)return traceDomestic(id,button);
+  try{await withBusy(button,"Traceroute…",async function(){
+    q("#traceOutput").innerHTML=empty("Traceroute","Выполняем маршрут с VPS…");
+    var r=await api("/api/resources/"+id+"/trace",{method:"POST"},true);
+    q("#traceMeta").textContent=r.host+" → "+r.resolved_ip+" · DNS "+r.dns_ms+" мс";
+    q("#traceOutput").innerHTML=r.hops.length?r.hops.map(function(h){return '<div class="trace-hop"><span>'+h.hop+'</span><span>'+esc(h.ip||"*")+'</span><span>'+(h.latency_ms==null?"*":h.latency_ms+" ms")+'</span></div>'}).join(""):'<pre class="trace-raw">'+esc(r.raw)+'</pre>';
+    openView("diagnostics");q("#diagResource").value=String(id);S.diagId=id
+  })}catch(e){q("#traceOutput").innerHTML=empty("Traceroute не выполнен",e.message);toast(e.message)}
 }
-async function traceDomestic(id){
+async function traceDomestic(id,button){
   var probes=S.dashboard.probes||[],p=probes.find(function(x){return x.scope==="DOMESTIC"&&x.online});
   if(!p){toast("Российский probe не подключён");return}
-  try{q("#traceOutput").innerHTML=empty("Traceroute РФ","Задание отправлено probe…");var job=await api("/api/resources/"+id+"/trace-domestic?probe_key="+encodeURIComponent(p.probe_key),{method:"POST"},true);openView("diagnostics");for(var i=0;i<30;i++){await new Promise(function(resolve){setTimeout(resolve,1000)});var state=await api("/api/trace-tasks/"+job.task_id);if(state.status==="DONE"){q("#traceMeta").textContent=p.name+" · российский контур";q("#traceOutput").innerHTML='<pre class="trace-raw">'+esc(state.result_text||"Нет вывода")+'</pre>';return}}throw new Error("Probe не вернул traceroute за 30 секунд")}catch(e){q("#traceOutput").innerHTML=empty("Traceroute РФ не выполнен",e.message);toast(e.message)}
+  try{await withBusy(button,"Traceroute РФ…",async function(){
+    q("#traceOutput").innerHTML=empty("Traceroute РФ","Задание отправлено probe…");
+    var job=await api("/api/resources/"+id+"/trace-domestic?probe_key="+encodeURIComponent(p.probe_key),{method:"POST"},true);
+    openView("diagnostics");
+    for(var i=0;i<30;i++){
+      await new Promise(function(resolve){setTimeout(resolve,1000)});
+      var state=await api("/api/trace-tasks/"+job.task_id);
+      if(state.status==="DONE"){
+        q("#traceMeta").textContent=p.name+" · российский контур";
+        q("#traceOutput").innerHTML='<pre class="trace-raw">'+esc(state.result_text||"Нет вывода")+'</pre>';
+        return
+      }
+    }
+    throw new Error("Probe не вернул traceroute за 30 секунд")
+  })}catch(e){q("#traceOutput").innerHTML=empty("Traceroute РФ не выполнен",e.message);toast(e.message)}
 }
 
 function catalogItemByKey(key){
@@ -906,34 +931,37 @@ async function inspectCustomResource(){
 }
 async function submitResourceCatalog(e){
   e.preventDefault();
+  var button=e.submitter||q("#addCatalogResources");
+  if(button&&button.dataset.busy==="1")return;
   var keys=Object.keys(S.catalogSelected),customTarget=q("#customResourceTarget").value.trim(),messages=[],added=0,existing=0;
-  q("#addCatalogResources").disabled=true;
   try{
-    if(S.customCatalogMatch&&S.customCatalogMatch.matched&&!S.customCatalogMatch.already_added&&keys.indexOf(S.customCatalogMatch.resource.key)<0)keys.push(S.customCatalogMatch.resource.key);
-    if(keys.length){
-      var batch=await api("/api/resource-catalog/add",{method:"POST",body:JSON.stringify({resource_keys:keys})},true);
-      added+=batch.added.length;existing+=batch.existing.length
-    }
-    if(customTarget&&!S.customCatalogMatch){
-      var customName=q("#customResourceName").value.trim();
-      if(!customName){var meta=await getTargetMetadata(customTarget);customName=meta.name||targetMeta(customTarget).name||customTarget}
-      var custom=await api("/api/resources",{method:"POST",body:JSON.stringify({
-        name:customName,target:customTarget,group_name:q("#customResourceGroup").value||"CUSTOM",
-        interval_seconds:60,expected_status_min:200,expected_status_max:399,slow_threshold_ms:1500,failure_threshold:2,enabled:true,alerts_enabled:true
-      })},true);
-      if(custom.used_catalog){
-        var matchedName=custom.catalog_match&&custom.catalog_match.name||customName;
-        messages.push("«"+matchedName+"» найден в каталоге — использован каталоговый вариант");
+    await withBusy(button,"Добавляем…",async function(){
+      if(S.customCatalogMatch&&S.customCatalogMatch.matched&&!S.customCatalogMatch.already_added&&keys.indexOf(S.customCatalogMatch.resource.key)<0)keys.push(S.customCatalogMatch.resource.key);
+      if(keys.length){
+        var batch=await api("/api/resource-catalog/add",{method:"POST",body:JSON.stringify({resource_keys:keys})},true);
+        added+=batch.added.length;existing+=batch.existing.length
       }
-      if(custom.created)added++;else existing++
-    }else if(customTarget&&S.customCatalogMatch&&S.customCatalogMatch.already_added){
-      existing++;messages.push("«"+S.customCatalogMatch.resource.name+"» уже находится в мониторинге")
-    }
-    q("#resourceDialog").close();
-    S.catalog=null;await loadAll(true);
-    var parts=[];if(added)parts.push("добавлено: "+added);if(existing)parts.push("уже было: "+existing);
-    toast((parts.length?parts.join(" · "):"Изменений нет")+(messages.length?" · "+messages.join("; "):""))
-  }catch(err){toast(err.message);q("#addCatalogResources").disabled=false}
+      if(customTarget&&!S.customCatalogMatch){
+        var customName=q("#customResourceName").value.trim();
+        if(!customName){var meta=await getTargetMetadata(customTarget);customName=meta.name||targetMeta(customTarget).name||customTarget}
+        var custom=await api("/api/resources",{method:"POST",body:JSON.stringify({
+          name:customName,target:customTarget,group_name:q("#customResourceGroup").value||"CUSTOM",
+          interval_seconds:60,expected_status_min:200,expected_status_max:399,slow_threshold_ms:1500,failure_threshold:2,enabled:true,alerts_enabled:true
+        })},true);
+        if(custom.used_catalog){
+          var matchedName=custom.catalog_match&&custom.catalog_match.name||customName;
+          messages.push("«"+matchedName+"» найден в каталоге — использован каталоговый вариант")
+        }
+        if(custom.created)added++;else existing++
+      }else if(customTarget&&S.customCatalogMatch&&S.customCatalogMatch.already_added){
+        existing++;messages.push("«"+S.customCatalogMatch.resource.name+"» уже находится в мониторинге")
+      }
+      q("#resourceDialog").close();
+      S.catalog=null;await loadAll(true);
+      var parts=[];if(added)parts.push("добавлено: "+added);if(existing)parts.push("уже было: "+existing);
+      toast((parts.length?parts.join(" · "):"Изменений нет")+(messages.length?" · "+messages.join("; "):""))
+    })
+  }catch(err){toast(err.message)}
 }
 
 function formPayload(){return{name:q("#resourceName").value.trim(),target:q("#resourceTarget").value.trim(),group_name:q("#resourceGroup").value.trim()||"CUSTOM",interval_seconds:Number(q("#resourceInterval").value),expected_status_min:Number(q("#statusMin").value),expected_status_max:Number(q("#statusMax").value),slow_threshold_ms:Number(q("#slowThreshold").value),failure_threshold:Number(q("#failureThreshold").value),enabled:q("#resourceEnabled").checked,alerts_enabled:q("#alertsEnabled").checked}}
@@ -1027,19 +1055,19 @@ function setup(){
   q("#openToken2").onclick=function(){toast("Development mode: авторизация отключена")};
   q("#tokenForm").onsubmit=function(e){e.preventDefault();q("#tokenDialog").close()};
   q("#clearToken").onclick=function(){q("#tokenDialog").close()};
-  qa(".seg").forEach(function(b){b.onclick=async function(){qa(".seg").forEach(function(x){x.classList.remove("active")});b.classList.add("active");S.streamMinutes=Number(b.dataset.minutes);S.realtime=await api("/api/realtime?minutes="+S.streamMinutes+"&scope=EXTERNAL");renderRealtime();renderResourceCards();renderOverviewTable()}});
+  qa(".seg").forEach(function(b){b.onclick=async function(){if(b.dataset.busy==="1")return;qa(".seg").forEach(function(x){x.classList.remove("active")});b.classList.add("active");S.streamMinutes=Number(b.dataset.minutes);try{await withBusy(b,"…",async function(){S.realtime=await api("/api/realtime?minutes="+S.streamMinutes+"&scope=EXTERNAL");renderRealtime();renderResourceCards();renderOverviewTable()})}catch(e){toast(e.message)}}});
   q("#streamChart").addEventListener("mousemove",handleChartMove);q("#streamChart").addEventListener("mouseleave",function(){q("#chartTooltip").classList.add("hidden")});
-  q("#expandChart").onclick=function(){q(".streams-panel").classList.toggle("chart-expanded")};
+  q("#expandChart").onclick=function(){var panel=q(".streams-panel"),expanded=panel.classList.toggle("chart-expanded");this.setAttribute("aria-expanded",expanded?"true":"false");this.setAttribute("title",expanded?"Свернуть график":"Развернуть график")};
   q("#mapZoomIn").onclick=function(){S.mapScale=Math.min(2,S.mapScale+.15);q("#worldMapSvg").style.transform="scale("+S.mapScale+")"};
   q("#mapZoomOut").onclick=function(){S.mapScale=Math.max(.8,S.mapScale-.15);q("#worldMapSvg").style.transform="scale("+S.mapScale+")"};
   q("#mapRegion").onchange=function(){toast("Фильтр карты: "+this.options[this.selectedIndex].text)};
   q("#faultResourceSelect").onchange=function(){S.faultId=Number(this.value);renderFaultPanel()};
   q("#searchInput").oninput=renderResources;q("#groupFilter").onchange=renderResources;q("#statusFilter").onchange=renderResources;
   q("#diagResource").onchange=function(){S.diagId=Number(this.value);var r=resourceById(this.value);if(r)showDiagnostic(r)};
-  q("#diagCheck").onclick=function(){var id=Number(q("#diagResource").value);if(id)manualCheck(id)};q("#diagTrace").onclick=function(){var id=Number(q("#diagResource").value);if(id)trace(id,false)};q("#diagTraceDomestic").onclick=function(){var id=Number(q("#diagResource").value);if(id)trace(id,true)};
+  q("#diagCheck").onclick=function(){var id=Number(q("#diagResource").value);if(id)manualCheck(id,this)};q("#diagTrace").onclick=function(){var id=Number(q("#diagResource").value);if(id)trace(id,false,this)};q("#diagTraceDomestic").onclick=function(){var id=Number(q("#diagResource").value);if(id)trace(id,true,this)};
   q("#historyRange").onchange=function(){loadAll(true)};
   q("#enableNotifications").onclick=async function(){var button=this;if(!("Notification" in window)){toast("Браузер не поддерживает уведомления");return}await withBusy(button,"Запрашиваем…",async function(){var p=await Notification.requestPermission();renderNotifications();toast(p==="granted"?"Уведомления включены":"Разрешение не выдано")})};
-  q("#deleteResource").onclick=deleteResource;q("#editResource").onclick=function(){var r=resourceById(S.detailId);q("#detailDialog").close();if(r)openResourceForm(r)};q("#detailCheck").onclick=function(){q("#detailDialog").close();manualCheck(S.detailId)};q("#detailTrace").onclick=function(){q("#detailDialog").close();trace(S.detailId,false)};
+  q("#deleteResource").onclick=deleteResource;q("#editResource").onclick=function(){var r=resourceById(S.detailId);q("#detailDialog").close();if(r)openResourceForm(r)};q("#detailCheck").onclick=function(){var b=this,id=S.detailId;q("#detailDialog").close();manualCheck(id,b)};q("#detailTrace").onclick=function(){var b=this,id=S.detailId;q("#detailDialog").close();trace(id,false,b)};
   window.addEventListener("resize",function(){renderRealtime();renderHistory();renderResourceCards();renderOverviewTable();applyDashboardPreferences()});
   loadAll(false);S.poll=setInterval(function(){loadAll(true)},15000)
 }
