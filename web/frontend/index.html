@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#07111f">
   <meta name="description" content="NetWeather — мониторинг доступности ресурсов и диагностика сетевых проблем в реальном времени.">
   <title>NetWeather — Network Observatory</title>
-  <link rel="stylesheet" href="/assets/dashboard.css?v=0.3.2">
+  <link rel="stylesheet" href="/assets/dashboard.css?v=0.3.3">
 </head>
 <body>
 <div class="shell">
@@ -48,7 +48,7 @@
         <div class="clock"><b id="clockTime">—</b><span id="clockDate">—</span></div>
         <button class="icon-btn" id="themeToggle" title="Сменить тему">☼</button>
         <button class="icon-btn notify-btn" id="openAlerts" title="Инциденты">♢<i id="notifyCount" class="notify-count hidden">0</i></button>
-        <button class="owner-pill" id="ownerButton" title="Режим владельца"><i></i><span id="ownerButtonText">Войти</span></button>
+        <button class="owner-pill active" id="ownerButton" title="Открытый режим разработки"><i></i><span id="ownerButtonText">DEV · Открыто</span></button>
       </div>
     </header>
 
@@ -235,7 +235,7 @@
       <section class="view" id="view-settings">
         <div class="page-head"><div><h1>Настройки</h1><p>Доступ, точки наблюдения и состояние Core.</p></div></div>
         <div class="settings-grid">
-          <article class="panel setting-card"><span>ДОСТУП</span><h2>Режим владельца</h2><p>Один вход — затем браузер остаётся авторизованным. API-токен не нужен для обычной работы с сайтом.</p><div id="tokenState" class="setting-box"></div><button class="btn primary" id="openToken2">Войти / выйти</button></article>
+          <article class="panel setting-card"><span>ДОСТУП</span><h2>Открытый режим разработки</h2><p>Все функции интерфейса доступны без пароля и API-токена. Авторизацию включим перед публичным распространением.</p><div id="tokenState" class="setting-box"></div><button class="btn secondary" id="openToken2" type="button">Открытый доступ</button></article>
           <article class="panel setting-card"><span>ТОЧКИ НАБЛЮДЕНИЯ</span><h2>Probes</h2><div id="probeSettings" class="probe-settings"></div></article>
           <article class="panel setting-card"><span>ТРЕВОГИ</span><h2>Триггеры</h2><p>Последовательные ошибки, высокая задержка и срок TLS.</p><div id="alertSystemState" class="setting-box"></div></article>
           <article class="panel setting-card"><span>CORE</span><h2>Runtime</h2><div id="systemInfo" class="system-info"></div></article>
@@ -291,6 +291,6 @@
 </dialog>
 
 <div id="toast" class="toast"></div>
-<script src="/assets/dashboard.js?v=0.3.2"></script>
+<script src="/assets/dashboard.js?v=0.3.3"></script>
 </body>
 </html>
