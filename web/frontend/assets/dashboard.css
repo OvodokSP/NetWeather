@@ -439,3 +439,11 @@ body{font-size:var(--nw-fs-base);font-weight:400;-webkit-font-smoothing:antialia
   .overview-row-bottom{grid-template-columns:minmax(0,1.435fr) minmax(390px,1fr)}
   .resource-card-name b{font-size:10px}
 }
+
+/* Fit the five canonical rows to the available viewport exactly. */
+@media(min-width:1051px){
+  .overview-grid{grid-template-rows:55px 82px minmax(0,1.1fr) 148px minmax(0,1fr)}
+}
+@media(max-height:880px) and (min-width:1051px){
+  .overview-grid{grid-template-rows:48px 76px minmax(0,1.08fr) 136px minmax(0,1fr)}
+}
