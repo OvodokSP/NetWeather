@@ -13,7 +13,10 @@ function duration(sec){sec=Number(sec||0);if(sec<60)return sec+" сек";if(sec<
 function stClass(s){return s==="OK"?"ok":s==="TIMEOUT"?"warn":s?"bad":"neutral"}
 function stText(s){return({OK:"Работает",DNS_ERROR:"DNS ошибка",TCP_ERROR:"TCP ошибка",TLS_ERROR:"TLS ошибка",HTTP_ERROR:"HTTP ошибка",TIMEOUT:"Таймаут",BLOCKED_TARGET:"Заблокировано",UNKNOWN_ERROR:"Ошибка"})[s]||"Нет данных"}
 function groupTitle(v){var found=S.groups.find(function(g){return g.id===v});if(found)return found.title;return({"RUSSIAN":"Российские","INTERNATIONAL":"Международные","MESSENGERS":"Мессенджеры и соцсети","INFRASTRUCTURE":"Инфраструктура","CUSTOM":"Пользовательские"})[v]||v}
-function mode(mode){return({NORMAL:["Нормальный доступ","Сеть доступна, существенных проблем не обнаружено.","ok"],PARTIAL_DEGRADATION:["Частичная деградация","Часть контролируемых ресурсов недоступна или отвечает нестабильно.","warn"],RESTRICTED_ACCESS:["Вероятны ограничения","Российский сегмент доступен заметно лучше международного.","warn"],NO_INTERNET:["Критическая недоступность","Большинство проверенных ресурсов недоступно.","bad"],INITIALIZING:["Инициализация","Ресурсы добавлены. NetWeather собирает первые измерения.","neutral"],NO_DATA:["Нет целей","Добавьте хотя бы один ресурс для начала мониторинга.","neutral"]})[mode]||["Нет данных","Ожидание данных.","neutral"]}
+function mode(mode){return({NORMAL:["Нормальный доступ","Внешний VPS и российский probe не показывают расхождений.","ok"],NO_DOMESTIC_PROBE:["Нет данных из РФ","Внешний VPS работает, но без российского probe нельзя определить блокировки.","neutral"],RESTRICTIONS_DETECTED:["Вероятны ограничения","Есть ресурсы, доступные с внешнего VPS, но недоступные из российского контура.","bad"],OUTAGES_DETECTED:["Есть падения ресурсов","Есть цели, недоступные одновременно с внешнего VPS и из российского контура.","bad"],PROBE_PATH_ISSUES:["Проблема внешнего маршрута","Российский probe видит ресурс, а внешний VPS — нет.","warn"]})[mode]||["Нет данных","Недостаточно данных для вывода.","neutral"]}
+
+function diagText(d){return({AVAILABLE:"Доступен",LIKELY_RESTRICTION:"Вероятное ограничение",LIKELY_OUTAGE:"Вероятное падение",EXTERNAL_PATH_ISSUE:"Проблема пути VPS",DOMESTIC_UNKNOWN:"Нет данных РФ",INSUFFICIENT_DATA:"Недостаточно данных"})[d]||"Нет данных"}
+function diagClass(d){return d==="AVAILABLE"?"ok":d==="LIKELY_RESTRICTION"||d==="LIKELY_OUTAGE"?"bad":d==="EXTERNAL_PATH_ISSUE"?"warn":"neutral"}
 async function api(path,opt,secure){opt=opt||{};if(secure&&!token()){q("#tokenInput").value="";q("#tokenDialog").showModal();throw new Error("Сначала укажите API-токен")}var headers={"Content-Type":"application/json"};Object.assign(headers,opt.headers||{});if(secure)Object.assign(headers,auth());var res=await fetch(path,Object.assign({},opt,{headers:headers}));if(!res.ok){var m="HTTP "+res.status;try{var j=await res.json();m=j.detail||m}catch(_e){}if(res.status===401)toast("Неверный или отсутствующий API-токен");throw new Error(m)}if(res.status===204)return null;return res.json()}
 function empty(title,text){return '<div class="nw-empty"><div><b>'+esc(title)+'</b><span>'+esc(text||"")+'</span></div></div>'}
 function resourceById(id){return(S.dashboard&&S.dashboard.resources||[]).find(function(r){return r.id===Number(id)})}
@@ -33,41 +36,67 @@ function renderAll(){renderOverview();renderResources();renderIncidents();render
 
 function renderOverview(){
   if(!S.dashboard)return;var s=S.dashboard.summary||{},rows=S.dashboard.resources||[],mi=mode(s.mode);
-  q("#availability").textContent=s.checked?Number(s.availability_index||0):"—";
-  var pct=s.checked?Number(s.availability_index||0):0;q("#gauge").style.background="conic-gradient(var(--accent) "+(pct*3.6)+"deg,rgba(128,150,175,.12) 0deg)";
+  var hasScore=s.availability_index!==null&&s.availability_index!==undefined;
+  q("#availability").textContent=hasScore?Number(s.availability_index):"—";
+  var pct=hasScore?Number(s.availability_index):0;q("#gauge").style.background="conic-gradient(var(--accent) "+(pct*3.6)+"deg,rgba(128,150,175,.12) 0deg)";
   q("#modePill").textContent=mi[0];q("#modePill").className="mode-pill "+mi[2];q("#modeTitle").textContent=mi[0];q("#modeText").textContent=mi[1];q("#lastUpdated").textContent=fmt(s.last_updated);
-  q("#availableCount").textContent=s.available||0;q("#availableHint").textContent="из "+(s.checked||0)+" проверенных · "+(s.total||0)+" целей";
-  q("#problemCount").textContent=s.problematic||0;q("#avgLatency").textContent=s.avg_latency_ms==null?"—":s.avg_latency_ms+" мс";
-  q("#activeIncidentCount").textContent=s.active_incidents||0;q("#incidentHint").textContent=(s.active_incidents||0)?"требуют внимания":"нет активных";
+  q("#availableCount").textContent=s.domestic_probe_online?(s.available||0):"—";
+  q("#availableHint").textContent=s.domestic_probe_online?"из "+s.total+" целей":"подключите probe в РФ";
+  q("#problemCount").textContent=s.domestic_probe_online?(s.likely_restriction||0):"—";
+  q("#avgLatency").textContent=s.domestic_probe_online?(s.likely_outage||0):"—";
+  q("#activeIncidentCount").textContent=s.unknown||0;
+  q("#incidentHint").textContent=s.domestic_probe_online?"не классифицировано: "+(s.unknown||0):"российский контур не подключён";
+  renderProbes(S.dashboard.probes||[]);
   renderGroups(s.groups||{});renderOverviewResources(rows);renderOverviewIncidents((S.dashboard.incidents||[]).filter(function(i){return !i.closed_at}).slice(0,6));
   var badge=q("#alertBadge"),n=(S.dashboard.incidents||[]).filter(function(i){return !i.closed_at}).length;badge.textContent=n;badge.classList.toggle("hidden",!n);
   drawChart("availabilityChart",S.history,"availability",true,"availabilityEmpty");
 }
+function renderProbes(probes){
+  var ext=probes.find(function(p){return p.scope==="EXTERNAL"}),dom=probes.find(function(p){return p.scope==="DOMESTIC"&&p.online})||probes.find(function(p){return p.scope==="DOMESTIC"});
+  var ec=q("#externalProbeCard"),dc=q("#domesticProbeCard");
+  q("#externalProbeName").textContent=ext?ext.name:"Внешний VPS";
+  q("#externalProbeState").textContent=ext&&ext.online?"онлайн · "+ago(ext.last_seen_at):"нет связи";
+  ec.classList.toggle("probe-offline",!(ext&&ext.online));
+  q("#domesticProbeName").textContent=dom?dom.name:"Российский probe";
+  q("#domesticProbeState").textContent=dom?(dom.online?"онлайн · "+ago(dom.last_seen_at):"нет свежих данных · "+ago(dom.last_seen_at)):"не подключён — классификация блокировок отключена";
+  dc.classList.toggle("probe-offline",!(dom&&dom.online));
+}
 function renderGroups(groups){
   var el=q("#groupList"),keys=Object.keys(groups);if(!keys.length){el.innerHTML=empty("Групп пока нет","Они появятся после добавления ресурсов.");return}
-  el.innerHTML=keys.map(function(k){var g=groups[k],p=g.availability==null?0:g.availability;return '<div class="nw-group"><div class="nw-group-head"><b>'+esc(groupTitle(k))+'</b><span>'+(g.checked||0)+'/'+g.total+' проверено · '+(g.availability==null?"—":g.availability+"%")+'</span></div><div class="nw-progress"><i style="width:'+p+'%"></i></div></div>'}).join("");
+  el.innerHTML=keys.map(function(k){var g=groups[k];return '<button class="nw-group group-open" data-group="'+esc(k)+'"><div class="nw-group-head"><b>'+esc(groupTitle(k))+'</b><span>'+g.total+' целей</span></div><div class="group-diagnosis"><span class="good">'+g.available+' доступно</span><span class="restriction">'+g.restriction+' ограничено</span><span class="outage">'+g.outage+' упало</span><span class="unknown">'+g.unknown+' без данных</span></div></button>'}).join("");
+  qa(".group-open").forEach(function(b){b.onclick=function(){openView("resources");q("#groupFilter").value=b.dataset.group;renderResources()}});
 }
 function resourceMini(r){
-  return '<div class="nw-resource" data-resource="'+r.id+'"><div class="nw-resource-main"><b>'+esc(r.name)+'</b><span>'+esc(r.target)+'</span></div><div><span class="status-pill '+stClass(r.status)+'">'+stText(r.status)+'</span></div><div class="nw-stage"><b>'+(r.dns_ms==null?"—":r.dns_ms+" мс")+'</b>DNS</div><div class="nw-stage"><b>'+(r.tcp_ms==null?"—":r.tcp_ms+" мс")+'</b>TCP</div><div class="nw-stage"><b>'+(r.tls_ms==null?"—":r.tls_ms+" мс")+'</b>TLS</div><div class="latency">'+(r.response_time_ms==null?"—":r.response_time_ms+" мс")+'</div></div>'
+  var ext=r.external,dom=r.domestic;
+  return '<div class="nw-resource" data-resource="'+r.id+'"><div class="nw-resource-main"><b>'+esc(r.name)+'</b><span>'+esc(r.target)+'</span></div><div><span class="status-pill '+diagClass(r.diagnosis)+'">'+diagText(r.diagnosis)+'</span></div><div class="nw-stage"><b>'+stText(ext&&ext.status)+'</b>VPS</div><div class="nw-stage"><b>'+stText(dom&&dom.status)+'</b>РФ</div><div class="nw-stage"><b>'+(dom&&dom.response_time_ms!=null?dom.response_time_ms+" мс":"—")+'</b>отклик РФ</div><div class="latency">'+(dom&&dom.http_status!=null?"HTTP "+dom.http_status:"—")+'</div></div>'
 }
 function renderOverviewResources(rows){var el=q("#overviewResources");if(!rows.length){el.innerHTML=empty("Нет ресурсов","Перейдите в «Ресурсы» и добавьте первую цель.");return}el.innerHTML=rows.slice(0,8).map(resourceMini).join("");bindResourceClicks(el)}
 function incidentHtml(i,active){
-  var cls=i.severity==="critical"?"critical":i.closed_at?"info":"warning";var kind=({DOWN:"Недоступность",SLOW:"Медленный ответ",TLS_EXPIRY:"Срок TLS"})[i.kind]||i.kind;
+  var cls=i.severity==="critical"?"critical":i.closed_at?"info":"warning";var kind=({DOWN:"Недоступность извне",SLOW:"Медленный ответ",TLS_EXPIRY:"Срок TLS",RESTRICTION:"Вероятное ограничение"})[i.kind]||i.kind;
   return '<div class="nw-incident '+cls+'"><i class="incident-mark"></i><div><b>'+esc(i.resource_name)+' · '+esc(kind)+'</b><p>'+esc(i.message)+'</p></div><time>'+ago(i.opened_at)+'</time>'+(active&&!i.acknowledged_at?'<div class="incident-actions"><button class="mini-btn ack-btn" data-ack="'+i.id+'" title="Подтвердить">✓</button></div>':"")+'</div>'
 }
 function renderOverviewIncidents(rows){var el=q("#overviewIncidents");el.innerHTML=rows.length?rows.map(function(i){return incidentHtml(i,false)}).join(""):empty("Всё спокойно","Активных тревог нет.")}
 
 function filteredResources(){
   var rows=(S.dashboard&&S.dashboard.resources||[]).slice(),search=(q("#searchInput").value||"").toLowerCase(),group=q("#groupFilter").value,status=q("#statusFilter").value;
-  return rows.filter(function(r){var match=!search||r.name.toLowerCase().indexOf(search)>=0||r.target.toLowerCase().indexOf(search)>=0||String(r.resolved_ip||"").indexOf(search)>=0;if(group!=="ALL"&&r.group_name!==group)match=false;if(status==="OK"&&r.status!=="OK")match=false;if(status==="PROBLEM"&&(!r.status||r.status==="OK"))match=false;if(status==="PENDING"&&r.status)match=false;return match})
+  return rows.filter(function(r){
+    var match=!search||r.name.toLowerCase().indexOf(search)>=0||r.target.toLowerCase().indexOf(search)>=0||String((r.domestic&&r.domestic.resolved_ip)||(r.external&&r.external.resolved_ip)||"").indexOf(search)>=0;
+    if(group!=="ALL"&&r.group_name!==group)match=false;
+    if(status==="AVAILABLE"&&r.diagnosis!=="AVAILABLE")match=false;
+    if(status==="RESTRICTION"&&r.diagnosis!=="LIKELY_RESTRICTION")match=false;
+    if(status==="OUTAGE"&&r.diagnosis!=="LIKELY_OUTAGE")match=false;
+    if(status==="UNKNOWN"&&r.diagnosis!=="DOMESTIC_UNKNOWN"&&r.diagnosis!=="INSUFFICIENT_DATA")match=false;
+    return match
+  })
 }
 function renderResources(){
   var all=S.dashboard&&S.dashboard.resources||[],sel=q("#groupFilter"),old=sel.value||"ALL",groups=Array.from(new Set(all.map(function(r){return r.group_name})));
   sel.innerHTML='<option value="ALL">Все группы</option>'+groups.map(function(g){return '<option value="'+esc(g)+'">'+esc(groupTitle(g))+'</option>'}).join("");if(Array.from(sel.options).some(function(o){return o.value===old}))sel.value=old;
   q("#groupOptions").innerHTML=(S.groups||[]).map(function(g){return '<option value="'+esc(g.id)+'">'+esc(g.title)+'</option>'}).join("");
   var el=q("#resourcesTable"),rows=filteredResources();if(!rows.length){el.innerHTML=empty(all.length?"Ничего не найдено":"Список пуст",all.length?"Измените фильтры.":"Добавьте ресурс — проверки начнутся автоматически.");return}
-  el.innerHTML='<div class="nw-table-head"><div>Ресурс</div><div>Статус</div><div>DNS</div><div>TCP</div><div>TLS</div><div>HTTP</div><div></div></div>'+rows.map(function(r){
-    return '<div class="nw-table-row" data-resource="'+r.id+'"><div class="nw-table-resource"><b>'+esc(r.name)+'</b><span>'+esc(r.target)+' · '+esc(groupTitle(r.group_name))+(r.resolved_ip?" · "+esc(r.resolved_ip):"")+'</span></div><div><span class="status-pill '+stClass(r.status)+'">'+stText(r.status)+'</span></div><div>'+(r.dns_ms==null?"—":r.dns_ms+" мс")+'</div><div>'+(r.tcp_ms==null?"—":r.tcp_ms+" мс")+'</div><div>'+(r.tls_ms==null?"—":r.tls_ms+" мс")+'</div><div>'+(r.http_status==null?"—":r.http_status)+'</div><div class="nw-actions"><button class="mini-btn row-check" data-check="'+r.id+'" title="Проверить">↻</button><button class="mini-btn row-edit" data-edit="'+r.id+'" title="Изменить">✎</button></div></div>'
+  el.innerHTML='<div class="nw-table-head"><div>Ресурс</div><div>Вывод</div><div>VPS</div><div>РФ</div><div>DNS РФ</div><div>HTTP РФ</div><div></div></div>'+rows.map(function(r){
+    var ext=r.external,dom=r.domestic;
+    return '<div class="nw-table-row" data-resource="'+r.id+'"><div class="nw-table-resource"><b>'+esc(r.name)+'</b><span>'+esc(r.target)+' · '+esc(groupTitle(r.group_name))+'</span></div><div><span class="status-pill '+diagClass(r.diagnosis)+'">'+diagText(r.diagnosis)+'</span></div><div>'+stText(ext&&ext.status)+'</div><div>'+stText(dom&&dom.status)+'</div><div>'+(dom&&dom.dns_ms!=null?dom.dns_ms+" мс":"—")+'</div><div>'+(dom&&dom.http_status!=null?dom.http_status:"—")+'</div><div class="nw-actions"><button class="mini-btn row-check" data-check="'+r.id+'" title="Проверить с VPS">↻</button><button class="mini-btn row-edit" data-edit="'+r.id+'" title="Изменить">✎</button></div></div>'
   }).join("");bindResourceClicks(el);qa(".row-check").forEach(function(b){b.onclick=function(e){e.stopPropagation();manualCheck(Number(b.dataset.check))}});qa(".row-edit").forEach(function(b){b.onclick=function(e){e.stopPropagation();openResourceForm(resourceById(b.dataset.edit))}})
 }
 function bindResourceClicks(root){Array.prototype.slice.call(root.querySelectorAll("[data-resource]")).forEach(function(e){e.onclick=function(){openDetail(Number(e.dataset.resource))}})}
@@ -94,8 +123,10 @@ function renderDiagnostics(){
 }
 function resetStages(){["Dns","Tcp","Tls","Http"].forEach(function(k){var e=q("#stage"+k);e.className="diag-step";e.querySelector("b").textContent="—"})}
 function showDiagnostic(r){
-  S.diagId=r.id;q("#diagResource").value=String(r.id);q("#diagSummary").innerHTML='<div class="diag-summary-card"><div><span>Ресурс</span><b>'+esc(r.name)+'</b></div><div><span>IP</span><b>'+esc(r.resolved_ip||"—")+'</b></div><div><span>Полный отклик</span><b>'+(r.response_time_ms==null?"—":r.response_time_ms+" мс")+'</b></div><div><span>HTTP</span><b>'+(r.http_status==null?"—":r.http_status)+'</b></div><div><span>TLS</span><b>'+(r.tls_days_left==null?"—":r.tls_days_left+" дн")+'</b></div></div>';
-  setStage("Dns",r.dns_ms,r.status!=="DNS_ERROR"&&r.status!=="BLOCKED_TARGET");setStage("Tcp",r.tcp_ms,r.tcp_ms!=null);setStage("Tls",r.tls_ms,r.target.indexOf("https://")!==0||r.tls_ms!=null);setStage("Http",r.http_ms,r.status==="OK")
+  S.diagId=r.id;q("#diagResource").value=String(r.id);var ext=r.external,dom=r.domestic,active=dom||ext;
+  q("#diagSummary").innerHTML='<div class="diag-summary-card"><div><span>Вывод</span><b class="'+diagClass(r.diagnosis)+'">'+diagText(r.diagnosis)+'</b></div><div><span>VPS</span><b>'+stText(ext&&ext.status)+(ext&&ext.response_time_ms!=null?" · "+ext.response_time_ms+" мс":"")+'</b></div><div><span>Российский контур</span><b>'+stText(dom&&dom.status)+(dom&&dom.response_time_ms!=null?" · "+dom.response_time_ms+" мс":"")+'</b></div><div><span>IP РФ</span><b>'+esc(dom&&dom.resolved_ip||"—")+'</b></div><div><span>Пояснение</span><b>'+esc(r.diagnosis_text||"—")+'</b></div></div>';
+  if(!active){resetStages();return}
+  setStage("Dns",active.dns_ms,active.status!=="DNS_ERROR"&&active.status!=="BLOCKED_TARGET);setStage("Tcp",active.tcp_ms,active.tcp_ms!=null);setStage("Tls",active.tls_ms,r.target.indexOf("https://")!==0||active.tls_ms!=null);setStage("Http",active.http_ms,active.status==="OK")
 }
 function setStage(name,val,good){var e=q("#stage"+name);e.querySelector("b").textContent=val==null?"—":val+" мс";e.className="diag-step "+(val==null?"":good?"good":"bad")}
 
@@ -122,6 +153,26 @@ async function checkAll(){
 async function trace(id){
   try{q("#traceOutput").innerHTML=empty("Traceroute","Выполняем маршрут с VPS…");var r=await api("/api/resources/"+id+"/trace",{method:"POST"},true);q("#traceMeta").textContent=r.host+" → "+r.resolved_ip+" · DNS "+r.dns_ms+" мс";q("#traceOutput").innerHTML=r.hops.length?r.hops.map(function(h){return '<div class="trace-hop"><span>'+h.hop+'</span><span>'+esc(h.ip||"*")+'</span><span>'+(h.latency_ms==null?"*":h.latency_ms+" ms")+'</span></div>'}).join(""):'<pre class="trace-raw">'+esc(r.raw)+'</pre>';openView("diagnostics");q("#diagResource").value=String(id);S.diagId=id}catch(e){q("#traceOutput").innerHTML=empty("Traceroute не выполнен",e.message);toast(e.message)}
 }
+async function traceDomestic(id){
+  var probes=S.dashboard&&S.dashboard.probes||[],p=probes.find(function(x){return x.scope==="DOMESTIC"&&x.online});
+  if(!p){toast("Российский probe не подключён или не в сети");return}
+  try{
+    q("#traceOutput").innerHTML=empty("Traceroute РФ","Задание отправлено российскому probe…");
+    var job=await api("/api/resources/"+id+"/trace-domestic?probe_key="+encodeURIComponent(p.probe_key),{method:"POST"},true);
+    q("#traceMeta").textContent=p.name+" · ожидание результата";
+    for(var i=0;i<30;i++){
+      await new Promise(function(resolve){setTimeout(resolve,1000)});
+      var state=await api("/api/trace-tasks/"+job.task_id);
+      if(state.status==="DONE"){
+        q("#traceMeta").textContent=p.name+" · российский контур";
+        q("#traceOutput").innerHTML='<pre class="trace-raw">'+esc(state.result_text||"Нет вывода")+'</pre>';
+        return
+      }
+    }
+    throw new Error("Российский probe не вернул traceroute за 30 секунд")
+  }catch(e){q("#traceOutput").innerHTML=empty("Traceroute РФ не выполнен",e.message);toast(e.message)}
+}
+
 async function ackIncident(id){try{await api("/api/incidents/"+id+"/ack",{method:"POST"},true);await loadAll(true);toast("Тревога подтверждена")}catch(e){toast(e.message)}}
 
 function formPayload(){
@@ -156,7 +207,7 @@ function setup(){
   q("#searchInput").oninput=renderResources;q("#groupFilter").onchange=renderResources;q("#statusFilter").onchange=renderResources;
   q("#checkAll").onclick=checkAll;q("#historyRange").onchange=function(){loadAll(true)};
   q("#diagResource").onchange=function(){S.diagId=Number(this.value);var r=resourceById(this.value);if(r)showDiagnostic(r)};
-  q("#diagCheck").onclick=function(){var id=Number(q("#diagResource").value);if(id)manualCheck(id)};q("#diagTrace").onclick=function(){var id=Number(q("#diagResource").value);if(id)trace(id)};
+  q("#diagCheck").onclick=function(){var id=Number(q("#diagResource").value);if(id)manualCheck(id)};q("#diagTrace").onclick=function(){var id=Number(q("#diagResource").value);if(id)trace(id)};q("#diagTraceDomestic").onclick=function(){var id=Number(q("#diagResource").value);if(id)traceDomestic(id)};
   q("#enableNotifications").onclick=async function(){if(!("Notification" in window)){toast("Браузер не поддерживает уведомления");return}var p=await Notification.requestPermission();toast(p==="granted"?"Уведомления включены":"Разрешение не выдано")};
   q("#deleteResource").onclick=deleteResource;q("#editResource").onclick=function(){var r=resourceById(S.detailId);q("#detailDialog").close();if(r)openResourceForm(r)};q("#detailCheck").onclick=function(){q("#detailDialog").close();manualCheck(S.detailId)};q("#detailTrace").onclick=function(){q("#detailDialog").close();trace(S.detailId)};
   window.addEventListener("resize",function(){if(S.history)drawHistory()});
