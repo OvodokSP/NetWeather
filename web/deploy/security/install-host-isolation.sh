@@ -93,6 +93,17 @@ for old_name in netweather-web web-netweather-1; do
   fi
 done
 if [[ -n "${CURRENT_IMAGE}" ]]; then
+  IMAGE_USER="$(docker image inspect -f '{{.Config.User}}' "${CURRENT_IMAGE}" 2>/dev/null || true)"
+  if [[ "${IMAGE_USER}" != "10001:10001" ]]; then
+    echo "Current image is legacy/root-oriented (USER=${IMAGE_USER:-root}); build one-time hardened bootstrap image."
+    BOOTSTRAP_SHA="$(git -C /opt/NetWeather rev-parse HEAD)"
+    docker build \
+      --build-arg NETWEATHER_VCS_REF="${BOOTSTRAP_SHA}" \
+      --tag "netweather-web:${BOOTSTRAP_SHA}" \
+      "${PROJECT}"
+    CURRENT_IMAGE="netweather-web:${BOOTSTRAP_SHA}"
+  fi
+
   docker run -d \
     --name netweather-web \
     --hostname netweather-app \
