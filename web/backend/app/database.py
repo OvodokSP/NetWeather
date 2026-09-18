@@ -57,6 +57,10 @@ def init_db() -> None:
           message TEXT NOT NULL, FOREIGN KEY(resource_id) REFERENCES resources(id) ON DELETE CASCADE
         );
         CREATE INDEX IF NOT EXISTS idx_incidents_resource_open ON incidents(resource_id, closed_at, opened_at DESC);
+        CREATE TABLE IF NOT EXISTS resource_groups (
+          group_key TEXT PRIMARY KEY, title TEXT NOT NULL, color TEXT NOT NULL DEFAULT '#3A8DFF',
+          sort_order INTEGER NOT NULL DEFAULT 100, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS probes (
           probe_key TEXT PRIMARY KEY, name TEXT NOT NULL, scope TEXT NOT NULL,
           last_seen_at INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
@@ -85,6 +89,24 @@ def init_db() -> None:
         ]:
             _ensure_column(conn, table, name, ddl)
         now = int(time.time())
+        default_groups = [
+            ("RUSSIAN","Российские","#35D89A",10),
+            ("INTERNATIONAL","Международные","#55C7FF",20),
+            ("MESSENGERS","Мессенджеры и соцсети","#7C62FF",30),
+            ("INFRASTRUCTURE","Инфраструктура","#FFAD4D",40),
+            ("CUSTOM","Пользовательские","#8A96A3",90),
+        ]
+        for group_key, title, color, sort_order in default_groups:
+            conn.execute("""INSERT INTO resource_groups(group_key,title,color,sort_order,created_at,updated_at)
+              VALUES(?,?,?,?,?,?)
+              ON CONFLICT(group_key) DO NOTHING""",
+              (group_key,title,color,sort_order,now,now))
+        for row in conn.execute("SELECT DISTINCT group_name FROM resources").fetchall():
+            key = row["group_name"]
+            conn.execute("""INSERT INTO resource_groups(group_key,title,color,sort_order,created_at,updated_at)
+              VALUES(?,?,?,?,?,?)
+              ON CONFLICT(group_key) DO NOTHING""",
+              (key,key,"#8A96A3",100,now,now))
         conn.execute("""INSERT INTO probes(probe_key,name,scope,last_seen_at,created_at,updated_at)
           VALUES(?,?,?,?,?,?)
           ON CONFLICT(probe_key) DO UPDATE SET name=excluded.name,scope=excluded.scope,last_seen_at=excluded.last_seen_at,updated_at=excluded.updated_at""",
@@ -300,3 +322,12 @@ def dual_summary() -> dict[str, Any]:
         "avg_domestic_latency_ms": round(sum(domestic_lat)/len(domestic_lat)) if domestic_lat else None,
         **counts,
     }
+
+
+
+def resource_groups() -> list[dict[str, Any]]:
+    with db() as conn:
+        rows = conn.execute("""SELECT g.*,
+          (SELECT COUNT(*) FROM resources r WHERE r.group_name=g.group_key) resource_count
+          FROM resource_groups g ORDER BY g.sort_order,g.title""").fetchall()
+    return [dict(r) for r in rows]
