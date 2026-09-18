@@ -5,17 +5,20 @@ import subprocess
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .config import (
-    ALERT_WEBHOOK_URL, ALLOW_PRIVATE_TARGETS, API_TOKEN, APP_VERSION, DEFAULT_INTERVAL,
-    FRONTEND_DIR, KNOWN_GROUPS, ResourceCreate, ResourcePatch, SCHEDULER_ENABLED, STARTED_AT,
+    AGENT_TOKEN, ALERT_WEBHOOK_URL, ALLOW_PRIVATE_TARGETS, API_TOKEN, APP_VERSION, DEFAULT_INTERVAL,
+    FRONTEND_DIR, KNOWN_GROUPS, ResourceCreate, ResourcePatch, AgentResult, SCHEDULER_ENABLED, STARTED_AT,
     normalize_group, normalize_target,
 )
-from .database import db, get_incidents, init_db, latest_resources, seed_defaults, summary
+from .database import (
+    db, dual_summary, get_incidents, init_db, latest_resources, probe_statuses,
+    register_probe, resource_matrix, seed_defaults, summary,
+)
 from .incidents import write_check
 from .monitor import perform_check, traceroute_to_resource
 
@@ -25,6 +28,13 @@ def require_token(authorization: str | None = Header(default=None)) -> None:
         raise HTTPException(503, "NETWEATHER_API_TOKEN is not configured")
     if authorization != f"Bearer {API_TOKEN}":
         raise HTTPException(401, "Invalid API token")
+
+
+def require_agent(x_netweather_agent: str | None = Header(default=None)) -> None:
+    if not AGENT_TOKEN:
+        raise HTTPException(503, "NETWEATHER_AGENT_TOKEN is not configured")
+    if x_netweather_agent != AGENT_TOKEN:
+        raise HTTPException(401, "Invalid probe token")
 
 
 async def check_resource(resource_id: int):
@@ -105,7 +115,18 @@ def verify_token():
 
 @app.get("/api/dashboard")
 def dashboard():
-    return {"summary":summary(),"resources":latest_resources(),"incidents":get_incidents(True,20)}
+    return {
+        "summary": dual_summary(),
+        "legacy_summary": summary(),
+        "resources": resource_matrix(),
+        "incidents": get_incidents(True,20),
+        "probes": probe_statuses(),
+    }
+
+
+@app.get("/api/probes")
+def probes():
+    return probe_statuses()
 
 
 @app.get("/api/groups")
@@ -116,12 +137,12 @@ def groups():
 
 @app.get("/api/resources")
 def list_resources():
-    return latest_resources()
+    return resource_matrix()
 
 
 @app.get("/api/resources/{resource_id}")
 def resource_details(resource_id:int):
-    rows=[r for r in latest_resources() if r["id"]==resource_id]
+    rows=[r for r in resource_matrix() if r["id"]==resource_id]
     if not rows: raise HTTPException(404,"Resource not found")
     with db() as conn:
         checks=conn.execute("SELECT * FROM checks WHERE resource_id=? ORDER BY checked_at DESC,id DESC LIMIT 30",(resource_id,)).fetchall()
@@ -173,6 +194,84 @@ async def manual_check(resource_id:int): return await check_resource(resource_id
 
 @app.post("/api/resources/{resource_id}/trace", dependencies=[Depends(require_token)])
 async def trace_resource(resource_id:int): return await traceroute_to_resource(resource_id)
+
+
+@app.get("/api/agent/config.tsv", dependencies=[Depends(require_agent)])
+def agent_config(probe_key: str = Query(min_length=1,max_length=80), probe_name: str = Query(default="Российский probe",max_length=120)):
+    register_probe(probe_key, probe_name, "DOMESTIC")
+    rows = []
+    with db() as conn:
+        resources = conn.execute("""SELECT id,name,target,expected_status_min,expected_status_max,enabled
+          FROM resources WHERE enabled=1 ORDER BY id""").fetchall()
+    for r in resources:
+        rows.append("\t".join([
+            str(r["id"]), r["name"].replace("\t"," "), r["target"],
+            str(r["expected_status_min"]), str(r["expected_status_max"])
+        ]))
+    return Response(content="\n".join(rows)+("\n" if rows else ""), media_type="text/tab-separated-values; charset=utf-8")
+
+
+@app.post("/api/agent/result", dependencies=[Depends(require_agent)])
+def agent_result(payload: AgentResult, probe_key: str = Query(min_length=1,max_length=80), probe_name: str = Query(default="Российский probe",max_length=120)):
+    register_probe(probe_key, probe_name, "DOMESTIC")
+    with db() as conn:
+        exists = conn.execute("SELECT 1 FROM resources WHERE id=?", (payload.resource_id,)).fetchone()
+    if not exists:
+        raise HTTPException(404, "Resource not found")
+    data = payload.model_dump()
+    data.update({"tls_days_left":None,"final_url":None,"location":None})
+    write_check(payload.resource_id, data, probe_key=probe_key, probe_scope="DOMESTIC")
+    return {"ok":True}
+
+
+@app.get("/api/agent/tasks.tsv", dependencies=[Depends(require_agent)])
+def agent_tasks(probe_key: str = Query(min_length=1,max_length=80), probe_name: str = Query(default="Российский probe",max_length=120)):
+    register_probe(probe_key, probe_name, "DOMESTIC")
+    now = int(time.time())
+    with db() as conn:
+        rows = conn.execute("""SELECT t.id,t.resource_id,r.target FROM probe_tasks t
+          JOIN resources r ON r.id=t.resource_id
+          WHERE t.probe_key=? AND t.status='PENDING'
+          ORDER BY t.created_at LIMIT 5""", (probe_key,)).fetchall()
+        for r in rows:
+            conn.execute("UPDATE probe_tasks SET status='RUNNING',started_at=? WHERE id=?", (now,r["id"]))
+    return Response(
+        content="".join(f"{r['id']}\t{r['resource_id']}\t{r['target']}\n" for r in rows),
+        media_type="text/tab-separated-values; charset=utf-8",
+    )
+
+
+@app.post("/api/agent/tasks/{task_id}/complete", dependencies=[Depends(require_agent)])
+async def agent_task_complete(task_id:int, request:Request, probe_key:str=Query(min_length=1,max_length=80)):
+    text_body = (await request.body()).decode("utf-8", errors="replace")[:20000]
+    now = int(time.time())
+    with db() as conn:
+        cur = conn.execute("""UPDATE probe_tasks SET status='DONE',completed_at=?,result_text=?
+          WHERE id=? AND probe_key=?""", (now,text_body,task_id,probe_key))
+    if cur.rowcount == 0:
+        raise HTTPException(404, "Task not found")
+    return {"ok":True}
+
+
+@app.post("/api/resources/{resource_id}/trace-domestic", dependencies=[Depends(require_token)])
+def trace_domestic(resource_id:int, probe_key:str=Query(default="RU_HOME",min_length=1,max_length=80)):
+    with db() as conn:
+        if not conn.execute("SELECT 1 FROM resources WHERE id=?", (resource_id,)).fetchone():
+            raise HTTPException(404, "Resource not found")
+        now = int(time.time())
+        cur = conn.execute("""INSERT INTO probe_tasks(probe_key,resource_id,task_type,status,created_at)
+          VALUES(?,?, 'TRACE', 'PENDING', ?)""", (probe_key,resource_id,now))
+    return {"task_id":cur.lastrowid,"status":"PENDING"}
+
+
+@app.get("/api/trace-tasks/{task_id}")
+def trace_task(task_id:int):
+    with db() as conn:
+        row = conn.execute("""SELECT t.*,r.name resource_name,r.target FROM probe_tasks t
+          JOIN resources r ON r.id=t.resource_id WHERE t.id=?""", (task_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "Trace task not found")
+    return dict(row)
 
 
 @app.post("/api/check-all", dependencies=[Depends(require_token)])
