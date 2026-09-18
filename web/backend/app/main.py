@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import (
     AGENT_TOKEN, ALERT_WEBHOOK_URL, ALLOW_PRIVATE_TARGETS, API_TOKEN, APP_VERSION, AUTH_REQUIRED, DEFAULT_INTERVAL,
-    FRONTEND_DIR, KNOWN_GROUPS, ResourceCreate, ResourcePatch, AgentResult, GroupCreate, GroupPatch,
+    FRONTEND_DIR, KNOWN_GROUPS, ResourceCreate, ResourcePatch, AgentResult, CatalogAddRequest, GroupCreate, GroupPatch,
     OwnerLogin, SCHEDULER_ENABLED, SESSION_MAX_AGE, STARTED_AT, UI_PASSWORD,
     normalize_group, normalize_target,
 )
@@ -25,6 +25,7 @@ from .database import (
 )
 from .incidents import write_check
 from .monitor import discover_target_metadata, perform_check, traceroute_to_resource
+from .resource_catalog import CATALOG_BY_KEY, catalog_match, catalog_payload
 
 
 SESSION_COOKIE = "netweather_owner"
@@ -245,6 +246,83 @@ async def target_metadata(target:str=Query(min_length=1,max_length=2048)):
     return await discover_target_metadata(target)
 
 
+def _ensure_resource_group(conn, group_name:str, now:int) -> None:
+    conn.execute("""INSERT INTO resource_groups(group_key,title,color,sort_order,created_at,updated_at)
+      VALUES(?,?,?,?,?,?) ON CONFLICT(group_key) DO NOTHING""",
+      (group_name,KNOWN_GROUPS.get(group_name,group_name),"#8A96A3",100,now,now))
+
+
+def _insert_catalog_resource(conn, item, now:int, *, interval_seconds:int=DEFAULT_INTERVAL,
+                             expected_status_min:int=200, expected_status_max:int=399,
+                             slow_threshold_ms:int=1500, failure_threshold:int=2,
+                             alerts_enabled:bool=True, enabled:bool=True) -> tuple[int,bool]:
+    existing=conn.execute("SELECT id FROM resources WHERE catalog_key=? LIMIT 1",(item.key,)).fetchone()
+    if existing:
+        return int(existing["id"]),False
+    _ensure_resource_group(conn,item.group_key,now)
+    cur=conn.execute("""INSERT INTO resources(
+      name,target,group_name,interval_seconds,enabled,created_at,updated_at,last_checked_at,
+      expected_status_min,expected_status_max,slow_threshold_ms,failure_threshold,alerts_enabled,
+      last_success_at,last_failure_at,catalog_key
+    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+    (item.name,normalize_target(item.target),item.group_key,interval_seconds,int(enabled),now,now,0,
+     expected_status_min,expected_status_max,slow_threshold_ms,failure_threshold,int(alerts_enabled),0,0,item.key))
+    return int(cur.lastrowid),True
+
+
+def _target_key(value:str) -> str:
+    from urllib.parse import urlparse
+    target=normalize_target(value)
+    parsed=urlparse(target)
+    host=(parsed.hostname or "").lower().rstrip(".")
+    port=f":{parsed.port}" if parsed.port else ""
+    path=(parsed.path or "/").rstrip("/") or "/"
+    query=f"?{parsed.query}" if parsed.query else ""
+    return f"{parsed.scheme.lower()}://{host}{port}{path}{query}"
+
+
+@app.get("/api/resource-catalog")
+def resource_catalog():
+    with db() as conn:
+        existing={row["catalog_key"] for row in conn.execute(
+            "SELECT catalog_key FROM resources WHERE catalog_key IS NOT NULL AND catalog_key<>''"
+        ).fetchall()}
+    return catalog_payload(existing)
+
+
+@app.get("/api/resource-catalog/match")
+def resource_catalog_match(target:str=Query(min_length=1,max_length=2048)):
+    match=catalog_match(target)
+    if not match:
+        return {"matched":False}
+    with db() as conn:
+        row=conn.execute("SELECT id FROM resources WHERE catalog_key=? LIMIT 1",(match.key,)).fetchone()
+    return {
+        "matched":True,
+        "resource":match.public(),
+        "already_added":bool(row),
+        "existing_resource_id":int(row["id"]) if row else None,
+    }
+
+
+@app.post("/api/resource-catalog/add", dependencies=[Depends(require_token)])
+def add_catalog_resources(payload:CatalogAddRequest):
+    keys=list(dict.fromkeys(payload.resource_keys))
+    unknown=[key for key in keys if key not in CATALOG_BY_KEY]
+    if unknown:
+        raise HTTPException(400,"Unknown catalog resource: "+", ".join(unknown))
+    added=[]
+    existing=[]
+    now=int(time.time())
+    with db() as conn:
+        for key in keys:
+            item=CATALOG_BY_KEY[key]
+            resource_id,created=_insert_catalog_resource(conn,item,now)
+            target=added if created else existing
+            target.append({"id":resource_id,"key":item.key,"name":item.name,"group_key":item.group_key})
+    return {"added":added,"existing":existing,"requested":len(keys)}
+
+
 @app.get("/api/resources")
 def list_resources():
     return resource_matrix()
@@ -262,23 +340,66 @@ def resource_details(resource_id:int):
 @app.post("/api/resources", dependencies=[Depends(require_token)])
 def create_resource(payload:ResourceCreate):
     target=normalize_target(payload.target)
-    if payload.expected_status_min>payload.expected_status_max: raise HTTPException(400,"Expected status min must be <= max")
+    if payload.expected_status_min>payload.expected_status_max:
+        raise HTTPException(400,"Expected status min must be <= max")
     now=int(time.time())
-    group_name=normalize_group(payload.group_name)
+    match=catalog_match(target)
     with db() as conn:
-        conn.execute("""INSERT INTO resource_groups(group_key,title,color,sort_order,created_at,updated_at)
-          VALUES(?,?,?,?,?,?) ON CONFLICT(group_key) DO NOTHING""",(group_name,KNOWN_GROUPS.get(group_name,group_name),"#8A96A3",100,now,now))
-        cur=conn.execute("""INSERT INTO resources(name,target,group_name,interval_seconds,enabled,created_at,updated_at,last_checked_at,
-          expected_status_min,expected_status_max,slow_threshold_ms,failure_threshold,alerts_enabled,last_success_at,last_failure_at)
-          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",(payload.name,target,group_name,payload.interval_seconds,int(payload.enabled),now,now,0,
-          payload.expected_status_min,payload.expected_status_max,payload.slow_threshold_ms,payload.failure_threshold,int(payload.alerts_enabled),0,0))
-    return {"id":cur.lastrowid}
+        if match:
+            resource_id,created=_insert_catalog_resource(
+                conn,match,now,
+                interval_seconds=payload.interval_seconds,
+                expected_status_min=payload.expected_status_min,
+                expected_status_max=payload.expected_status_max,
+                slow_threshold_ms=payload.slow_threshold_ms,
+                failure_threshold=payload.failure_threshold,
+                alerts_enabled=payload.alerts_enabled,
+                enabled=payload.enabled,
+            )
+            return {
+                "id":resource_id,
+                "created":created,
+                "used_catalog":True,
+                "catalog_match":match.public(),
+                "already_exists":not created,
+            }
+        target_key=_target_key(target)
+        for row in conn.execute("SELECT id,target FROM resources").fetchall():
+            try:
+                if _target_key(row["target"])==target_key:
+                    return {"id":int(row["id"]),"created":False,"used_catalog":False,"already_exists":True}
+            except HTTPException:
+                continue
+        group_name=normalize_group(payload.group_name)
+        _ensure_resource_group(conn,group_name,now)
+        cur=conn.execute("""INSERT INTO resources(
+          name,target,group_name,interval_seconds,enabled,created_at,updated_at,last_checked_at,
+          expected_status_min,expected_status_max,slow_threshold_ms,failure_threshold,alerts_enabled,
+          last_success_at,last_failure_at,catalog_key
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)""",
+        (payload.name,target,group_name,payload.interval_seconds,int(payload.enabled),now,now,0,
+         payload.expected_status_min,payload.expected_status_max,payload.slow_threshold_ms,payload.failure_threshold,
+         int(payload.alerts_enabled),0,0))
+    return {"id":int(cur.lastrowid),"created":True,"used_catalog":False,"already_exists":False}
 
 
 @app.patch("/api/resources/{resource_id}", dependencies=[Depends(require_token)])
 def patch_resource(resource_id:int,payload:ResourcePatch):
     values=payload.model_dump(exclude_none=True)
-    if "target" in values: values["target"]=normalize_target(values["target"])
+    if "target" in values:
+        values["target"]=normalize_target(values["target"])
+        match=catalog_match(values["target"])
+        if match:
+            with db() as conn:
+                existing=conn.execute("SELECT id FROM resources WHERE catalog_key=? AND id<>? LIMIT 1",(match.key,resource_id)).fetchone()
+            if existing:
+                raise HTTPException(409,f"Этот ресурс уже добавлен из каталога: {match.name}")
+            values["target"]=normalize_target(match.target)
+            values["name"]=match.name
+            values["group_name"]=match.group_key
+            values["catalog_key"]=match.key
+        else:
+            values["catalog_key"]=None
     if "group_name" in values:
         values["group_name"]=normalize_group(values["group_name"])
         now_group=int(time.time())
