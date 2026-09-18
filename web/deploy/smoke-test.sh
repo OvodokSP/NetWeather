@@ -30,8 +30,8 @@ get '/api/history?hours=24'
 curl -fsSI "$BASE_URL/" >/dev/null; ok 'HEAD /'
 FRONTEND_HTML="$(curl -fsS "$BASE_URL/")"
 grep -Fq 'NetWeather' <<<"$FRONTEND_HTML"; ok 'GET / frontend'
-curl -fsS "$BASE_URL/assets/dashboard.js?v=0.3.9" >/dev/null; ok 'GET /assets/dashboard.js'
-curl -fsS "$BASE_URL/assets/dashboard.css?v=0.3.9" >/dev/null; ok 'GET /assets/dashboard.css'
+curl -fsS "$BASE_URL/assets/dashboard.js?v=0.3.10" >/dev/null; ok 'GET /assets/dashboard.js'
+curl -fsS "$BASE_URL/assets/dashboard.css?v=0.3.10" >/dev/null; ok 'GET /assets/dashboard.css'
 
 if [[ "$AUTH_REQUIRED" == "true" && -z "$TOKEN" ]]; then
   echo 'SKIP  write/diagnostic tests: authentication is required and NETWEATHER_API_TOKEN is unavailable'
