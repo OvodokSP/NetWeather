@@ -107,11 +107,11 @@ run_tasks() {
     -H "X-NetWeather-Agent: $TOKEN" \
     "$BASE_URL/api/agent/tasks.tsv?probe_key=$PROBE_KEY&probe_name=$(printf '%s' "$PROBE_NAME" | sed 's/ /%20/g')" 2>/dev/null)" || return 0
 
-  printf '%s\n' "$tasks" | while IFS="$TAB" read -r task_id resource_id task_type target; do
+  printf '%s\n' "$tasks" | while IFS="$TAB" read -r task_id resource_id task_type target min_code max_code; do
     [ -z "${task_id:-}" ] && continue
     outfile="$TMP/task.$task_id"
     if [ "$task_type" = "CHECK" ]; then
-      probe_one "$resource_id" "$target" "200" "399"
+      probe_one "$resource_id" "$target" "${min_code:-200}" "${max_code:-399}"
       echo "domestic check completed" >"$outfile"
     else
       host="$(printf '%s' "$target" | sed -E 's#^[A-Za-z]+://##; s#/.*##; s/:.*##')"
