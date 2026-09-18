@@ -1,5 +1,63 @@
 # Changelog
 
-## 0.1.0-alpha
-- Clean Android project from scratch.
-- Compose UI, Room, WorkManager, widgets and diagnostics.
+Все значимые изменения NetWeather фиксируются здесь по продуктовым контрольным точкам.
+
+## Unreleased
+
+### UI / UX
+- единый interaction contract для dialog/buttons/keyboard;
+- дальнейшая полировка Overview и групп ресурсов.
+
+### Probe architecture
+- Keenetic Domestic Probe;
+- Browser Probe;
+- unified fault-domain.
+
+## 0.3.9-web — Isolated production boundary
+
+- NetWeather production container переведён на dedicated UID/GID 10001.
+- Read-only root filesystem.
+- Drop all Linux capabilities.
+- `no-new-privileges`.
+- Удалены host bind mounts и Docker socket.
+- Добавлена отдельная сеть NetWeather.
+- Добавлен nftables egress guard против host/private/VPN access.
+- Production image собирается off-host.
+- Forced-command deployment key.
+- Security contract и hardened runtime smoke в CI.
+- Удалён wildcard CORS.
+- SPA file serving ограничен frontend root.
+
+## 0.3.8-web — Dashboard preferences
+
+- настраиваемый Overview;
+- до 6 закреплённых ресурсов;
+- выбор закреплений по группам;
+- capability-aware UI;
+- панели без данных скрываются;
+- минимальный web font-size 10 px.
+
+## 0.3.7-web — Resource catalog
+
+- каталог ресурсов по группам;
+- 10 популярных ресурсов на группу;
+- batch add;
+- duplicate-safe catalog identity;
+- ручной target автоматически использует каталоговую сущность при совпадении.
+
+## 0.3.6-web — Reference dashboard parity
+
+- перестроена геометрия Overview;
+- единая типографика;
+- SVG icon system;
+- scrollable resource table;
+- availability graph bands;
+- incident read/unread improvements.
+
+## 0.1.0-alpha — Android foundation
+
+- Compose UI;
+- Room;
+- WorkManager;
+- widgets;
+- local diagnostics.
