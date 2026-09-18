@@ -7,7 +7,7 @@ var S={
   historyExt:[],historyDom:[],streamMinutes:60,detailId:null,diagId:null,
   faultId:null,view:"overview",poll:null,streamMeta:null,authRequired:false,
   owner:true,mapScale:1,metaCache:{},catalog:null,catalogSelected:{},customCatalogMatch:null,customAutoCatalogKey:null,
-  dashboardPrefs:null
+  dashboardPrefs:null,searchIndex:-1
 };
 
 var DASHBOARD_PREFS_KEY="netweather_dashboard_v1";
@@ -128,7 +128,7 @@ function renderDashboardPreferencesModal(){
 }
 function openDashboardPreferences(){
   renderDashboardPreferencesModal();
-  q("#dashboardPreferencesDialog").showModal()
+  openDialog(q("#dashboardPreferencesDialog"),"[data-pin-resource]")
 }
 function submitDashboardPreferences(e){
   e.preventDefault();
@@ -150,6 +150,97 @@ function resetDashboardPreferences(){
 
 function q(s){return document.querySelector(s)}
 function qa(s){return Array.prototype.slice.call(document.querySelectorAll(s))}
+
+function focusableIn(root){
+  if(!root)return[];
+  return qa.call?Array.prototype.slice.call(root.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href],[tabindex]:not([tabindex="-1"])')):[]
+}
+function openDialog(dialog,focusSelector){
+  if(!dialog)return;
+  dialog._returnFocus=document.activeElement&&document.activeElement!==document.body?document.activeElement:null;
+  if(!dialog.open)dialog.showModal();
+  requestAnimationFrame(function(){
+    var target=focusSelector?dialog.querySelector(focusSelector):null;
+    if(!target)target=focusableIn(dialog)[0];
+    if(target&&typeof target.focus==="function")target.focus({preventScroll:true})
+  })
+}
+function closeDialog(dialog){
+  if(dialog&&dialog.open&&!dialog.dataset.locked)dialog.close()
+}
+function setupDialogs(){
+  qa("dialog.modal").forEach(function(dialog){
+    dialog.addEventListener("click",function(e){
+      if(e.target===dialog&&!dialog.dataset.locked)dialog.close()
+    });
+    dialog.addEventListener("close",function(){
+      dialog.removeAttribute("aria-busy");
+      var back=dialog._returnFocus;dialog._returnFocus=null;
+      if(back&&document.contains(back)&&typeof back.focus==="function")requestAnimationFrame(function(){back.focus({preventScroll:true})})
+    });
+    dialog.addEventListener("cancel",function(e){
+      if(dialog.dataset.locked){e.preventDefault()}
+    })
+  })
+}
+function setBusy(button,busy,label){
+  if(!button)return;
+  if(busy){
+    if(button.dataset.busy==="1")return;
+    button.dataset.busy="1";button._busyHtml=button.innerHTML;button._busyDisabled=button.disabled;
+    button.disabled=true;button.setAttribute("aria-busy","true");button.classList.add("is-busy");
+    if(label)button.textContent=label
+  }else{
+    if(button.dataset.busy!=="1")return;
+    if(button._busyHtml!=null)button.innerHTML=button._busyHtml;
+    button.disabled=!!button._busyDisabled;button.removeAttribute("aria-busy");button.classList.remove("is-busy");
+    delete button.dataset.busy;delete button._busyHtml;delete button._busyDisabled
+  }
+}
+async function withBusy(button,label,fn){
+  if(button&&button.dataset.busy==="1")return;
+  setBusy(button,true,label);
+  try{return await fn()}finally{setBusy(button,false)}
+}
+function confirmAction(options){
+  options=options||{};
+  var dialog=q("#confirmDialog"),accept=q("#confirmAccept"),cancel=q("#confirmCancel");
+  if(!dialog||!accept||!cancel)return Promise.resolve(false);
+  q("#confirmEyebrow").textContent=options.eyebrow||"ПОДТВЕРЖДЕНИЕ";
+  q("#confirmTitle").textContent=options.title||"Подтвердите действие";
+  q("#confirmMessage").textContent=options.message||"Продолжить?";
+  q("#confirmHint").textContent=options.hint||"";
+  accept.textContent=options.accept||"Продолжить";
+  accept.className="btn "+(options.danger===false?"primary":"danger");
+  return new Promise(function(resolve){
+    var settled=false;
+    function finish(value){
+      if(settled)return;settled=true;
+      accept.onclick=null;cancel.onclick=null;
+      if(dialog.open)dialog.close();
+      resolve(value)
+    }
+    accept.onclick=function(){finish(true)};
+    cancel.onclick=function(){finish(false)};
+    dialog.addEventListener("close",function(){finish(false)},{once:true});
+    openDialog(dialog,"#confirmAccept")
+  })
+}
+function hideSearch(){
+  var el=q("#searchResults"),input=q("#globalSearch");if(!el||!input)return;
+  el.classList.add("hidden");input.setAttribute("aria-expanded","false");S.searchIndex=-1
+}
+function handleSearchKeydown(e){
+  var results=qa("#searchResults [data-search-id]");
+  if(e.key==="Escape"){hideSearch();return}
+  if(!results.length)return;
+  if(e.key==="ArrowDown"){
+    e.preventDefault();S.searchIndex=Math.min(results.length-1,S.searchIndex+1);results[S.searchIndex].focus();return
+  }
+  if(e.key==="ArrowUp"){
+    e.preventDefault();if(S.searchIndex<=0){S.searchIndex=-1;q("#globalSearch").focus()}else{S.searchIndex--;results[S.searchIndex].focus()}
+  }
+}
 function esc(v){return String(v==null?"":v).replace(/[&<>"']/g,function(c){return({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"})[c]})}
 function token(){return localStorage.getItem("netweather_token")||""}
 function auth(){return token()?{"Authorization":"Bearer "+token()}:{}}
@@ -255,7 +346,7 @@ function getCss(name){return getComputedStyle(document.documentElement).getPrope
 async function api(path,opt,secure){
   opt=opt||{};
   if(secure&&S.authRequired&&!S.owner&&!token()){
-    var dlg=q("#tokenDialog");if(dlg)dlg.showModal();
+    var dlg=q("#tokenDialog");if(dlg)openDialog(dlg,"#tokenInput");
     throw new Error("Войдите в режим владельца");
   }
   var headers={"Content-Type":"application/json"};
@@ -570,12 +661,20 @@ function renderFaultPanel(){
 }
 
 function renderSearch(value){
-  var el=q("#searchResults");if(!el)return;var v=(value||"").trim().toLowerCase();
-  if(!v){el.classList.add("hidden");el.innerHTML="";return}
+  var el=q("#searchResults"),input=q("#globalSearch");if(!el||!input)return;var v=(value||"").trim().toLowerCase();
+  S.searchIndex=-1;
+  if(!v){hideSearch();el.innerHTML="";return}
   var rows=(S.dashboard&&S.dashboard.resources||[]).filter(function(r){return r.name.toLowerCase().indexOf(v)>=0||r.target.toLowerCase().indexOf(v)>=0||String(r.resolved_ip||"").indexOf(v)>=0}).slice(0,8);
-  el.innerHTML=rows.length?rows.map(function(r){return '<button class="search-result" data-search-id="'+r.id+'"><div><b>'+esc(r.name)+'</b><span>'+esc(r.target)+'</span></div><em>'+diagText(r.diagnosis)+'</em></button>'}).join(""):empty("Ничего не найдено","");
-  el.classList.remove("hidden");
-  qa("[data-search-id]").forEach(function(b){b.onclick=function(){el.classList.add("hidden");openDetail(Number(b.dataset.searchId))}})
+  el.innerHTML=rows.length?rows.map(function(r,i){return '<button class="search-result" role="option" id="search-result-'+i+'" data-search-id="'+r.id+'"><div><b>'+esc(r.name)+'</b><span>'+esc(r.target)+'</span></div><em>'+diagText(r.diagnosis)+'</em></button>'}).join(""):empty("Ничего не найдено","");
+  el.classList.remove("hidden");input.setAttribute("aria-expanded","true");
+  qa("[data-search-id]").forEach(function(b,index){
+    b.onclick=function(){hideSearch();input.value="";openDetail(Number(b.dataset.searchId))};
+    b.onkeydown=function(e){
+      if(e.key==="ArrowDown"){e.preventDefault();var next=qa("#searchResults [data-search-id]")[index+1];if(next)next.focus()}
+      if(e.key==="ArrowUp"){e.preventDefault();var prev=qa("#searchResults [data-search-id]")[index-1];if(prev)prev.focus();else input.focus()}
+      if(e.key==="Escape"){e.preventDefault();hideSearch();input.focus()}
+    }
+  })
 }
 
 function groupStats(key){
@@ -594,16 +693,21 @@ function renderGroups(){
 }
 
 function openGroupForm(g){
-  q("#groupForm").reset();q("#groupKey").value=g?g.id:"";q("#groupDialogTitle").textContent=g?"Изменить группу":"Новая группа";q("#groupTitle").value=g?g.title:"";q("#groupColor").value=g&&g.color?g.color:"#3A8DFF";q("#groupDialog").showModal()
+  q("#groupForm").reset();q("#groupKey").value=g?g.id:"";q("#groupDialogTitle").textContent=g?"Изменить группу":"Новая группа";q("#groupTitle").value=g?g.title:"";q("#groupColor").value=g&&g.color?g.color:"#3A8DFF";openDialog(q("#groupDialog"),"#groupTitle")
 }
 async function saveGroup(e){
-  e.preventDefault();var key=q("#groupKey").value,title=q("#groupTitle").value.trim(),color=q("#groupColor").value;
-  if(!title){toast("Введите название группы");return}
-  try{if(key)await api("/api/groups/"+encodeURIComponent(key),{method:"PATCH",body:JSON.stringify({title:title,color:color})},true);else await api("/api/groups",{method:"POST",body:JSON.stringify({title:title,color:color})},true);q("#groupDialog").close();await loadAll(true);toast(key?"Группа обновлена":"Группа создана")}catch(err){toast(err.message)}
+  e.preventDefault();var key=q("#groupKey").value,title=q("#groupTitle").value.trim(),color=q("#groupColor").value,button=e.submitter||q("#groupForm [type=submit]");
+  if(!title){toast("Введите название группы");q("#groupTitle").focus();return}
+  try{await withBusy(button,"Сохраняем…",async function(){
+    if(key)await api("/api/groups/"+encodeURIComponent(key),{method:"PATCH",body:JSON.stringify({title:title,color:color})},true);
+    else await api("/api/groups",{method:"POST",body:JSON.stringify({title:title,color:color})},true);
+    q("#groupDialog").close();await loadAll(true);toast(key?"Группа обновлена":"Группа создана")
+  })}catch(err){toast(err.message)}
 }
 async function deleteGroup(key){
   var g=S.groups.find(function(x){return x.id===key});if(!g)return;
-  if(!confirm("Удалить группу «"+g.title+"»? Ресурсы будут перенесены в «Пользовательские»."))return;
+  var ok=await confirmAction({title:"Удалить группу?",message:"«"+g.title+"» будет удалена.",hint:"Ресурсы группы будут перенесены в «Пользовательские».",accept:"Удалить группу"});
+  if(!ok)return;
   try{await api("/api/groups/"+encodeURIComponent(key),{method:"DELETE"},true);await loadAll(true);toast("Группа удалена")}catch(err){toast(err.message)}
 }
 
@@ -635,7 +739,8 @@ async function acknowledgeIncident(id){
   try{await api("/api/incidents/"+id+"/ack",{method:"POST"},true);await loadAll(true);toast("Инцидент отмечен прочитанным")}catch(e){toast(e.message)}
 }
 async function acknowledgeAllIncidents(){
-  try{var r=await api("/api/incidents/ack-all",{method:"POST"},true);await loadAll(true);toast("Отмечено прочитанными: "+r.acknowledged)}catch(e){toast(e.message)}
+  var button=q("#ackAllIncidents");
+  try{await withBusy(button,"Отмечаем…",async function(){var r=await api("/api/incidents/ack-all",{method:"POST"},true);await loadAll(true);toast("Отмечено прочитанными: "+r.acknowledged)})}catch(e){toast(e.message)}
 }
 function bindIncidentActions(){
   qa("[data-ack]").forEach(function(b){b.onclick=function(e){e.stopPropagation();acknowledgeIncident(Number(b.dataset.ack))}})
@@ -769,7 +874,7 @@ async function openResourceCatalog(){
   q("#catalogSearch").value="";q("#customResourceTarget").value="";q("#customResourceName").value="";q("#customResourceName").dataset.autoSuggested="1";
   q("#customCatalogMatch").className="custom-match hidden";q("#customCatalogMatch").innerHTML="";
   fillCustomGroupOptions();q("#resourceCatalogGroups").innerHTML='<div class="catalog-loading">Загружаем каталог…</div>';
-  q("#resourceDialog").showModal();
+  openDialog(q("#resourceDialog"),"#catalogSearch");
   try{await loadResourceCatalog(true);renderCatalog("")}catch(e){q("#resourceCatalogGroups").innerHTML=empty("Каталог не загружен",e.message);toast(e.message)}
   updateCatalogSelection()
 }
@@ -838,17 +943,21 @@ function openResourceForm(r){
   q("#resourceName").value=r.name;q("#resourceName").dataset.autoSuggested="0";q("#resourceTarget").value=r.target;q("#resourceGroup").value=r.group_name;
   q("#resourceInterval").value=String(r.interval_seconds||60);q("#statusMin").value=r.expected_status_min||200;q("#statusMax").value=r.expected_status_max||399;
   q("#slowThreshold").value=r.slow_threshold_ms||1500;q("#failureThreshold").value=r.failure_threshold||2;q("#resourceEnabled").checked=!!r.enabled;q("#alertsEnabled").checked=!!r.alerts_enabled;
-  syncResourceIdentity(false);q("#resourceEditDialog").showModal()
+  syncResourceIdentity(false);openDialog(q("#resourceEditDialog"),"#resourceName")
 }
 async function saveResource(e){
-  e.preventDefault();var id=q("#resourceId").value,p=formPayload();if(!id||!p.name||!p.target){toast("Заполните название и адрес");return}
-  try{await api("/api/resources/"+id,{method:"PATCH",body:JSON.stringify(p)},true);q("#resourceEditDialog").close();S.catalog=null;await loadAll(true);toast("Ресурс обновлён")}catch(err){toast(err.message)}
+  e.preventDefault();var id=q("#resourceId").value,p=formPayload(),button=e.submitter||q("#resourceForm [type=submit]");
+  if(!id||!p.name||!p.target){toast("Заполните название и адрес");return}
+  try{await withBusy(button,"Сохраняем…",async function(){
+    await api("/api/resources/"+id,{method:"PATCH",body:JSON.stringify(p)},true);
+    q("#resourceEditDialog").close();S.catalog=null;await loadAll(true);toast("Ресурс обновлён")
+  })}catch(err){toast(err.message)}
 }
 
 async function openDetail(id){
-  try{var d=await api("/api/resources/"+id),r=d.resource;S.detailId=id;q("#detailTitle").textContent=r.name;q("#detailBody").innerHTML='<div class="detail-top"><div class="detail-kv"><span>Вывод</span><b>'+diagText(r.diagnosis)+'</b></div><div class="detail-kv"><span>VPS</span><b>'+stText(r.external&&r.external.status)+'</b></div><div class="detail-kv"><span>РФ</span><b>'+stText(r.domestic&&r.domestic.status)+'</b></div><div class="detail-kv"><span>Отклик</span><b>'+num((r.domestic||r.external||{}).response_time_ms," мс")+'</b></div></div><div class="detail-section"><h3>'+esc(r.target)+'</h3><div class="detail-kv"><span>Пояснение</span><b>'+esc(r.diagnosis_text||"—")+'</b></div></div><div class="detail-section"><h3>Последние проверки</h3><div class="check-list">'+(d.checks.length?d.checks.map(function(c){return '<div class="check-row"><div>'+fmt(c.checked_at)+'</div><div>'+esc(c.probe_scope||"")+' · '+stText(c.status)+'</div><div>'+esc(c.message||"")+'</div><div>'+c.response_time_ms+' мс</div></div>'}).join(""):empty("Проверок нет",""))+'</div></div>';q("#detailDialog").showModal()}catch(e){toast(e.message)}
+  try{var d=await api("/api/resources/"+id),r=d.resource;S.detailId=id;q("#detailTitle").textContent=r.name;q("#detailBody").innerHTML='<div class="detail-top"><div class="detail-kv"><span>Вывод</span><b>'+diagText(r.diagnosis)+'</b></div><div class="detail-kv"><span>VPS</span><b>'+stText(r.external&&r.external.status)+'</b></div><div class="detail-kv"><span>РФ</span><b>'+stText(r.domestic&&r.domestic.status)+'</b></div><div class="detail-kv"><span>Отклик</span><b>'+num((r.domestic||r.external||{}).response_time_ms," мс")+'</b></div></div><div class="detail-section"><h3>'+esc(r.target)+'</h3><div class="detail-kv"><span>Пояснение</span><b>'+esc(r.diagnosis_text||"—")+'</b></div></div><div class="detail-section"><h3>Последние проверки</h3><div class="check-list">'+(d.checks.length?d.checks.map(function(c){return '<div class="check-row"><div>'+fmt(c.checked_at)+'</div><div>'+esc(c.probe_scope||"")+' · '+stText(c.status)+'</div><div>'+esc(c.message||"")+'</div><div>'+c.response_time_ms+' мс</div></div>'}).join(""):empty("Проверок нет",""))+'</div></div>';openDialog(q("#detailDialog"),"#detailCheck")}catch(e){toast(e.message)}
 }
-async function deleteResource(){var r=resourceById(S.detailId);if(!r)return;if(!confirm("Удалить ресурс «"+r.name+"» и его историю?"))return;try{await api("/api/resources/"+r.id,{method:"DELETE"},true);q("#detailDialog").close();await loadAll(true);toast("Ресурс удалён")}catch(e){toast(e.message)}}
+async function deleteResource(){var r=resourceById(S.detailId);if(!r)return;var ok=await confirmAction({title:"Удалить ресурс?",message:"«"+r.name+"» будет удалён из мониторинга.",hint:"История проверок этого ресурса также будет удалена.",accept:"Удалить ресурс"});if(!ok)return;try{await withBusy(q("#deleteResource"),"Удаляем…",async function(){await api("/api/resources/"+r.id,{method:"DELETE"},true);q("#detailDialog").close();await loadAll(true);toast("Ресурс удалён")})}catch(e){toast(e.message)}}
 
 function appIconMarkup(name){
   var icons={
@@ -880,15 +989,24 @@ function hydrateChromeIcons(){
 
 function setup(){
   hydrateChromeIcons();
+  setupDialogs();
+  var shortcut=q(".search-wrap kbd");if(shortcut)shortcut.textContent=/Mac|iPhone|iPad/.test(navigator.platform)?"⌘ K":"Ctrl K";
   updateClock();setInterval(updateClock,1000);
   qa(".side-item[data-view]").forEach(function(b){b.onclick=function(){openView(b.dataset.view)}});
   qa("[data-view-jump]").forEach(function(b){b.onclick=function(){openView(b.dataset.viewJump)}});
   q("#globalSearch").oninput=function(){renderSearch(this.value)};
+  q("#globalSearch").addEventListener("keydown",handleSearchKeydown);
   var identityTimer=null;
   q("#resourceTarget").addEventListener("input",function(){clearTimeout(identityTimer);identityTimer=setTimeout(function(){syncResourceIdentity(false)},180)});
   q("#resourceName").addEventListener("input",function(){this.dataset.autoSuggested="0"});
-  document.addEventListener("keydown",function(e){if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){e.preventDefault();q("#globalSearch").focus()}});
-  document.addEventListener("click",function(e){if(!e.target.closest(".search-wrap"))q("#searchResults").classList.add("hidden")});
+  document.addEventListener("keydown",function(e){
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){e.preventDefault();var input=q("#globalSearch");input.focus();input.select();return}
+    if(e.key==="Escape"){
+      var search=q("#searchResults");if(search&&!search.classList.contains("hidden")){hideSearch();return}
+      var expanded=q(".streams-panel.chart-expanded");if(expanded){expanded.classList.remove("chart-expanded")}
+    }
+  });
+  document.addEventListener("click",function(e){if(!e.target.closest(".search-wrap"))hideSearch()});
   q("#themeToggle").onclick=function(){var light=document.documentElement.dataset.theme==="light";document.documentElement.dataset.theme=light?"dark":"light";localStorage.setItem("netweather_theme",light?"dark":"light");renderAll()};
   document.documentElement.dataset.theme=localStorage.getItem("netweather_theme")||"dark";
   q("#openAlerts").onclick=function(){openView("alerts")};
@@ -905,7 +1023,7 @@ function setup(){
   q("#customResourceTarget").oninput=function(){clearTimeout(customTimer);customTimer=setTimeout(inspectCustomResource,260);updateCatalogSelection()};
   q("#customResourceName").oninput=function(){this.dataset.autoSuggested="0"};
   q("#resourceForm").onsubmit=saveResource;q("#groupForm").onsubmit=saveGroup;q("#openAddGroup").onclick=function(){openGroupForm(null)};
-  qa(".modal-close").forEach(function(b){b.onclick=function(){b.closest("dialog").close()}});
+  qa(".modal-close").forEach(function(b){b.onclick=function(){closeDialog(b.closest("dialog"))}});
   q("#openToken2").onclick=function(){toast("Development mode: авторизация отключена")};
   q("#tokenForm").onsubmit=function(e){e.preventDefault();q("#tokenDialog").close()};
   q("#clearToken").onclick=function(){q("#tokenDialog").close()};
@@ -920,7 +1038,7 @@ function setup(){
   q("#diagResource").onchange=function(){S.diagId=Number(this.value);var r=resourceById(this.value);if(r)showDiagnostic(r)};
   q("#diagCheck").onclick=function(){var id=Number(q("#diagResource").value);if(id)manualCheck(id)};q("#diagTrace").onclick=function(){var id=Number(q("#diagResource").value);if(id)trace(id,false)};q("#diagTraceDomestic").onclick=function(){var id=Number(q("#diagResource").value);if(id)trace(id,true)};
   q("#historyRange").onchange=function(){loadAll(true)};
-  q("#enableNotifications").onclick=async function(){if(!("Notification" in window)){toast("Браузер не поддерживает уведомления");return}var p=await Notification.requestPermission();renderNotifications();toast(p==="granted"?"Уведомления включены":"Разрешение не выдано")};
+  q("#enableNotifications").onclick=async function(){var button=this;if(!("Notification" in window)){toast("Браузер не поддерживает уведомления");return}await withBusy(button,"Запрашиваем…",async function(){var p=await Notification.requestPermission();renderNotifications();toast(p==="granted"?"Уведомления включены":"Разрешение не выдано")})};
   q("#deleteResource").onclick=deleteResource;q("#editResource").onclick=function(){var r=resourceById(S.detailId);q("#detailDialog").close();if(r)openResourceForm(r)};q("#detailCheck").onclick=function(){q("#detailDialog").close();manualCheck(S.detailId)};q("#detailTrace").onclick=function(){q("#detailDialog").close();trace(S.detailId,false)};
   window.addEventListener("resize",function(){renderRealtime();renderHistory();renderResourceCards();renderOverviewTable();applyDashboardPreferences()});
   loadAll(false);S.poll=setInterval(function(){loadAll(true)},15000)
