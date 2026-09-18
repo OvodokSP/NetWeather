@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .config import (
-    AGENT_TOKEN, ALERT_WEBHOOK_URL, ALLOW_PRIVATE_TARGETS, API_TOKEN, APP_VERSION, DEFAULT_INTERVAL,
+    AGENT_TOKEN, ALERT_WEBHOOK_URL, ALLOW_PRIVATE_TARGETS, API_TOKEN, APP_VERSION, AUTH_REQUIRED, DEFAULT_INTERVAL,
     FRONTEND_DIR, KNOWN_GROUPS, ResourceCreate, ResourcePatch, AgentResult, GroupCreate, GroupPatch,
     OwnerLogin, SCHEDULER_ENABLED, SESSION_MAX_AGE, STARTED_AT, UI_PASSWORD,
     normalize_group, normalize_target,
@@ -51,6 +51,8 @@ def _is_owner(request: Request, authorization: str | None) -> bool:
 
 
 def require_token(request: Request, authorization: str | None = Header(default=None)) -> None:
+    if not AUTH_REQUIRED:
+        return
     if not _owner_secret():
         raise HTTPException(503, "Owner authentication is not configured")
     if not _is_owner(request, authorization):
@@ -132,7 +134,8 @@ def system_info():
     return {"version":APP_VERSION,"started_at":STARTED_AT,"uptime_seconds":int(time.time())-STARTED_AT,"resources":resources,
       "checks":checks,"active_incidents":incidents,"database":"ok","traceroute_available":traceroute_available,
       "webhook_configured":bool(ALERT_WEBHOOK_URL),"private_targets_allowed":ALLOW_PRIVATE_TARGETS,
-      "default_interval_seconds":DEFAULT_INTERVAL,"scheduler_enabled":SCHEDULER_ENABLED}
+      "default_interval_seconds":DEFAULT_INTERVAL,"scheduler_enabled":SCHEDULER_ENABLED,
+      "auth_required":AUTH_REQUIRED}
 
 
 @app.get("/api/auth/verify", dependencies=[Depends(require_token)])
@@ -142,11 +145,17 @@ def verify_token():
 
 @app.get("/api/session")
 def session_status(request: Request, authorization: str | None = Header(default=None)):
-    return {"authenticated": _is_owner(request, authorization), "password_configured": bool(_owner_secret())}
+    return {
+        "authenticated": True if not AUTH_REQUIRED else _is_owner(request, authorization),
+        "auth_required": AUTH_REQUIRED,
+        "password_configured": bool(_owner_secret()),
+    }
 
 
 @app.post("/api/session/login")
 def session_login(payload: OwnerLogin, response: Response):
+    if not AUTH_REQUIRED:
+        return {"ok":True,"open_access":True,"expires_in":0}
     secret = _owner_secret()
     if not secret:
         raise HTTPException(503, "Owner authentication is not configured")
