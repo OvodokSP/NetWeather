@@ -6,7 +6,7 @@ var S={
   dashboard:null,incidents:[],system:null,groups:[],realtime:null,events:[],
   historyExt:[],historyDom:[],streamMinutes:60,detailId:null,diagId:null,
   faultId:null,view:"overview",poll:null,streamMeta:null,authRequired:false,
-  owner:true,mapScale:1,metaCache:{}
+  owner:true,mapScale:1,metaCache:{},catalog:null,catalogSelected:{},customCatalogMatch:null
 };
 
 function q(s){return document.querySelector(s)}
@@ -578,9 +578,132 @@ async function traceDomestic(id){
   try{q("#traceOutput").innerHTML=empty("Traceroute РФ","Задание отправлено probe…");var job=await api("/api/resources/"+id+"/trace-domestic?probe_key="+encodeURIComponent(p.probe_key),{method:"POST"},true);openView("diagnostics");for(var i=0;i<30;i++){await new Promise(function(resolve){setTimeout(resolve,1000)});var state=await api("/api/trace-tasks/"+job.task_id);if(state.status==="DONE"){q("#traceMeta").textContent=p.name+" · российский контур";q("#traceOutput").innerHTML='<pre class="trace-raw">'+esc(state.result_text||"Нет вывода")+'</pre>';return}}throw new Error("Probe не вернул traceroute за 30 секунд")}catch(e){q("#traceOutput").innerHTML=empty("Traceroute РФ не выполнен",e.message);toast(e.message)}
 }
 
+function catalogItemByKey(key){
+  if(!S.catalog)return null;
+  for(var gi=0;gi<S.catalog.groups.length;gi++){
+    var items=S.catalog.groups[gi].items||[];
+    for(var ii=0;ii<items.length;ii++)if(items[ii].key===key)return items[ii]
+  }
+  return null
+}
+async function loadResourceCatalog(force){
+  if(S.catalog&&!force)return S.catalog;
+  S.catalog=await api("/api/resource-catalog");
+  return S.catalog
+}
+function renderCatalog(filter){
+  var el=q("#resourceCatalogGroups");if(!el||!S.catalog)return;
+  var needle=String(filter||"").trim().toLowerCase();
+  var html=S.catalog.groups.map(function(group,groupIndex){
+    var items=(group.items||[]).filter(function(item){
+      if(!needle)return true;
+      return item.name.toLowerCase().indexOf(needle)>=0||item.target.toLowerCase().indexOf(needle)>=0||group.title.toLowerCase().indexOf(needle)>=0
+    });
+    if(!items.length)return "";
+    var available=items.filter(function(item){return !item.already_added}).length;
+    var open=needle||groupIndex===0?" open":"";
+    return '<details class="catalog-group" data-catalog-group="'+esc(group.key)+'"'+open+'><summary><div class="catalog-group-title"><i style="background:'+esc(group.color||"#55C7FF")+'"></i><div><b>'+esc(group.title)+'</b><span>'+items.length+' ресурсов · '+available+' можно добавить</span></div></div><div class="catalog-group-meta"><span>'+esc(group.source||"")+'</span><small>'+esc(group.as_of||"")+'</small><strong>⌄</strong></div></summary><div class="catalog-group-description">'+esc(group.description||"")+'</div><div class="catalog-resource-list">'+items.map(function(item){
+      var checked=!!S.catalogSelected[item.key],disabled=!!item.already_added;
+      return '<label class="catalog-resource-row '+(disabled?"already-added":"")+'" data-catalog-row="'+esc(item.key)+'"><input type="checkbox" data-catalog-check="'+esc(item.key)+'" '+(checked?"checked ":"")+(disabled?"disabled ":"")+'><span class="catalog-checkmark"></span>'+resourceIconHtml(item.target,item.name)+'<span class="catalog-resource-main"><b><em>#'+item.rank+'</em>'+esc(item.name)+'</b><small>'+esc(item.target.replace(/^https?:\/\//,""))+'</small></span>'+(disabled?'<span class="catalog-added-badge">Уже добавлен</span>':'<span class="catalog-add-hint">Добавить</span>')+'</label>'
+    }).join("")+'</div></details>'
+  }).join("");
+  el.innerHTML=html||empty("Ничего не найдено","Измените запрос.");
+  qa("[data-catalog-check]").forEach(function(box){box.onchange=function(){if(box.checked)S.catalogSelected[box.dataset.catalogCheck]=true;else delete S.catalogSelected[box.dataset.catalogCheck];updateCatalogSelection()}});
+  hydrateResourceIcons();
+  updateCatalogSelection()
+}
+function updateCatalogSelection(){
+  var keys=Object.keys(S.catalogSelected),count=keys.length;
+  q("#catalogSelectedCount").textContent=count;
+  var custom=String(q("#customResourceTarget").value||"").trim();
+  var customPart=custom?(S.customCatalogMatch?" · свой адрес совпал с каталогом":" · + свой ресурс"):"";
+  q("#catalogSelectionSummary").textContent=count?(count+" "+(count===1?"ресурс выбран":count<5?"ресурса выбрано":"ресурсов выбрано")+customPart):(custom?"Будет добавлен свой ресурс":"Ничего не выбрано");
+  q("#addCatalogResources").disabled=!count&&!custom
+}
+function fillCustomGroupOptions(){
+  var sel=q("#customResourceGroup");if(!sel)return;
+  var groups=(S.groups||[]).slice().sort(function(a,b){return Number(a.sort_order||0)-Number(b.sort_order||0)});
+  sel.innerHTML=groups.map(function(g){return '<option value="'+esc(g.id)+'" '+(g.id==="CUSTOM"?"selected":"")+'>'+esc(g.title)+'</option>'}).join("")
+}
+async function openResourceCatalog(){
+  S.catalogSelected={};S.customCatalogMatch=null;
+  q("#catalogSearch").value="";q("#customResourceTarget").value="";q("#customResourceName").value="";q("#customResourceName").dataset.autoSuggested="1";
+  q("#customCatalogMatch").className="custom-match hidden";q("#customCatalogMatch").innerHTML="";
+  fillCustomGroupOptions();q("#resourceCatalogGroups").innerHTML='<div class="catalog-loading">Загружаем каталог…</div>';
+  q("#resourceDialog").showModal();
+  try{await loadResourceCatalog(true);renderCatalog("")}catch(e){q("#resourceCatalogGroups").innerHTML=empty("Каталог не загружен",e.message);toast(e.message)}
+  updateCatalogSelection()
+}
+async function inspectCustomResource(){
+  var input=q("#customResourceTarget"),raw=String(input.value||"").trim(),notice=q("#customCatalogMatch"),name=q("#customResourceName");
+  S.customCatalogMatch=null;
+  if(!raw){notice.className="custom-match hidden";notice.innerHTML="";updateCatalogSelection();return}
+  try{
+    var match=await api("/api/resource-catalog/match?target="+encodeURIComponent(raw));
+    if(input.value.trim()!==raw)return;
+    if(match.matched){
+      S.customCatalogMatch=match;
+      var item=match.resource;
+      name.value=item.name;name.dataset.autoSuggested="1";
+      notice.className="custom-match catalog-match-found";
+      notice.innerHTML='<div>'+resourceIconHtml(item.target,item.name)+'</div><div><b>Этот ресурс уже есть в каталоге</b><span>'+esc(item.name)+' · '+esc(groupTitle(item.group_key))+'</span><small>'+(match.already_added?"Он уже добавлен в мониторинг. Дубликат создан не будет.":"Будет использован каталоговый вариант вместо ручного.")+'</small></div>';
+      if(!match.already_added)S.catalogSelected[item.key]=true;
+      hydrateResourceIcons();renderCatalog(q("#catalogSearch").value);updateCatalogSelection();return
+    }
+    notice.className="custom-match custom-match-new";notice.innerHTML='<div class="custom-match-icon">+</div><div><b>Новый пользовательский ресурс</b><span>Совпадений в каталоге нет.</span><small>Название и логотип определяются автоматически.</small></div>';
+    var meta=await getTargetMetadata(raw);
+    if(input.value.trim()!==raw)return;
+    if((!name.value.trim()||name.dataset.autoSuggested==="1")&&meta.name){name.value=meta.name;name.dataset.autoSuggested="1"}
+  }catch(e){
+    notice.className="custom-match custom-match-error";notice.innerHTML='<div class="custom-match-icon">!</div><div><b>Не удалось проверить адрес</b><span>'+esc(e.message)+'</span></div>'
+  }
+  updateCatalogSelection()
+}
+async function submitResourceCatalog(e){
+  e.preventDefault();
+  var keys=Object.keys(S.catalogSelected),customTarget=q("#customResourceTarget").value.trim(),messages=[],added=0,existing=0;
+  q("#addCatalogResources").disabled=true;
+  try{
+    if(S.customCatalogMatch&&S.customCatalogMatch.matched&&!S.customCatalogMatch.already_added&&keys.indexOf(S.customCatalogMatch.resource.key)<0)keys.push(S.customCatalogMatch.resource.key);
+    if(keys.length){
+      var batch=await api("/api/resource-catalog/add",{method:"POST",body:JSON.stringify({resource_keys:keys})},true);
+      added+=batch.added.length;existing+=batch.existing.length
+    }
+    if(customTarget&&!S.customCatalogMatch){
+      var customName=q("#customResourceName").value.trim();
+      if(!customName){var meta=await getTargetMetadata(customTarget);customName=meta.name||targetMeta(customTarget).name||customTarget}
+      var custom=await api("/api/resources",{method:"POST",body:JSON.stringify({
+        name:customName,target:customTarget,group_name:q("#customResourceGroup").value||"CUSTOM",
+        interval_seconds:60,expected_status_min:200,expected_status_max:399,slow_threshold_ms:1500,failure_threshold:2,enabled:true,alerts_enabled:true
+      })},true);
+      if(custom.used_catalog){
+        var matchedName=custom.catalog_match&&custom.catalog_match.name||customName;
+        messages.push("«"+matchedName+"» найден в каталоге — использован каталоговый вариант");
+      }
+      if(custom.created)added++;else existing++
+    }else if(customTarget&&S.customCatalogMatch&&S.customCatalogMatch.already_added){
+      existing++;messages.push("«"+S.customCatalogMatch.resource.name+"» уже находится в мониторинге")
+    }
+    q("#resourceDialog").close();
+    S.catalog=null;await loadAll(true);
+    var parts=[];if(added)parts.push("добавлено: "+added);if(existing)parts.push("уже было: "+existing);
+    toast((parts.length?parts.join(" · "):"Изменений нет")+(messages.length?" · "+messages.join("; "):""))
+  }catch(err){toast(err.message);q("#addCatalogResources").disabled=false}
+}
+
 function formPayload(){return{name:q("#resourceName").value.trim(),target:q("#resourceTarget").value.trim(),group_name:q("#resourceGroup").value.trim()||"CUSTOM",interval_seconds:Number(q("#resourceInterval").value),expected_status_min:Number(q("#statusMin").value),expected_status_max:Number(q("#statusMax").value),slow_threshold_ms:Number(q("#slowThreshold").value),failure_threshold:Number(q("#failureThreshold").value),enabled:q("#resourceEnabled").checked,alerts_enabled:q("#alertsEnabled").checked}}
-function openResourceForm(r){q("#resourceForm").reset();q("#resourceId").value=r?r.id:"";q("#resourceDialogLabel").textContent=r?"РЕДАКТИРОВАНИЕ":"НОВАЯ ЦЕЛЬ";q("#resourceDialogTitle").textContent=r?"Изменить ресурс":"Добавить ресурс";q("#resourceName").value=r?r.name:"";q("#resourceName").dataset.autoSuggested=r?"0":"1";q("#resourceTarget").value=r?r.target:"";q("#resourceGroup").value=r?r.group_name:"CUSTOM";q("#resourceInterval").value=String(r?r.interval_seconds:60);q("#statusMin").value=r?r.expected_status_min:200;q("#statusMax").value=r?r.expected_status_max:399;q("#slowThreshold").value=r?r.slow_threshold_ms:1500;q("#failureThreshold").value=r?r.failure_threshold:2;q("#resourceEnabled").checked=r?!!r.enabled:true;q("#alertsEnabled").checked=r?!!r.alerts_enabled:true;syncResourceIdentity(false);q("#resourceDialog").showModal()}
-async function saveResource(e){e.preventDefault();var id=q("#resourceId").value,p=formPayload();if(!p.name||!p.target){toast("Заполните название и адрес");return}try{if(id)await api("/api/resources/"+id,{method:"PATCH",body:JSON.stringify(p)},true);else await api("/api/resources",{method:"POST",body:JSON.stringify(p)},true);q("#resourceDialog").close();await loadAll(true);toast(id?"Ресурс обновлён":"Ресурс добавлен")}catch(err){toast(err.message)}}
+function openResourceForm(r){
+  if(!r){openResourceCatalog();return}
+  q("#resourceForm").reset();q("#resourceId").value=r.id;q("#resourceDialogTitle").textContent="Изменить ресурс";
+  q("#resourceName").value=r.name;q("#resourceName").dataset.autoSuggested="0";q("#resourceTarget").value=r.target;q("#resourceGroup").value=r.group_name;
+  q("#resourceInterval").value=String(r.interval_seconds||60);q("#statusMin").value=r.expected_status_min||200;q("#statusMax").value=r.expected_status_max||399;
+  q("#slowThreshold").value=r.slow_threshold_ms||1500;q("#failureThreshold").value=r.failure_threshold||2;q("#resourceEnabled").checked=!!r.enabled;q("#alertsEnabled").checked=!!r.alerts_enabled;
+  syncResourceIdentity(false);q("#resourceEditDialog").showModal()
+}
+async function saveResource(e){
+  e.preventDefault();var id=q("#resourceId").value,p=formPayload();if(!id||!p.name||!p.target){toast("Заполните название и адрес");return}
+  try{await api("/api/resources/"+id,{method:"PATCH",body:JSON.stringify(p)},true);q("#resourceEditDialog").close();S.catalog=null;await loadAll(true);toast("Ресурс обновлён")}catch(err){toast(err.message)}
+}
 
 async function openDetail(id){
   try{var d=await api("/api/resources/"+id),r=d.resource;S.detailId=id;q("#detailTitle").textContent=r.name;q("#detailBody").innerHTML='<div class="detail-top"><div class="detail-kv"><span>Вывод</span><b>'+diagText(r.diagnosis)+'</b></div><div class="detail-kv"><span>VPS</span><b>'+stText(r.external&&r.external.status)+'</b></div><div class="detail-kv"><span>РФ</span><b>'+stText(r.domestic&&r.domestic.status)+'</b></div><div class="detail-kv"><span>Отклик</span><b>'+num((r.domestic||r.external||{}).response_time_ms," мс")+'</b></div></div><div class="detail-section"><h3>'+esc(r.target)+'</h3><div class="detail-kv"><span>Пояснение</span><b>'+esc(r.diagnosis_text||"—")+'</b></div></div><div class="detail-section"><h3>Последние проверки</h3><div class="check-list">'+(d.checks.length?d.checks.map(function(c){return '<div class="check-row"><div>'+fmt(c.checked_at)+'</div><div>'+esc(c.probe_scope||"")+' · '+stText(c.status)+'</div><div>'+esc(c.message||"")+'</div><div>'+c.response_time_ms+' мс</div></div>'}).join(""):empty("Проверок нет",""))+'</div></div>';q("#detailDialog").showModal()}catch(e){toast(e.message)}
@@ -632,7 +755,12 @@ function setup(){
   q("#ackAllIncidents").onclick=acknowledgeAllIncidents;
   q("#worldButton").onclick=function(){openView("map")};
   q("#manageGroups").onclick=function(){openView("groups")};
-  [q("#sidebarAddResource"),q("#openAddResource"),q("#overviewAddResource")].forEach(function(b){if(b)b.onclick=function(){openResourceForm(null)}});
+  [q("#sidebarAddResource"),q("#openAddResource"),q("#overviewAddResource")].forEach(function(b){if(b)b.onclick=openResourceCatalog});
+  q("#resourceCatalogForm").onsubmit=submitResourceCatalog;
+  q("#catalogSearch").oninput=function(){renderCatalog(this.value)};
+  var customTimer=null;
+  q("#customResourceTarget").oninput=function(){clearTimeout(customTimer);customTimer=setTimeout(inspectCustomResource,260);updateCatalogSelection()};
+  q("#customResourceName").oninput=function(){this.dataset.autoSuggested="0"};
   q("#resourceForm").onsubmit=saveResource;q("#groupForm").onsubmit=saveGroup;q("#openAddGroup").onclick=function(){openGroupForm(null)};
   qa(".modal-close").forEach(function(b){b.onclick=function(){b.closest("dialog").close()}});
   q("#openToken2").onclick=function(){toast("Development mode: авторизация отключена")};
