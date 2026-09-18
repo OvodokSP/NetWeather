@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from typing import Any
 
 from .config import AGENT_STALE_SECONDS, DB_PATH, DEFAULT_INTERVAL, DEFAULT_RESOURCES, SEED_DEFAULTS, SERVER_PROBE_KEY, SERVER_PROBE_NAME
+from .resource_catalog import catalog_match
 
 
 @contextmanager
@@ -81,6 +82,7 @@ def init_db() -> None:
             ("resources","alerts_enabled","INTEGER NOT NULL DEFAULT 1"),
             ("resources","last_success_at","INTEGER NOT NULL DEFAULT 0"),
             ("resources","last_failure_at","INTEGER NOT NULL DEFAULT 0"),
+            ("resources","catalog_key","TEXT"),
             ("checks","tls_days_left","INTEGER"),
             ("checks","final_url","TEXT"),
             ("checks","location","TEXT"),
@@ -88,6 +90,18 @@ def init_db() -> None:
             ("checks","probe_scope","TEXT NOT NULL DEFAULT 'EXTERNAL'"),
         ]:
             _ensure_column(conn, table, name, ddl)
+        conn.execute("""CREATE UNIQUE INDEX IF NOT EXISTS idx_resources_catalog_key
+          ON resources(catalog_key) WHERE catalog_key IS NOT NULL AND catalog_key <> ''""")
+        # Backfill catalog identity for existing resources when the target uniquely matches the curated catalog.
+        for row in conn.execute("SELECT id,target,catalog_key FROM resources").fetchall():
+            if row["catalog_key"]:
+                continue
+            match = catalog_match(row["target"])
+            if match:
+                try:
+                    conn.execute("UPDATE resources SET catalog_key=? WHERE id=?", (match.key, row["id"]))
+                except sqlite3.IntegrityError:
+                    pass
         now = int(time.time())
         default_groups = [
             ("RUSSIAN","Российские","#35D89A",10),
