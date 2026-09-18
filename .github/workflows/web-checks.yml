@@ -23,4 +23,5 @@ jobs:
       - run: python -m py_compile web/backend/app/*.py
       - run: node --check web/frontend/assets/v2.js
       - run: bash -n web/deploy/smoke-test.sh
+      - run: bash -n web/deploy/keenetic/netweather-probe.sh
       - run: PYTHONPATH=web/backend python -m unittest discover -s web/backend/tests -v
