@@ -778,3 +778,47 @@ dialog.modal[open]{
     transition-duration:.01ms!important;
   }
 }
+
+
+/* 0.3.10 — stale data and live map states */
+body.core-offline #topSystemStatus{
+  border-color:rgba(255,97,116,.55);
+  box-shadow:0 0 0 1px rgba(255,97,116,.08),0 0 22px rgba(255,97,116,.08);
+}
+body.core-offline .overview-view .kpi-card,
+body.core-offline .overview-view .resource-card,
+body.core-offline .overview-view .resources-panel,
+body.core-offline .overview-view .streams-panel{
+  border-style:dashed;
+}
+body.core-offline .overview-view .kpi-card::after{
+  content:"данные могут быть устаревшими";
+  position:absolute;
+  right:8px;
+  bottom:5px;
+  font-size:10px;
+  color:var(--red);
+  opacity:.72;
+  pointer-events:none;
+}
+.kpi-card{position:relative}
+.map-point{
+  cursor:default;
+  stroke:rgba(255,255,255,.7);
+  stroke-width:1.2;
+  vector-effect:non-scaling-stroke;
+}
+.map-point:focus-visible{
+  outline:none;
+  stroke:#fff;
+  stroke-width:3;
+  filter:drop-shadow(0 0 5px rgba(88,199,255,.9));
+}
+.row-more{
+  cursor:pointer;
+  border-radius:5px;
+}
+.row-more:hover,.row-more:focus-visible{
+  color:var(--blue);
+  background:rgba(88,199,255,.08);
+}
