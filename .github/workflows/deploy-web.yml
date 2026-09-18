@@ -1,0 +1,185 @@
+name: Deploy NetWeather Web
+
+on:
+  push:
+    branches:
+      - feature/web-vps-monitoring
+    paths:
+      - "web/**"
+      - ".github/workflows/deploy-web.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: netweather-web-production
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install backend dependencies
+        run: pip install -r web/backend/requirements.txt
+
+      - name: Compile backend
+        run: python -m py_compile web/backend/app/*.py
+
+      - name: Validate frontend JavaScript
+        run: node --check web/frontend/assets/dashboard.js
+
+      - name: Validate deployment scripts
+        run: |
+          bash -n web/deploy/smoke-test.sh
+          bash -n web/deploy/keenetic/netweather-probe.sh
+
+      - name: Run web tests
+        env:
+          PYTHONPATH: web/backend
+        run: python -m unittest discover -s web/backend/tests -v
+
+  deploy:
+    name: Deploy web to VPS
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: netweather-web
+    env:
+      VPS_HOST: ${{ secrets.NETWEATHER_VPS_HOST }}
+      VPS_USER: ${{ secrets.NETWEATHER_VPS_USER }}
+      VPS_PORT: ${{ secrets.NETWEATHER_VPS_PORT }}
+      VPS_SSH_KEY: ${{ secrets.NETWEATHER_VPS_SSH_KEY }}
+      VPS_KNOWN_HOSTS: ${{ secrets.NETWEATHER_VPS_KNOWN_HOSTS }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check deployment configuration
+        id: deploy_config
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${VPS_HOST}" || -z "${VPS_USER}" || -z "${VPS_SSH_KEY}" || -z "${VPS_KNOWN_HOSTS}" ]]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::NetWeather VPS deployment secrets are not configured yet; verify passed and deployment is skipped."
+            exit 0
+          fi
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare SSH
+        if: steps.deploy_config.outputs.configured == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "${VPS_SSH_KEY}" > ~/.ssh/netweather_deploy
+          chmod 600 ~/.ssh/netweather_deploy
+          printf '%s\n' "${VPS_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          if [[ -z "${VPS_PORT}" ]]; then echo "VPS_PORT=22" >> "$GITHUB_ENV"; fi
+
+      - name: Build deployment archive
+        if: steps.deploy_config.outputs.configured == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar --exclude='web/.env' --exclude='web/.env.*' -czf /tmp/netweather-web.tgz web
+          sha256sum /tmp/netweather-web.tgz
+
+      - name: Upload deployment archive
+        if: steps.deploy_config.outputs.configured == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          scp -P "${VPS_PORT:-22}" -i ~/.ssh/netweather_deploy             /tmp/netweather-web.tgz             "${VPS_USER}@${VPS_HOST}:/tmp/netweather-web-${GITHUB_SHA}.tgz"
+
+      - name: Deploy, verify and rollback on failure
+        if: steps.deploy_config.outputs.configured == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "${VPS_PORT:-22}" -i ~/.ssh/netweather_deploy "${VPS_USER}@${VPS_HOST}" \
+            "DEPLOY_SHA='${GITHUB_SHA}' bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+
+          APP="/opt/NetWeather/web"
+          DEPLOY_ROOT="/opt/NetWeather/.deploy"
+          ARCHIVE="/tmp/netweather-web-${DEPLOY_SHA}.tgz"
+          STAGE="${DEPLOY_ROOT}/stage-${DEPLOY_SHA}"
+          BACKUP="${DEPLOY_ROOT}/rollback-${DEPLOY_SHA}"
+          HEALTH="http://127.0.0.1:18081/api/health"
+
+          mkdir -p "${DEPLOY_ROOT}"
+          rm -rf "${STAGE}" "${BACKUP}"
+          mkdir -p "${STAGE}" "${BACKUP}"
+
+          rollback() {
+            rc=$?
+            echo "=== DEPLOY FAILED: rollback ==="
+            if [[ -d "${BACKUP}/web" ]]; then
+              find "${APP}" -mindepth 1 -maxdepth 1 ! -name '.env' -exec rm -rf {} +
+              cp -a "${BACKUP}/web/." "${APP}/"
+              cd "${APP}"
+              docker compose up -d --build || true
+            fi
+            rm -rf "${STAGE}"
+            rm -f "${ARCHIVE}"
+            exit "${rc}"
+          }
+          trap rollback ERR
+
+          echo "=== BACKUP CURRENT WEB ==="
+          cp -a "${APP}" "${BACKUP}/web"
+
+          echo "=== EXTRACT NEW WEB ==="
+          tar -xzf "${ARCHIVE}" -C "${STAGE}"
+          test -f "${STAGE}/web/docker-compose.yml"
+          test -f "${STAGE}/web/frontend/index.html"
+          test -f "${STAGE}/web/backend/app/main.py"
+
+          echo "=== PRESERVE SERVER ENV ==="
+          if [[ -f "${APP}/.env" ]]; then
+            cp -a "${APP}/.env" "${STAGE}/web/.env"
+          fi
+
+          echo "=== INSTALL WEB ONLY ==="
+          find "${APP}" -mindepth 1 -maxdepth 1 ! -name '.env' -exec rm -rf {} +
+          cp -a "${STAGE}/web/." "${APP}/"
+
+          echo "=== BUILD / START ==="
+          cd "${APP}"
+          docker compose up -d --build
+
+          echo "=== HEALTH ==="
+          ready=0
+          for _ in $(seq 1 30); do
+            if curl -fsS --max-time 5 "${HEALTH}" >/tmp/netweather-health.json; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          test "${ready}" = "1"
+          cat /tmp/netweather-health.json
+          echo
+
+          echo "=== SMOKE ==="
+          bash deploy/smoke-test.sh
+
+          echo "=== DEPLOY PASS ==="
+          docker compose ps
+
+          trap - ERR
+          rm -rf "${STAGE}" "${BACKUP}"
+          rm -f "${ARCHIVE}"
+          REMOTE
