@@ -14,3 +14,14 @@ Security boundary:
 - outbound access to the VPS host, private networks and VPN ranges is blocked by the dedicated nftables guard.
 
 Last deployment-channel verification trigger: 2026-09-18.
+
+
+## 0.3.10 production verification
+
+This marker intentionally triggers the guarded production pipeline after:
+- interaction-contract CI passed;
+- host isolation was verified;
+- forced-command SSH was verified;
+- deploy helper private-state temporary paths were installed on the VPS.
+
+Expected public health after deployment: `0.3.10-web`.
