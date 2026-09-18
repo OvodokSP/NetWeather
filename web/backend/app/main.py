@@ -292,10 +292,13 @@ def acknowledge_incident(incident_id:int):
 
 
 @app.get("/api/history")
-def history(hours:int=24):
+def history(hours:int=24, scope:str=Query(default="EXTERNAL")):
     hours=max(1,min(hours,720)); since=int(time.time())-hours*3600
+    scope=scope.upper()
+    if scope not in {"EXTERNAL","DOMESTIC"}:
+        raise HTTPException(400,"scope must be EXTERNAL or DOMESTIC")
     with db() as conn:
-        rows=conn.execute("SELECT resource_id,checked_at,status,response_time_ms FROM checks WHERE checked_at>=? ORDER BY checked_at ASC",(since,)).fetchall()
+        rows=conn.execute("SELECT resource_id,checked_at,status,response_time_ms FROM checks WHERE checked_at>=? AND probe_scope=? ORDER BY checked_at ASC",(since,scope)).fetchall()
     buckets={}; size=max(60,(hours*3600)//240)
     for row in rows:
         bucket=(row["checked_at"]//size)*size; data=buckets.setdefault(bucket,{"timestamp":bucket,"total":0,"ok":0,"latency_sum":0})
