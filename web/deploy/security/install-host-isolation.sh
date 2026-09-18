@@ -63,8 +63,8 @@ p.write_text(prefix+keys[0]+"\n")
 PY
 chown -R root:root "/home/${DEPLOY_USER}"
 chmod 0755 "/home/${DEPLOY_USER}"
-chmod 0700 "/home/${DEPLOY_USER}/.ssh"
-chmod 0600 "${AUTH}"
+chmod 0755 "/home/${DEPLOY_USER}/.ssh"
+chmod 0644 "${AUTH}"
 
 echo "=== CREATE DEDICATED DOCKER NETWORK / DATA VOLUME ==="
 if ! docker network inspect netweather-isolated >/dev/null 2>&1; then
