@@ -587,7 +587,36 @@ async function openDetail(id){
 }
 async function deleteResource(){var r=resourceById(S.detailId);if(!r)return;if(!confirm("Удалить ресурс «"+r.name+"» и его историю?"))return;try{await api("/api/resources/"+r.id,{method:"DELETE"},true);q("#detailDialog").close();await loadAll(true);toast("Ресурс удалён")}catch(e){toast(e.message)}}
 
+function appIconMarkup(name){
+  var icons={
+    overview:'<svg viewBox="0 0 24 24"><path d="M3 11.5L12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M9.5 20v-6h5v6"/></svg>',
+    resources:'<svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="11" rx="2"/><path d="M8 20h8M12 17v3"/></svg>',
+    alerts:'<svg viewBox="0 0 24 24"><path d="M12 3l9 16H3L12 3z"/><path d="M12 9v4M12 16.5h.01"/></svg>',
+    map:'<svg viewBox="0 0 24 24"><path d="M9 18l-5 2V6l5-2 6 2 5-2v14l-5 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>',
+    probes:'<svg viewBox="0 0 24 24"><circle cx="12" cy="11" r="3"/><path d="M19 11c0 5-7 10-7 10S5 16 5 11a7 7 0 0114 0z"/></svg>',
+    history:'<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>',
+    notifications:'<svg viewBox="0 0 24 24"><path d="M6 9a6 6 0 0112 0c0 7 3 7 3 7H3s3 0 3-7"/><path d="M10 20h4"/></svg>',
+    integrations:'<svg viewBox="0 0 24 24"><circle cx="7" cy="7" r="2"/><circle cx="17" cy="7" r="2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M9 7h6M7 9v6M17 9v6M9 17h6"/></svg>',
+    settings:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 13.5v-3l-2-.7-.8-1.9.9-1.9-2.1-2.1-1.9.9-1.9-.8L10.5 2h-3l-.7 2-1.9.8-1.9-.9L.9 6l.9 1.9L1 9.8l-2 .7v3l2 .7.8 1.9-.9 1.9L3 20.1l1.9-.9 1.9.8.7 2h3l.7-2 1.9-.8 1.9.9 2.1-2.1-.9-1.9.8-1.9z" transform="translate(2.5 0) scale(.79)"/></svg>',
+    bell:'<svg viewBox="0 0 24 24"><path d="M6 9a6 6 0 0112 0c0 7 3 7 3 7H3s3 0 3-7"/><path d="M10 20h4"/></svg>',
+    theme:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+    world:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 010 18M12 3a15 15 0 000 18"/></svg>',
+    expand:'<svg viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/><path d="M9 9L3 3M15 9l6-6M9 15l-6 6M15 15l6 6"/></svg>',
+    cloud:'<svg viewBox="0 0 32 32"><path d="M9 24h14a6 6 0 000-12h-.5A8 8 0 007 14.5 4.8 4.8 0 009 24z" fill="#0b2036"/><path d="M13 17h6l-2.1 3H20l-5 6 1.2-4H13z" fill="#0b2036"/></svg>'
+  };
+  return icons[name]||""
+}
+function hydrateChromeIcons(){
+  qa(".side-item[data-view]").forEach(function(b){var slot=b.querySelector(":scope > span");if(slot)slot.innerHTML=appIconMarkup(b.dataset.view)});
+  var brand=q(".brand-logo");if(brand)brand.innerHTML=appIconMarkup("cloud");
+  var alert=q("#openAlerts");if(alert)alert.insertAdjacentHTML("afterbegin",appIconMarkup("bell"));
+  var theme=q("#themeToggle");if(theme)theme.innerHTML=appIconMarkup("theme");
+  var world=q("#worldButton");if(world)world.innerHTML=appIconMarkup("world");
+  var expand=q("#expandChart");if(expand)expand.innerHTML=appIconMarkup("expand")
+}
+
 function setup(){
+  hydrateChromeIcons();
   updateClock();setInterval(updateClock,1000);
   qa(".side-item[data-view]").forEach(function(b){b.onclick=function(){openView(b.dataset.view)}});
   qa("[data-view-jump]").forEach(function(b){b.onclick=function(){openView(b.dataset.viewJump)}});
