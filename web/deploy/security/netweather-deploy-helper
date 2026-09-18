@@ -103,7 +103,12 @@ rollback() {
   echo "=== DEPLOY FAILED: ROLLBACK ===" >&2
   docker rm -f "${CONTAINER}" >/dev/null 2>&1 || true
   if [[ -n "${OLD_IMAGE}" ]]; then
-    run_locked "${OLD_IMAGE}" >/dev/null || true
+    OLD_USER="$(docker image inspect -f '{{.Config.User}}' "${OLD_IMAGE}" 2>/dev/null || true)"
+    if [[ "${OLD_USER}" == "10001:10001" ]]; then
+      run_locked "${OLD_IMAGE}" >/dev/null || true
+    else
+      echo "rollback image is legacy/root-oriented; refusing unsafe restart" >&2
+    fi
   fi
   exit "${rc}"
 }
