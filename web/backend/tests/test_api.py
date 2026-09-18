@@ -12,6 +12,7 @@ class NetWeatherApiTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         os.environ["NETWEATHER_DB"] = str(Path(self.tmp.name) / "test.db")
         os.environ["NETWEATHER_API_TOKEN"] = "test-token"
+        os.environ["NETWEATHER_UI_PASSWORD"] = "owner-pass"
         os.environ["NETWEATHER_AGENT_TOKEN"] = "agent-token"
         os.environ["NETWEATHER_SEED_DEFAULTS"] = "true"
         os.environ["NETWEATHER_SCHEDULER_ENABLED"] = "false"
@@ -26,7 +27,7 @@ class NetWeatherApiTest(unittest.TestCase):
         importlib.reload(incidents)
         importlib.reload(monitor)
         self.main = importlib.reload(main)
-        self.client_ctx = TestClient(self.main.app)
+        self.client_ctx = TestClient(self.main.app, base_url="https://testserver")
         self.client = self.client_ctx.__enter__()
         self.auth = {"Authorization": "Bearer test-token"}
 
@@ -45,6 +46,38 @@ class NetWeatherApiTest(unittest.TestCase):
         self.assertEqual(self.client.head("/").status_code, 200)
         self.assertEqual(self.client.get("/api/system").status_code, 200)
         self.assertEqual(self.client.get("/api/groups").status_code, 200)
+
+    def test_owner_session_and_group_crud(self):
+        status = self.client.get("/api/session")
+        self.assertEqual(status.status_code, 200)
+        self.assertFalse(status.json()["authenticated"])
+
+        bad = self.client.post("/api/session/login", json={"password":"wrong"})
+        self.assertEqual(bad.status_code, 401)
+
+        login = self.client.post("/api/session/login", json={"password":"owner-pass"})
+        self.assertEqual(login.status_code, 200)
+        self.assertTrue(self.client.get("/api/session").json()["authenticated"])
+
+        created = self.client.post("/api/groups", json={"title":"Рабочие сервисы","key":"WORK","color":"#3A8DFF"})
+        self.assertEqual(created.status_code, 200)
+        groups = self.client.get("/api/groups").json()
+        self.assertTrue(any(g["id"] == "WORK" and g["title"] == "Рабочие сервисы" for g in groups))
+
+        patched = self.client.patch("/api/groups/WORK", json={"title":"Работа","color":"#2ECC71"})
+        self.assertEqual(patched.status_code, 200)
+
+        resource = self.client.post("/api/resources", json={"name":"Work test","target":"https://example.com","group_name":"WORK"})
+        self.assertEqual(resource.status_code, 200)
+
+        deleted = self.client.delete("/api/groups/WORK")
+        self.assertEqual(deleted.status_code, 200)
+        detail = self.client.get("/api/resources/%d" % resource.json()["id"]).json()
+        self.assertEqual(detail["resource"]["group_name"], "CUSTOM")
+
+        logout = self.client.post("/api/session/logout")
+        self.assertEqual(logout.status_code, 200)
+        self.assertFalse(self.client.get("/api/session").json()["authenticated"])
 
     def test_realtime_and_event_feed(self):
         rt = self.client.get("/api/realtime?minutes=60&scope=EXTERNAL")
