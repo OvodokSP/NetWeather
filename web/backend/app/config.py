@@ -9,12 +9,13 @@ from urllib.parse import urlparse
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-APP_VERSION = "0.3.2-web"
+APP_VERSION = "0.3.3-web"
 STARTED_AT = int(time.time())
 DB_PATH = Path(os.getenv("NETWEATHER_DB", "/data/netweather.db"))
 API_TOKEN = os.getenv("NETWEATHER_API_TOKEN", "")
 UI_PASSWORD = os.getenv("NETWEATHER_UI_PASSWORD", "").strip()
 SESSION_MAX_AGE = int(os.getenv("NETWEATHER_SESSION_MAX_AGE", "2592000"))
+AUTH_REQUIRED = os.getenv("NETWEATHER_AUTH_REQUIRED", "false").lower() in {"1","true","yes","on"}
 ALLOW_PRIVATE_TARGETS = os.getenv("ALLOW_PRIVATE_TARGETS", "false").lower() == "true"
 DEFAULT_INTERVAL = int(os.getenv("DEFAULT_INTERVAL_SECONDS", "60"))
 REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "8"))
