@@ -57,8 +57,23 @@ class FrontendContractTest(unittest.TestCase):
             "customResourceName","customResourceGroup","customCatalogMatch","addCatalogResources","resourceEditDialog",
             "customizeOverview","dashboardPreferencesDialog","dashboardPreferencesForm","pinnedResourceGroups",
             "pinnedResourceCount","dashboardPanelChoices","resetDashboardPreferences",
+            "confirmDialog","confirmTitle","confirmMessage","confirmHint","confirmCancel","confirmAccept",
         ):
             self.assertIn(f'id="{item}"', self.html)
+
+    def test_interaction_contract(self):
+        for token in (
+            "function openDialog(", "function closeDialog(", "function setupDialogs(",
+            "function setBusy(", "function withBusy(", "function confirmAction(",
+            "function handleSearchKeydown(", "aria-busy", "dataset.locked",
+        ):
+            self.assertIn(token, self.js)
+        self.assertNotRegex(self.js, r'\bconfirm\(')
+        self.assertIn(':focus-visible', self.css)
+        self.assertIn('prefers-reduced-motion:reduce', self.css)
+        self.assertIn('.btn.is-busy', self.css)
+        self.assertIn('role="status" aria-live="polite"', self.html)
+        self.assertIn('aria-controls="searchResults"', self.html)
 
     def test_ranked_catalog_picker_contract(self):
         for token in (
