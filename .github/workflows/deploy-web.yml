@@ -42,17 +42,56 @@ jobs:
 
       - name: Validate deployment scripts
         run: |
+          set -euo pipefail
           bash -n web/deploy/smoke-test.sh
           bash -n web/deploy/keenetic/netweather-probe.sh
+          bash -n web/deploy/security/netweather-deploy-helper
+          bash -n web/deploy/security/netweather-ssh-gate
+          bash -n web/deploy/security/netweather-egress-guard
+          bash -n web/deploy/security/install-host-isolation.sh
 
       - name: Run web tests
         env:
           PYTHONPATH: web/backend
         run: python -m unittest discover -s web/backend/tests -v
 
-  deploy:
-    name: Deploy web to VPS
+  build:
+    name: Build isolated image
     needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build production image off-host
+        run: |
+          set -euo pipefail
+          docker build             --build-arg NETWEATHER_VCS_REF="$GITHUB_SHA"             --tag "netweather-web:$GITHUB_SHA"             web
+
+      - name: Assert image is non-root
+        run: |
+          set -euo pipefail
+          test "$(docker image inspect -f '{{.Config.User}}' "netweather-web:$GITHUB_SHA")" = "10001:10001"
+          test "$(docker image inspect -f '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "netweather-web:$GITHUB_SHA")" = "$GITHUB_SHA"
+
+      - name: Export immutable image archive
+        run: |
+          set -euo pipefail
+          docker save "netweather-web:$GITHUB_SHA" | gzip -9 > /tmp/netweather-web-image.tar.gz
+          test "$(stat -c %s /tmp/netweather-web-image.tar.gz)" -lt $((320 * 1024 * 1024))
+          sha256sum /tmp/netweather-web-image.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: netweather-web-image
+          path: /tmp/netweather-web-image.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  deploy:
+    name: Deploy isolated image to VPS
+    needs: build
+    if: vars.NETWEATHER_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment: netweather-web
     env:
@@ -62,124 +101,35 @@ jobs:
       VPS_SSH_KEY: ${{ secrets.NETWEATHER_VPS_SSH_KEY }}
       VPS_KNOWN_HOSTS: ${{ secrets.NETWEATHER_VPS_KNOWN_HOSTS }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: netweather-web-image
+          path: /tmp/netweather-artifact
 
-      - name: Check deployment configuration
-        id: deploy_config
+      - name: Validate deployment configuration
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -z "${VPS_HOST}" || -z "${VPS_USER}" || -z "${VPS_SSH_KEY}" || -z "${VPS_KNOWN_HOSTS}" ]]; then
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::NetWeather VPS deployment secrets are not configured yet; verify passed and deployment is skipped."
-            exit 0
-          fi
-          echo "configured=true" >> "$GITHUB_OUTPUT"
+          test -n "$VPS_HOST"
+          test -n "$VPS_USER"
+          test -n "$VPS_SSH_KEY"
+          test -n "$VPS_KNOWN_HOSTS"
+          if [[ -z "$VPS_PORT" ]]; then echo "VPS_PORT=22" >> "$GITHUB_ENV"; fi
 
-      - name: Prepare SSH
-        if: steps.deploy_config.outputs.configured == 'true'
+      - name: Prepare restricted SSH client
         shell: bash
         run: |
           set -euo pipefail
           install -d -m 700 ~/.ssh
-          printf '%s\n' "${VPS_SSH_KEY}" > ~/.ssh/netweather_deploy
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/netweather_deploy
           chmod 600 ~/.ssh/netweather_deploy
-          printf '%s\n' "${VPS_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
-          if [[ -z "${VPS_PORT}" ]]; then echo "VPS_PORT=22" >> "$GITHUB_ENV"; fi
 
-      - name: Build deployment archive
-        if: steps.deploy_config.outputs.configured == 'true'
+      - name: Stream image into forced-command deploy gate
         shell: bash
         run: |
           set -euo pipefail
-          tar --exclude='web/.env' --exclude='web/.env.*' -czf /tmp/netweather-web.tgz web
-          sha256sum /tmp/netweather-web.tgz
-
-      - name: Upload deployment archive
-        if: steps.deploy_config.outputs.configured == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          scp -P "${VPS_PORT:-22}" -i ~/.ssh/netweather_deploy             /tmp/netweather-web.tgz             "${VPS_USER}@${VPS_HOST}:/tmp/netweather-web-${GITHUB_SHA}.tgz"
-
-      - name: Deploy, verify and rollback on failure
-        if: steps.deploy_config.outputs.configured == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          ssh -p "${VPS_PORT:-22}" -i ~/.ssh/netweather_deploy "${VPS_USER}@${VPS_HOST}" \
-            "DEPLOY_SHA='${GITHUB_SHA}' bash -s" <<'REMOTE'
-          set -Eeuo pipefail
-
-          APP="/opt/NetWeather/web"
-          DEPLOY_ROOT="/opt/NetWeather/.deploy"
-          ARCHIVE="/tmp/netweather-web-${DEPLOY_SHA}.tgz"
-          STAGE="${DEPLOY_ROOT}/stage-${DEPLOY_SHA}"
-          BACKUP="${DEPLOY_ROOT}/rollback-${DEPLOY_SHA}"
-          HEALTH="http://127.0.0.1:18081/api/health"
-
-          mkdir -p "${DEPLOY_ROOT}"
-          rm -rf "${STAGE}" "${BACKUP}"
-          mkdir -p "${STAGE}" "${BACKUP}"
-
-          rollback() {
-            rc=$?
-            echo "=== DEPLOY FAILED: rollback ==="
-            if [[ -d "${BACKUP}/web" ]]; then
-              find "${APP}" -mindepth 1 -maxdepth 1 ! -name '.env' -exec rm -rf {} +
-              cp -a "${BACKUP}/web/." "${APP}/"
-              cd "${APP}"
-              docker compose up -d --build || true
-            fi
-            rm -rf "${STAGE}"
-            rm -f "${ARCHIVE}"
-            exit "${rc}"
-          }
-          trap rollback ERR
-
-          echo "=== BACKUP CURRENT WEB ==="
-          cp -a "${APP}" "${BACKUP}/web"
-
-          echo "=== EXTRACT NEW WEB ==="
-          tar -xzf "${ARCHIVE}" -C "${STAGE}"
-          test -f "${STAGE}/web/docker-compose.yml"
-          test -f "${STAGE}/web/frontend/index.html"
-          test -f "${STAGE}/web/backend/app/main.py"
-
-          echo "=== PRESERVE SERVER ENV ==="
-          if [[ -f "${APP}/.env" ]]; then
-            cp -a "${APP}/.env" "${STAGE}/web/.env"
-          fi
-
-          echo "=== INSTALL WEB ONLY ==="
-          find "${APP}" -mindepth 1 -maxdepth 1 ! -name '.env' -exec rm -rf {} +
-          cp -a "${STAGE}/web/." "${APP}/"
-
-          echo "=== BUILD / START ==="
-          cd "${APP}"
-          docker compose up -d --build
-
-          echo "=== HEALTH ==="
-          ready=0
-          for _ in $(seq 1 30); do
-            if curl -fsS --max-time 5 "${HEALTH}" >/tmp/netweather-health.json; then
-              ready=1
-              break
-            fi
-            sleep 2
-          done
-          test "${ready}" = "1"
-          cat /tmp/netweather-health.json
-          echo
-
-          echo "=== SMOKE ==="
-          bash deploy/smoke-test.sh
-
-          echo "=== DEPLOY PASS ==="
-          docker compose ps
-
-          trap - ERR
-          rm -rf "${STAGE}" "${BACKUP}"
-          rm -f "${ARCHIVE}"
-          REMOTE
+          IMAGE_ARCHIVE=/tmp/netweather-artifact/netweather-web-image.tar.gz
+          gzip -t "$IMAGE_ARCHIVE"
+          cat "$IMAGE_ARCHIVE" |             ssh               -p "${VPS_PORT:-22}"               -i ~/.ssh/netweather_deploy               -o BatchMode=yes               -o IdentitiesOnly=yes               -o StrictHostKeyChecking=yes               "$VPS_USER@$VPS_HOST"               "deploy $GITHUB_SHA"
