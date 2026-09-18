@@ -429,6 +429,14 @@ def acknowledge_incident(incident_id:int):
     return {"ok":True}
 
 
+@app.post("/api/incidents/ack-all", dependencies=[Depends(require_token)])
+def acknowledge_all_incidents():
+    now=int(time.time())
+    with db() as conn:
+        cur=conn.execute("UPDATE incidents SET acknowledged_at=? WHERE acknowledged_at IS NULL",(now,))
+    return {"ok":True,"acknowledged":cur.rowcount,"acknowledged_at":now}
+
+
 @app.get("/api/realtime")
 def realtime(minutes:int=Query(default=60,ge=5,le=10080), scope:str=Query(default="EXTERNAL")):
     scope=scope.upper()
@@ -501,6 +509,8 @@ def recent_events(limit:int=Query(default=30,ge=1,le=100)):
         events.append({
             "type":"incident_closed" if inc["closed_at"] else "incident_open",
             "time":inc["closed_at"] or inc["opened_at"],
+            "incident_id":inc["id"],
+            "acknowledged_at":inc["acknowledged_at"],
             "resource_id":inc["resource_id"],
             "resource_name":inc["resource_name"],
             "severity":inc["severity"],
