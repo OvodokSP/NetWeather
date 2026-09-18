@@ -188,8 +188,31 @@ def delete_resource(resource_id:int):
     return {"ok":True}
 
 
+def schedule_domestic_checks(resource_ids:list[int]) -> int:
+    online = [p for p in probe_statuses() if p["scope"] == "DOMESTIC" and p["online"]]
+    if not online or not resource_ids:
+        return 0
+    now = int(time.time())
+    count = 0
+    with db() as conn:
+        for probe in online:
+            for resource_id in resource_ids:
+                exists = conn.execute("""SELECT 1 FROM probe_tasks
+                  WHERE probe_key=? AND resource_id=? AND task_type='CHECK' AND status='PENDING' LIMIT 1""",
+                  (probe["probe_key"], resource_id)).fetchone()
+                if exists:
+                    continue
+                conn.execute("""INSERT INTO probe_tasks(probe_key,resource_id,task_type,status,created_at)
+                  VALUES(?,?, 'CHECK', 'PENDING', ?)""", (probe["probe_key"], resource_id, now))
+                count += 1
+    return count
+
+
 @app.post("/api/resources/{resource_id}/check", dependencies=[Depends(require_token)])
-async def manual_check(resource_id:int): return await check_resource(resource_id)
+async def manual_check(resource_id:int):
+    payload = await check_resource(resource_id)
+    payload["scheduled_domestic"] = schedule_domestic_checks([resource_id])
+    return payload
 
 
 @app.post("/api/resources/{resource_id}/trace", dependencies=[Depends(require_token)])
@@ -228,12 +251,12 @@ def agent_result(payload: AgentResult, probe_key: str = Query(min_length=1,max_l
 def agent_tasks(probe_key: str = Query(min_length=1,max_length=80), probe_name: str = Query(default="Российский probe",max_length=120)):
     register_probe(probe_key, probe_name, "DOMESTIC")
     with db() as conn:
-        rows = conn.execute("""SELECT t.id,t.resource_id,r.target FROM probe_tasks t
+        rows = conn.execute("""SELECT t.id,t.resource_id,t.task_type,r.target FROM probe_tasks t
           JOIN resources r ON r.id=t.resource_id
           WHERE t.probe_key=? AND t.status='PENDING'
-          ORDER BY t.created_at LIMIT 5""", (probe_key,)).fetchall()
+          ORDER BY t.created_at LIMIT 10""", (probe_key,)).fetchall()
     return Response(
-        content="".join(f"{r['id']}\t{r['resource_id']}\t{r['target']}\n" for r in rows),
+        content="".join(f"{r['id']}\t{r['resource_id']}\t{r['task_type']}\t{r['target']}\n" for r in rows),
         media_type="text/tab-separated-values; charset=utf-8",
     )
 
@@ -276,7 +299,8 @@ async def check_all():
     with db() as conn: rows=conn.execute("SELECT * FROM resources WHERE enabled=1").fetchall()
     results=await asyncio.gather(*(perform_check(row) for row in rows))
     for row,result in zip(rows,results): write_check(row["id"],result)
-    return {"checked":len(rows),"ok":sum(1 for r in results if r["status"]=="OK"),"failed":sum(1 for r in results if r["status"]!="OK")}
+    scheduled_domestic = schedule_domestic_checks([int(row["id"]) for row in rows])
+    return {"checked":len(rows),"ok":sum(1 for r in results if r["status"]=="OK"),"failed":sum(1 for r in results if r["status"]!="OK"),"scheduled_domestic":scheduled_domestic}
 
 
 @app.get("/api/incidents")
