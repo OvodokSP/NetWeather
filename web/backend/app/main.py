@@ -9,7 +9,6 @@ import time
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
@@ -117,7 +116,6 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="NetWeather API", version=APP_VERSION, lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET","POST","PATCH","DELETE","HEAD"], allow_headers=["*"])
 
 
 @app.get("/api/health")
@@ -706,5 +704,13 @@ if FRONTEND_DIR.exists():
     if assets.exists(): app.mount("/assets",StaticFiles(directory=assets),name="assets")
     @app.api_route("/{full_path:path}",methods=["GET","HEAD"])
     def spa(full_path:str):
-        candidate=FRONTEND_DIR/full_path
-        return FileResponse(candidate if full_path and candidate.exists() and candidate.is_file() else FRONTEND_DIR/"index.html")
+        root=FRONTEND_DIR.resolve()
+        index=root/"index.html"
+        if not full_path:
+            return FileResponse(index)
+        try:
+            candidate=(root/full_path).resolve()
+            candidate.relative_to(root)
+        except (OSError,ValueError):
+            return FileResponse(index)
+        return FileResponse(candidate if candidate.exists() and candidate.is_file() else index)
