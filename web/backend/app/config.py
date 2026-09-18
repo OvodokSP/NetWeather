@@ -9,10 +9,12 @@ from urllib.parse import urlparse
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-APP_VERSION = "0.3.1-web"
+APP_VERSION = "0.3.2-web"
 STARTED_AT = int(time.time())
 DB_PATH = Path(os.getenv("NETWEATHER_DB", "/data/netweather.db"))
 API_TOKEN = os.getenv("NETWEATHER_API_TOKEN", "")
+UI_PASSWORD = os.getenv("NETWEATHER_UI_PASSWORD", "").strip()
+SESSION_MAX_AGE = int(os.getenv("NETWEATHER_SESSION_MAX_AGE", "2592000"))
 ALLOW_PRIVATE_TARGETS = os.getenv("ALLOW_PRIVATE_TARGETS", "false").lower() == "true"
 DEFAULT_INTERVAL = int(os.getenv("DEFAULT_INTERVAL_SECONDS", "60"))
 REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "8"))
@@ -56,6 +58,22 @@ class ResourceCreate(BaseModel):
     slow_threshold_ms: int = Field(default=1500, ge=100, le=120000)
     failure_threshold: int = Field(default=2, ge=1, le=10)
     alerts_enabled: bool = True
+
+
+class OwnerLogin(BaseModel):
+    password: str = Field(min_length=1, max_length=512)
+
+
+class GroupCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=80)
+    key: str | None = Field(default=None, max_length=60)
+    color: str = Field(default="#3A8DFF", pattern=r"^#[0-9A-Fa-f]{6}$")
+
+
+class GroupPatch(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=80)
+    color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
+    sort_order: int | None = Field(default=None, ge=0, le=10000)
 
 
 class AgentResult(BaseModel):
