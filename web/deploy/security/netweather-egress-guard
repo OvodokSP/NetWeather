@@ -31,6 +31,7 @@ table inet netweather_guard {
 
   chain input {
     type filter hook input priority -10; policy accept;
+    ip saddr ${SUBNET} ct state established,related counter accept
     ip saddr ${SUBNET} counter drop
   }
 
