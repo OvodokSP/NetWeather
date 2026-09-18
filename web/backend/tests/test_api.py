@@ -50,13 +50,12 @@ class NetWeatherApiTest(unittest.TestCase):
     def test_owner_session_and_group_crud(self):
         status = self.client.get("/api/session")
         self.assertEqual(status.status_code, 200)
-        self.assertFalse(status.json()["authenticated"])
+        self.assertTrue(status.json()["authenticated"])
+        self.assertFalse(status.json()["auth_required"])
 
-        bad = self.client.post("/api/session/login", json={"password":"wrong"})
-        self.assertEqual(bad.status_code, 401)
-
-        login = self.client.post("/api/session/login", json={"password":"owner-pass"})
+        login = self.client.post("/api/session/login", json={"password":"anything"})
         self.assertEqual(login.status_code, 200)
+        self.assertTrue(login.json()["open_access"])
         self.assertTrue(self.client.get("/api/session").json()["authenticated"])
 
         created = self.client.post("/api/groups", json={"title":"Рабочие сервисы","key":"WORK","color":"#3A8DFF"})
@@ -77,7 +76,7 @@ class NetWeatherApiTest(unittest.TestCase):
 
         logout = self.client.post("/api/session/logout")
         self.assertEqual(logout.status_code, 200)
-        self.assertFalse(self.client.get("/api/session").json()["authenticated"])
+        self.assertTrue(self.client.get("/api/session").json()["authenticated"])
 
     def test_realtime_and_event_feed(self):
         rt = self.client.get("/api/realtime?minutes=60&scope=EXTERNAL")
@@ -91,9 +90,7 @@ class NetWeatherApiTest(unittest.TestCase):
         self.assertIsInstance(events.json(), list)
 
     def test_resource_crud_and_auth(self):
-        denied = self.client.post("/api/resources", json={"name":"X","target":"https://example.com"})
-        self.assertEqual(denied.status_code, 401)
-        created = self.client.post("/api/resources", headers=self.auth, json={"name":"X","target":"https://example.com","group_name":"TEST"})
+        created = self.client.post("/api/resources", json={"name":"X","target":"https://example.com","group_name":"TEST"})
         self.assertEqual(created.status_code, 200)
         rid = created.json()["id"]
         patched = self.client.patch("/api/resources/%d" % rid, headers=self.auth, json={"slow_threshold_ms":1200,"failure_threshold":3})
