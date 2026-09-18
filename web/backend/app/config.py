@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-APP_VERSION = "0.2.1-web"
+APP_VERSION = "0.3.0-web"
 STARTED_AT = int(time.time())
 DB_PATH = Path(os.getenv("NETWEATHER_DB", "/data/netweather.db"))
 API_TOKEN = os.getenv("NETWEATHER_API_TOKEN", "")
@@ -20,6 +20,10 @@ FRONTEND_DIR = Path(os.getenv("FRONTEND_DIR", "/app/frontend"))
 SEED_DEFAULTS = os.getenv("NETWEATHER_SEED_DEFAULTS", "true").lower() == "true"
 SCHEDULER_ENABLED = os.getenv("NETWEATHER_SCHEDULER_ENABLED", "true").lower() == "true"
 ALERT_WEBHOOK_URL = os.getenv("ALERT_WEBHOOK_URL", "").strip()
+AGENT_TOKEN = os.getenv("NETWEATHER_AGENT_TOKEN", "").strip()
+AGENT_STALE_SECONDS = int(os.getenv("NETWEATHER_AGENT_STALE_SECONDS", "180"))
+SERVER_PROBE_KEY = os.getenv("NETWEATHER_SERVER_PROBE_KEY", "VPS_EU").strip() or "VPS_EU"
+SERVER_PROBE_NAME = os.getenv("NETWEATHER_SERVER_PROBE_NAME", "Внешний VPS").strip() or "Внешний VPS"
 
 KNOWN_GROUPS = {
     "RUSSIAN": "Российские",
@@ -52,6 +56,19 @@ class ResourceCreate(BaseModel):
     slow_threshold_ms: int = Field(default=1500, ge=100, le=120000)
     failure_threshold: int = Field(default=2, ge=1, le=10)
     alerts_enabled: bool = True
+
+
+class AgentResult(BaseModel):
+    resource_id: int = Field(ge=1)
+    status: str = Field(min_length=1, max_length=40)
+    response_time_ms: int = Field(ge=0, le=300000)
+    dns_ms: int | None = Field(default=None, ge=0, le=300000)
+    tcp_ms: int | None = Field(default=None, ge=0, le=300000)
+    tls_ms: int | None = Field(default=None, ge=0, le=300000)
+    http_ms: int | None = Field(default=None, ge=0, le=300000)
+    http_status: int | None = Field(default=None, ge=100, le=599)
+    resolved_ip: str | None = Field(default=None, max_length=128)
+    message: str = Field(default="", max_length=1000)
 
 
 class ResourcePatch(BaseModel):
