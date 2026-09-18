@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-APP_VERSION = "0.3.6-web"
+APP_VERSION = "0.3.7-web"
 STARTED_AT = int(time.time())
 DB_PATH = Path(os.getenv("NETWEATHER_DB", "/data/netweather.db"))
 API_TOKEN = os.getenv("NETWEATHER_API_TOKEN", "")
@@ -59,6 +59,10 @@ class ResourceCreate(BaseModel):
     slow_threshold_ms: int = Field(default=1500, ge=100, le=120000)
     failure_threshold: int = Field(default=2, ge=1, le=10)
     alerts_enabled: bool = True
+
+
+class CatalogAddRequest(BaseModel):
+    resource_keys: list[str] = Field(min_length=1, max_length=40)
 
 
 class OwnerLogin(BaseModel):
