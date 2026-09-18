@@ -17,6 +17,11 @@ class FrontendContractTest(unittest.TestCase):
         missing = sorted(referenced - declared)
         self.assertEqual(missing, [], "JS references missing DOM ids: %s" % missing)
 
+    def test_dom_ids_are_unique(self):
+        ids = re.findall(r'id="([A-Za-z0-9_-]+)"', self.html)
+        duplicates = sorted({item for item in ids if ids.count(item) > 1})
+        self.assertEqual(duplicates, [], "Duplicate DOM ids: %s" % duplicates)
+
     def test_navigation_views_exist(self):
         views = set(re.findall(r'data-view="([A-Za-z0-9_-]+)"', self.html))
         sections = set(re.findall(r'id="view-([A-Za-z0-9_-]+)"', self.html))
@@ -47,8 +52,20 @@ class FrontendContractTest(unittest.TestCase):
             "resourceDialog","detailDialog","tokenDialog","diagTrace","diagTraceDomestic",
             "diagCheck","openAddResource","overviewAddResource","groupDialog","openAddGroup","groupForm",
             "sidebarAddResource","manageGroups","expandChart","enableNotifications",
+            "ackAllIncidents","resourceIdentityPreview","resourceTargetHint",
         ):
             self.assertIn(f'id="{item}"', self.html)
+
+    def test_resource_identity_and_incident_read_handlers_exist(self):
+        self.assertIn("function targetMeta(", self.js)
+        self.assertIn("syncResourceIdentity", self.js)
+        self.assertIn("/api/incidents/ack-all", self.js)
+        self.assertIn("data-ack", self.js)
+        self.assertIn("resource-logo-img", self.css)
+
+    def test_availability_axis_uses_even_ticks(self):
+        self.assertIn("for(var ti=0;ti<=4;ti++)ticks.push", self.js)
+        self.assertNotIn("var ticks=[100,99,98,95,90]", self.js)
 
     def test_overview_is_desktop_no_scroll(self):
         self.assertIn("html,body{margin:0;width:100%;height:100%;overflow:hidden", self.css)
