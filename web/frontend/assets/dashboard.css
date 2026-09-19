@@ -779,6 +779,73 @@ dialog.modal[open]{
   }
 }
 
+/* 0.3.10 — device-independent responsive and touch contract */
+@supports (height:100dvh){
+  .shell,.sidebar{height:100dvh}
+  .modal{max-height:calc(100dvh - 28px)}
+  .resource-picker-modal,.resource-picker-modal>form,
+  .dashboard-preferences-modal,.dashboard-preferences-modal>form{
+    max-height:calc(100dvh - 34px)
+  }
+}
+
+@media(max-width:1050px){
+  :root{--mobile-nav-h:56px}
+  html,body{max-width:100%;overflow-x:hidden}
+  .sidebar{height:var(--mobile-nav-h);padding:6px 8px;overflow:hidden}
+  .side-nav{height:44px;overscroll-behavior-x:contain;scrollbar-width:none}
+  .side-nav::-webkit-scrollbar{display:none}
+  .side-item{height:44px;min-height:44px;flex:0 0 auto}
+  .topbar{top:var(--mobile-nav-h);min-width:0}
+  .search-wrap{min-width:0;flex:1 1 auto;width:auto}
+  .top-actions{flex:0 0 auto}
+  .content{max-width:100%;overflow-x:clip}
+  .page-head{align-items:flex-start;flex-wrap:wrap}
+  .page-actions,.panel-actions{flex-wrap:wrap}
+  .chart-expanded{inset:calc(var(--mobile-nav-h) + var(--topbar-h) + 8px) 8px 8px!important}
+  .modal-actions{flex-wrap:wrap}
+  .toast{max-width:calc(100vw - 24px)}
+}
+
+@media(max-width:640px){
+  :root{--topbar-h:54px}
+  .topbar{height:var(--topbar-h);gap:7px}
+  .search-wrap input{padding-right:12px}
+  .search-wrap kbd{display:none}
+  .content{padding-left:8px;padding-right:8px}
+  .headline-actions{width:100%;justify-content:space-between}
+  .page-head{display:grid;grid-template-columns:minmax(0,1fr)}
+  .page-actions{width:100%}
+  .page-actions .btn{flex:1 1 auto}
+  .panel-head{align-items:flex-start;flex-wrap:wrap}
+  .incident-row{grid-template-columns:9px minmax(0,1fr)}
+  .incident-row>time,.incident-row-actions{grid-column:2}
+  .incident-row-actions{justify-content:flex-start;flex-wrap:wrap}
+  .modal{width:calc(100vw - 16px);max-height:calc(100vh - 16px)}
+  .modal-actions{justify-content:stretch}
+  .modal-actions>.btn,.modal-actions>div{flex:1 1 auto}
+  .modal-actions>div{display:flex;flex-wrap:wrap}
+  .modal-actions>div>.btn{flex:1 1 auto}
+  .toast{left:12px;right:12px;bottom:12px;max-width:none}
+}
+
+@supports (height:100dvh){
+  @media(max-width:640px){
+    .modal,.resource-picker-modal,.resource-picker-modal>form,
+    .dashboard-preferences-modal,.dashboard-preferences-modal>form{
+      max-height:calc(100dvh - 16px)
+    }
+  }
+}
+
+@media(pointer:coarse){
+  .side-item,.icon-btn,.modal-close,.mini-icon,.row-more,
+  .btn,.input,.select,.seg,.link-btn,.incident-read-btn,.event-ack{
+    min-height:44px
+  }
+  .row-more,.mini-icon,.modal-close{min-width:44px}
+}
+
 
 /* 0.3.10 — stale data and live map states */
 body.core-offline #topSystemStatus{

@@ -159,6 +159,23 @@ class FrontendContractTest(unittest.TestCase):
         self.assertIn(".overview-view{height:100%;overflow:hidden}", self.css)
         self.assertIn(".overview-grid{height:100%;display:grid", self.css)
 
+    def test_responsive_viewport_and_touch_contract(self):
+        self.assertIn(
+            'content="width=device-width,initial-scale=1,maximum-scale=5"',
+            self.html,
+        )
+        for token in (
+            "@media(max-width:1050px)",
+            "@media(max-width:640px)",
+            "@media(pointer:coarse)",
+            "@supports (height:100dvh)",
+            "overflow-x:clip",
+            "--mobile-nav-h:56px",
+            "min-height:44px",
+            ".chart-expanded{inset:calc(var(--mobile-nav-h)",
+        ):
+            self.assertIn(token, self.css)
+
     def test_no_runtime_cdn_dependency(self):
         lower = self.html.lower()
         self.assertNotIn("cdn.jsdelivr", lower)
