@@ -73,6 +73,56 @@ jobs:
           test "$(docker image inspect -f '{{.Config.User}}' "netweather-web:$GITHUB_SHA")" = "10001:10001"
           test "$(docker image inspect -f '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "netweather-web:$GITHUB_SHA")" = "$GITHUB_SHA"
 
+      - name: Run hardened smoke on deploy image
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          container="netweather-deploy-smoke"
+          cleanup() {
+            docker rm -f "$container" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker run -d \
+            --name "$container" \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m \
+            --tmpfs /data:rw,noexec,nosuid,nodev,size=64m,uid=10001,gid=10001,mode=0750 \
+            --cap-drop ALL \
+            --security-opt no-new-privileges=true \
+            --pids-limit 256 \
+            --memory 512m \
+            --memory-swap 512m \
+            --cpus 0.75 \
+            --user 10001:10001 \
+            --publish 127.0.0.1:18081:8000 \
+            --env NETWEATHER_API_TOKEN=deploy-ci-only \
+            --env NETWEATHER_AUTH_REQUIRED=false \
+            --env ALLOW_PRIVATE_TARGETS=false \
+            "netweather-web:$GITHUB_SHA" >/dev/null
+
+          ready=0
+          for _ in $(seq 1 30); do
+            if curl -fsS --max-time 3 http://127.0.0.1:18081/api/health >/tmp/netweather-deploy-health.json; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" = "1"
+          cat /tmp/netweather-deploy-health.json
+
+          test "$(docker inspect -f '{{.Config.User}}' "$container")" = "10001:10001"
+          test "$(docker inspect -f '{{.HostConfig.ReadonlyRootfs}}' "$container")" = "true"
+          test "$(docker inspect -f '{{.HostConfig.Privileged}}' "$container")" = "false"
+          docker inspect -f '{{json .HostConfig.CapDrop}}' "$container" | grep -q '"ALL"'
+          docker inspect -f '{{json .HostConfig.SecurityOpt}}' "$container" | grep -q 'no-new-privileges'
+          test -z "$(docker inspect -f '{{range .Mounts}}{{if eq .Type "bind"}}{{.Source}}{{end}}{{end}}' "$container")"
+
+          curl -fsS --max-time 3 http://127.0.0.1:18081/ >/dev/null
+          curl -fsS --max-time 3 http://127.0.0.1:18081/api/system >/dev/null
+          curl -fsS --max-time 3 http://127.0.0.1:18081/api/groups >/dev/null
+
       - name: Export immutable image archive
         run: |
           set -euo pipefail
