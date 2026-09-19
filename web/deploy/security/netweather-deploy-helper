@@ -147,8 +147,25 @@ curl -fsS --max-time 5 http://127.0.0.1:18081/ >/dev/null
 curl -fsS --max-time 5 http://127.0.0.1:18081/api/system >/dev/null
 curl -fsS --max-time 5 http://127.0.0.1:18081/api/groups >/dev/null
 
+echo "=== FINAL RUNTIME IDENTITY ==="
+EXPECTED_IMAGE_ID="$(docker image inspect -f '{{.Id}}' "${IMAGE}")"
+ACTUAL_IMAGE_ID="$(docker container inspect -f '{{.Image}}' "${CONTAINER}")"
+[[ "${ACTUAL_IMAGE_ID}" == "${EXPECTED_IMAGE_ID}" ]]
+[[ "$(docker container inspect -f '{{.State.Running}}' "${CONTAINER}")" == "true" ]]
+
+healthy=0
+for _ in $(seq 1 30); do
+  if [[ "$(docker container inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${CONTAINER}")" == "healthy" ]]; then
+    healthy=1
+    break
+  fi
+  sleep 1
+done
+[[ "${healthy}" == 1 ]]
+
 trap - ERR
 rm -f "${HEALTH_JSON}"
 
 echo "=== DEPLOY PASS ==="
+echo "REVISION=${SHA} IMAGE_ID=${ACTUAL_IMAGE_ID}"
 docker ps --filter "name=^${CONTAINER}$" --format 'NAME={{.Names}} STATUS={{.Status}} PORTS={{.Ports}}'
