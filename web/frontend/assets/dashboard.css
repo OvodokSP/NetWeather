@@ -830,3 +830,11 @@ body.core-offline .overview-view .kpi-card::after{
 .map-status.bad span{color:var(--red)}
 
 .capability-hidden{display:none!important}
+.viewer-mode .owner-only,
+.viewer-mode #diagCheck,
+.viewer-mode #diagTrace,
+.viewer-mode #diagTraceDomestic,
+.viewer-mode .row-check,
+.viewer-mode .event-ack,
+.viewer-mode .group-manage-actions{display:none!important}
+.auth-note{margin:0;padding:0 15px 12px;color:var(--muted);font-size:11px;line-height:1.45}

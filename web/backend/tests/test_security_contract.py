@@ -56,7 +56,9 @@ class SecurityContractTest(unittest.TestCase):
             "--ip",
             "172.30.250.2",
             "--publish 127.0.0.1:18081:8000",
+            "--env NETWEATHER_ALLOW_OPEN_ACCESS=false",
             "--env ALLOW_PRIVATE_TARGETS=false",
+            "owner authentication secret is not configured",
         )
         for token in required:
             self.assertIn(token, self.helper)
@@ -87,6 +89,7 @@ class SecurityContractTest(unittest.TestCase):
         self.assertNotIn('allow_origins=["*"]', self.main)
         self.assertNotIn("CORSMiddleware", self.main)
         self.assertIn("candidate.relative_to(root)", self.main)
+        self.assertIn('raise RuntimeError("Owner authentication secret is required")', self.main)
 
 
 if __name__ == "__main__":

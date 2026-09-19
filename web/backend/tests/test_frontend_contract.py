@@ -75,12 +75,15 @@ class FrontendContractTest(unittest.TestCase):
         self.assertIn('role="status" aria-live="polite"', self.html)
         self.assertIn('aria-controls="searchResults"', self.html)
 
-    def test_open_development_mode_has_no_fake_login_controls(self):
+    def test_public_read_only_mode_has_owner_session_controls(self):
         for obsolete in ("tokenDialog","tokenForm","tokenInput","openToken2","clearToken"):
             self.assertNotIn(f'id="{obsolete}"', self.html)
             self.assertNotIn(obsolete, self.js)
-        self.assertIn("Локальный режим", self.html)
-        self.assertIn("без авторизации", self.html)
+        for item in ("ownerLoginDialog", "ownerLoginForm", "ownerPassword", "ownerAuthAction", "ownerModeTitle"):
+            self.assertIn(f'id="{item}"', self.html)
+        self.assertIn("function applyOwnerMode(", self.js)
+        self.assertIn("function submitOwnerLogin(", self.js)
+        self.assertIn("viewer-mode", self.css)
 
     def test_ranked_catalog_picker_contract(self):
         for token in (
@@ -101,6 +104,8 @@ class FrontendContractTest(unittest.TestCase):
         self.assertIn("/api/incidents/ack-all", self.js)
         self.assertIn("data-ack", self.js)
         self.assertIn("resource-logo-img", self.css)
+        self.assertNotIn('/favicon.ico', self.js)
+        self.assertNotIn('onerror="this.remove()', self.js)
 
     def test_navigation_hides_unavailable_capabilities(self):
         self.assertIn("function applyCapabilityNavigation(", self.js)
@@ -136,6 +141,7 @@ class FrontendContractTest(unittest.TestCase):
             self.assertTrue(token in self.js or token in self.html)
         self.assertIn(".dashboard-hidden", self.css)
         self.assertIn(".overview-row.single-panel", self.css)
+        self.assertIn("fault_domain:resources.length>0&&(hasDomestic||hasPersonal)", self.js)
 
     def test_font_sizes_never_drop_below_ten_pixels(self):
         values = [float(v) for v in re.findall(r'font-size:\s*(\d+(?:\.\d+)?)px', self.css)]

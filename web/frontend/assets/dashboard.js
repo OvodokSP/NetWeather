@@ -67,7 +67,7 @@ function dashboardCapabilities(){
     pinned_resources:resources.length>0,
     map:hasMap,
     resources_table:resources.length>0,
-    fault_domain:resources.length>0
+    fault_domain:resources.length>0&&(hasDomestic||hasPersonal)
   }
 }
 function visiblePinnedResourceIds(){
@@ -244,7 +244,8 @@ function handleSearchKeydown(e){
   }
 }
 function esc(v){return String(v==null?"":v).replace(/[&<>"']/g,function(c){return({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"})[c]})}
-function token(){return localStorage.getItem("netweather_token")||""}
+function legacyToken(){return localStorage.getItem("netweather_token")||""}
+function token(){return legacyToken()}
 function auth(){return token()?{"Authorization":"Bearer "+token()}:{}}
 function toast(m){var e=q("#toast");if(!e)return;e.textContent=m;e.classList.add("show");clearTimeout(toast.t);toast.t=setTimeout(function(){e.classList.remove("show")},3000)}
 function fmt(ts){if(!ts)return "—";return new Date(ts*1000).toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit"})}
@@ -253,8 +254,9 @@ function ago(ts){if(!ts)return "—";var d=Math.max(0,Math.floor(Date.now()/1000
 function duration(sec){sec=Number(sec||0);if(sec<60)return sec+" сек";if(sec<3600)return Math.floor(sec/60)+" мин";if(sec<86400)return Math.floor(sec/3600)+" ч";return Math.floor(sec/86400)+" дн"}
 function pct(v,digits){if(v==null||!Number.isFinite(Number(v)))return "—";return Number(v).toFixed(digits==null?(Number(v)%1?1:0):digits)+"%"}
 function num(v,suffix){return v==null||!Number.isFinite(Number(v))?"—":Math.round(Number(v))+(suffix||"")}
-function stText(s){return({OK:"Доступен",DNS_ERROR:"DNS ошибка",TCP_ERROR:"TCP ошибка",TLS_ERROR:"TLS ошибка",HTTP_ERROR:"HTTP ошибка",TIMEOUT:"Таймаут",BLOCKED_TARGET:"Заблокировано",UNKNOWN_ERROR:"Ошибка"})[s]||"Нет данных"}
-function stClass(s){return s==="OK"?"ok":s==="TIMEOUT"?"warn":s?"bad":"neutral"}
+function stText(s){return({OK:"Доступен",HTTP_REJECTED:"Доступен · probe отклонён",DNS_ERROR:"DNS ошибка",TCP_ERROR:"TCP ошибка",TLS_ERROR:"TLS ошибка",HTTP_ERROR:"HTTP ошибка",TIMEOUT:"Таймаут",BLOCKED_TARGET:"Заблокировано",UNKNOWN_ERROR:"Ошибка"})[s]||"Нет данных"}
+function stClass(s){return s==="OK"||s==="HTTP_REJECTED"?"ok":s==="TIMEOUT"?"warn":s?"bad":"neutral"}
+function isReachable(s){return s==="OK"||s==="HTTP_REJECTED"}
 function diagText(d){return({AVAILABLE:"Доступен",LIKELY_RESTRICTION:"Вероятное ограничение",LIKELY_OUTAGE:"Вероятное падение",EXTERNAL_PATH_ISSUE:"Проблема пути VPS",DOMESTIC_UNKNOWN:"Нет данных РФ",INSUFFICIENT_DATA:"Недостаточно данных"})[d]||"Нет данных"}
 function diagClass(d){return d==="AVAILABLE"?"ok":d==="LIKELY_RESTRICTION"||d==="LIKELY_OUTAGE"?"bad":d==="EXTERNAL_PATH_ISSUE"?"warn":"neutral"}
 function groupTitle(v){var found=S.groups.find(function(g){return g.id===v});return found?found.title:({"RUSSIAN":"Российские","INTERNATIONAL":"Международные","MESSENGERS":"Мессенджеры и соцсети","INFRASTRUCTURE":"Инфраструктура","CUSTOM":"Пользовательские"})[v]||v}
@@ -277,17 +279,16 @@ function targetMeta(value){
   var name="",isKnown=false;
   for(var i=0;i<known.length;i++){if(known[i][0].test(host)){name=known[i][1];isKnown=true;break}}
   if(!name){var part=host.split(".")[0]||host;name=part.replace(/[-_]+/g," ").replace(/\b\w/g,function(c){return c.toUpperCase()})}
-  var isLocal=host==="localhost"||/^127\./.test(host)||/^10\./.test(host)||/^192\.168\./.test(host)||/^172\.(1[6-9]|2\d|3[01])\./.test(host)||/^\[?::1\]?$/.test(host);
-  return{name:name,host:host,favicon:isLocal?"":u.protocol+"//"+u.host+"/favicon.ico",known:isKnown}
+  return{name:name,host:host,favicon:"",known:isKnown}
 }
 function getTargetMetadata(value){
   var local=targetMeta(value),u=targetUrl(value);
-  if(!u||!local.host)return Promise.resolve({name:local.name,host:local.host,favicon_url:local.favicon});
+  if(!u||!local.host)return Promise.resolve({name:local.name,host:local.host,favicon_url:""});
   var key=u.href;
   if(!S.metaCache[key]){
     S.metaCache[key]=api("/api/target-meta?target="+encodeURIComponent(value)).then(function(remote){
-      return{name:local.known?local.name:(remote.name||local.name),host:remote.host||local.host,favicon_url:remote.favicon_url||local.favicon}
-    }).catch(function(){return{name:local.name,host:local.host,favicon_url:local.favicon}})
+      return{name:local.known?local.name:(remote.name||local.name),host:remote.host||local.host,favicon_url:""}
+    }).catch(function(){return{name:local.name,host:local.host,favicon_url:""}})
   }
   return S.metaCache[key]
 }
@@ -310,13 +311,13 @@ function brandIconMarkup(target,name){
 function resourceIconHtml(target,name){
   var canonical=brandIconMarkup(target,name),m=targetMeta(target),fallback=esc((name||m.name||"?").slice(0,2).toUpperCase());
   if(canonical)return '<i class="resource-glyph brand-glyph">'+canonical+'</i>';
-  return '<i class="resource-glyph" data-icon-target="'+esc(target)+'" data-icon-name="'+esc(name||m.name||"")+'">'+(m.favicon?'<img class="resource-logo-img" src="'+esc(m.favicon)+'" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove();this.parentElement.querySelector(\'.resource-logo-fallback\').style.display=\'grid\'">':'')+'<span class="resource-logo-fallback"'+(m.favicon?' style="display:none"':'')+'>'+fallback+'</span></i>'
+  return '<i class="resource-glyph" data-icon-target="'+esc(target)+'" data-icon-name="'+esc(name||m.name||"")+'"><span class="resource-logo-fallback">'+fallback+'</span></i>'
 }
 
 function paintResourceIcon(node,meta){
   if(!node||!meta)return;
-  var fallback=esc((node.dataset.iconName||meta.name||"?").slice(0,2).toUpperCase()),src=meta.favicon_url||"";
-  node.innerHTML=(src?'<img class="resource-logo-img" src="'+esc(src)+'" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove();this.parentElement.querySelector(\'.resource-logo-fallback\').style.display=\'grid\'">':'')+'<span class="resource-logo-fallback"'+(src?' style="display:none"':'')+'>'+fallback+'</span>'
+  var fallback=esc((node.dataset.iconName||meta.name||"?").slice(0,2).toUpperCase());
+  node.innerHTML='<span class="resource-logo-fallback">'+fallback+'</span>'
 }
 function hydrateResourceIcons(){
   qa("[data-icon-target]").forEach(function(node){
@@ -328,16 +329,16 @@ async function syncResourceIdentity(force){
   var target=q("#resourceTarget"),name=q("#resourceName"),preview=q("#resourceIdentityPreview"),hint=q("#resourceTargetHint");
   if(!target||!name||!preview)return;
   var raw=target.value,m=targetMeta(raw);
-  if(!m.host){preview.innerHTML="<span>NW</span>";if(hint)hint.textContent="После ввода ссылки NetWeather предложит название и логотип ресурса.";return}
+  if(!m.host){preview.innerHTML="<span>NW</span>";if(hint)hint.textContent="После ввода ссылки NetWeather предложит название ресурса.";return}
   var canFill=force||!name.value.trim()||name.dataset.autoSuggested==="1";
   if(canFill&&m.name){name.value=m.name;name.dataset.autoSuggested="1"}
-  preview.innerHTML=(m.favicon?'<img src="'+esc(m.favicon)+'" alt="" referrerpolicy="no-referrer" onerror="this.remove();this.parentElement.innerHTML=\'<span>'+esc((m.name||"?").slice(0,2).toUpperCase())+'</span>\'">':'<span>'+esc((m.name||"?").slice(0,2).toUpperCase())+'</span>');
-  if(hint)hint.textContent=m.host+" · определяем название и логотип…";
+  preview.innerHTML='<span>'+esc((m.name||"?").slice(0,2).toUpperCase())+'</span>';
+  if(hint)hint.textContent=m.host+" · определяем название…";
   var remote=await getTargetMetadata(raw);
   if(target.value!==raw)return;
   if((force||!name.value.trim()||name.dataset.autoSuggested==="1")&&remote.name){name.value=remote.name;name.dataset.autoSuggested="1"}
-  var icon=remote.favicon_url||m.favicon,fallback=esc((remote.name||m.name||"?").slice(0,2).toUpperCase());
-  preview.innerHTML=icon?'<img src="'+esc(icon)+'" alt="" referrerpolicy="no-referrer" onerror="this.remove();this.parentElement.innerHTML=\'<span>'+fallback+'</span>\'">':'<span>'+fallback+'</span>';
+  var fallback=esc((remote.name||m.name||"?").slice(0,2).toUpperCase());
+  preview.innerHTML='<span>'+fallback+'</span>';
   if(hint)hint.textContent=(remote.host||m.host)+(remote.name?" · «"+remote.name+"»":"")
 }
 
@@ -347,12 +348,13 @@ function getCss(name){return getComputedStyle(document.documentElement).getPrope
 
 async function api(path,opt,secure){
   opt=opt||{};
-  if(secure&&S.authRequired&&!S.owner&&!token()){
+  if(secure&&S.authRequired&&!S.owner){
+    openOwnerLogin();
     throw new Error("Управление требует авторизации")
   }
   var headers={"Content-Type":"application/json"};
   Object.assign(headers,opt.headers||{});
-  if(secure)Object.assign(headers,auth());
+  var oldToken=legacyToken();if(secure&&oldToken)headers.Authorization="Bearer "+oldToken;
   var res=await fetch(path,Object.assign({},opt,{headers:headers}));
   if(!res.ok){
     var msg="HTTP "+res.status;
@@ -361,6 +363,31 @@ async function api(path,opt,secure){
   }
   if(res.status===204)return null;
   return res.json()
+}
+
+function applyOwnerMode(){
+  var viewer=S.authRequired&&!S.owner;
+  document.body.classList.toggle("viewer-mode",viewer);
+  var title=q("#ownerModeTitle"),hint=q("#ownerModeHint"),button=q("#ownerAuthAction");
+  if(title)title.textContent=S.owner?"Режим владельца":"Режим просмотра";
+  if(hint)hint.textContent=S.owner?"управление доступно":"публичные данные";
+  if(button){button.textContent=!S.authRequired?"Авторизация отключена":S.owner?"Выйти из режима владельца":"Войти как владелец";button.disabled=!S.authRequired;button.className="btn "+(S.owner&&S.authRequired?"secondary":"primary")}
+}
+function openOwnerLogin(){
+  if(!S.authRequired){toast("Авторизация владельца не требуется");return}
+  q("#ownerPassword").value="";
+  openDialog(q("#ownerLoginDialog"),"#ownerPassword")
+}
+async function submitOwnerLogin(e){
+  e.preventDefault();var password=q("#ownerPassword").value,button=e.submitter||q("#ownerLoginForm [type=submit]");
+  try{await withBusy(button,"Входим…",async function(){
+    await api("/api/session/login",{method:"POST",body:JSON.stringify({password:password})});
+    localStorage.removeItem("netweather_token");q("#ownerLoginDialog").close();await loadAll(true);toast("Режим владельца включён")
+  })}catch(err){toast(err.message);q("#ownerPassword").focus()}
+}
+async function ownerAuthAction(){
+  if(!S.owner){openOwnerLogin();return}
+  try{await api("/api/session/logout",{method:"POST"});await loadAll(true);toast("Открыт режим просмотра")}catch(err){toast(err.message)}
 }
 
 function openView(name){
@@ -451,6 +478,7 @@ function applyCapabilityNavigation(){
 }
 
 function renderAll(){
+  applyOwnerMode();
   renderOverview();
   renderGroups();
   renderResources();
@@ -690,7 +718,7 @@ function stageState(stage,r,x){
   if(stage==="DNS")return x.dns_ms!=null?"ok":x.status==="DNS_ERROR"?"bad":"neutral";
   if(stage==="TCP")return x.tcp_ms!=null?"ok":x.status==="TCP_ERROR"?"bad":"neutral";
   if(stage==="TLS")return r.target.indexOf("https://")!==0?"ok":x.tls_ms!=null?"ok":x.status==="TLS_ERROR"?"bad":"neutral";
-  if(stage==="HTTP")return x.status==="OK"?"ok":x.http_status!=null?"warn":x.status?"bad":"neutral";
+  if(stage==="HTTP")return isReachable(x.status)?"ok":x.http_status!=null?"warn":x.status?"bad":"neutral";
   return "neutral"
 }
 
@@ -704,9 +732,9 @@ function renderFaultPanel(){
   var nodes=[
     {name:"Ваше устройство",value:"device-probe",icon:"▣",state:"neutral"},
     {name:"Оператор",value:dom.response_time_ms!=null?num(dom.response_time_ms," мс"):"нет данных",icon:"✣",state:dom.status?stClass(dom.status):"neutral"},
-    {name:"Транзит (RTT)",value:ext.tcp_ms!=null?num(ext.tcp_ms," мс"):"—",icon:"△",state:r.diagnosis==="LIKELY_RESTRICTION"?"bad":r.diagnosis==="EXTERNAL_PATH_ISSUE"?"warn":ext.status==="OK"?"ok":"neutral"},
+    {name:"Транзит (RTT)",value:ext.tcp_ms!=null?num(ext.tcp_ms," мс"):"—",icon:"△",state:r.diagnosis==="LIKELY_RESTRICTION"?"bad":r.diagnosis==="EXTERNAL_PATH_ISSUE"?"warn":isReachable(ext.status)?"ok":"neutral"},
     {name:"Сервер "+r.name,value:ext.response_time_ms!=null?num(ext.response_time_ms," мс"):"—",icon:"▦",state:ext.status?stClass(ext.status):"neutral"},
-    {name:"Приложение",value:ext.status==="OK"?"OK":stText(ext.status),icon:"▣",state:ext.status?stClass(ext.status):"neutral"}
+    {name:"Приложение",value:isReachable(ext.status)?"OK":stText(ext.status),icon:"▣",state:ext.status?stClass(ext.status):"neutral"}
   ];
   q("#faultPath").innerHTML=nodes.map(function(n){return '<div class="fault-node '+n.state+'"><div class="node-icon">'+n.icon+'</div><b>'+esc(n.name)+'</b><span>'+esc(n.value)+'</span></div>'}).join("");
   var con=q("#faultConclusion"),cls=diagClass(r.diagnosis),title=diagText(r.diagnosis);
@@ -842,7 +870,7 @@ function renderDiagnostics(){
 function showDiagnostic(r){
   S.diagId=r.id;var ext=r.external||{},dom=r.domestic||{},x=r.domestic||r.external||{};
   q("#diagSummary").innerHTML='<div class="diag-summary-card"><div><span>Вывод</span><b>'+diagText(r.diagnosis)+'</b></div><div><span>VPS</span><b>'+stText(ext.status)+' · '+num(ext.response_time_ms," мс")+'</b></div><div><span>РФ</span><b>'+stText(dom.status)+' · '+num(dom.response_time_ms," мс")+'</b></div><div><span>IP</span><b>'+esc(x.resolved_ip||"—")+'</b></div><div><span>HTTP</span><b>'+(x.http_status||"—")+'</b></div></div>';
-  setStage("Dns",x.dns_ms,x.status!=="DNS_ERROR");setStage("Tcp",x.tcp_ms,x.tcp_ms!=null);setStage("Tls",x.tls_ms,r.target.indexOf("https://")!==0||x.tls_ms!=null);setStage("Http",x.http_ms,x.status==="OK")
+  setStage("Dns",x.dns_ms,x.status!=="DNS_ERROR");setStage("Tcp",x.tcp_ms,x.tcp_ms!=null);setStage("Tls",x.tls_ms,r.target.indexOf("https://")!==0||x.tls_ms!=null);setStage("Http",x.http_ms,isReachable(x.status))
 }
 function setStage(n,v,good){var e=q("#stage"+n);e.querySelector("b").textContent=v==null?"—":Math.round(v)+" мс";e.className="diag-step "+(v==null?"":good?"good":"bad")}
 
@@ -867,7 +895,7 @@ function drawBars(canvas,values,color){
 
 function renderSettings(){
   if(!S.system||!S.dashboard)return;
-  q("#tokenState").textContent=S.authRequired?(S.owner?"Режим владельца активен.":"Сейчас открыт режим просмотра."):"Development mode: все действия доступны без авторизации.";
+  q("#tokenState").textContent=S.authRequired?(S.owner?"Режим владельца активен. Управляющие действия разрешены.":"Публичный режим: доступно безопасное чтение данных."):"Локальная разработка: авторизация отключена.";
   q("#alertSystemState").textContent=S.system.webhook_configured?"Server webhook настроен.":"Webhook не настроен; инциденты сохраняются в журнале.";
   q("#securityState").textContent=S.system.private_targets_allowed?"Private targets разрешены.":"Private/loopback/link-local цели заблокированы.";
   var vals=[["Версия",S.system.version],["Uptime",duration(S.system.uptime_seconds)],["Ресурсы",S.system.resources],["Проверки",S.system.checks],["Инциденты",S.system.active_incidents],["Traceroute",S.system.traceroute_available?"готов":"нет"],["База",S.system.database],["Scheduler",S.system.scheduler_enabled?"включён":"выключен"]];
@@ -1084,6 +1112,7 @@ function hydrateChromeIcons(){
 function setup(){
   hydrateChromeIcons();
   setupDialogs();
+  localStorage.removeItem("netweather_token");
   var shortcut=q(".search-wrap kbd");if(shortcut)shortcut.textContent=/Mac|iPhone|iPad/.test(navigator.platform)?"⌘ K":"Ctrl K";
   updateClock();setInterval(updateClock,1000);
   qa(".side-item[data-view]").forEach(function(b){b.onclick=function(){openView(b.dataset.view)}});
@@ -1109,6 +1138,8 @@ function setup(){
   q("#manageGroups").onclick=function(){openView("groups")};
   q("#customizeOverview").onclick=openDashboardPreferences;
   q("#dashboardPreferencesForm").onsubmit=submitDashboardPreferences;
+  q("#ownerLoginForm").onsubmit=submitOwnerLogin;
+  q("#ownerAuthAction").onclick=ownerAuthAction;
   q("#resetDashboardPreferences").onclick=resetDashboardPreferences;
   [q("#sidebarAddResource"),q("#openAddResource"),q("#overviewAddResource")].forEach(function(b){if(b)b.onclick=openResourceCatalog});
   q("#resourceCatalogForm").onsubmit=submitResourceCatalog;

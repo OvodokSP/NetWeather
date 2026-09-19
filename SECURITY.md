@@ -78,7 +78,8 @@ root:root 600
 
 - wildcard CORS не используется;
 - SPA file serving ограничен frontend root;
-- write API перед публичным релизом должен быть отделён от public read-only режима;
+- production по умолчанию работает как public read-only, write API требует owner-session или API token;
+- отсутствие owner secret останавливает запуск production-контейнера;
 - пользовательский target проходит private-target protection;
 - browser-facing ошибки не должны раскрывать секреты или host paths.
 

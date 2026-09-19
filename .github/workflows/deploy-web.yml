@@ -97,7 +97,7 @@ jobs:
             --user 10001:10001 \
             --publish 127.0.0.1:18081:8000 \
             --env NETWEATHER_API_TOKEN=deploy-ci-only \
-            --env NETWEATHER_AUTH_REQUIRED=false \
+            --env NETWEATHER_ALLOW_OPEN_ACCESS=false \
             --env ALLOW_PRIVATE_TARGETS=false \
             "netweather-web:$GITHUB_SHA" >/dev/null
 
@@ -122,6 +122,10 @@ jobs:
           curl -fsS --max-time 3 http://127.0.0.1:18081/ >/dev/null
           curl -fsS --max-time 3 http://127.0.0.1:18081/api/system >/dev/null
           curl -fsS --max-time 3 http://127.0.0.1:18081/api/groups >/dev/null
+          test "$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
+            http://127.0.0.1:18081/api/groups -d '{"title":"blocked"}')" = "401"
+          curl -fsS --max-time 3 -H 'Authorization: Bearer deploy-ci-only' \
+            http://127.0.0.1:18081/api/auth/verify >/dev/null
 
       - name: Export immutable image archive
         run: |

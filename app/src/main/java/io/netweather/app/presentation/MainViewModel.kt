@@ -18,12 +18,12 @@ class MainViewModel @Inject constructor(private val repo: NetWeatherRepository) 
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
-    val resources: StateFlow<List<ResourceWithResult>> = combine(repo.observeResources(), flow { emit(repo.latestResults()) }) { res, results ->
+    val resources: StateFlow<List<ResourceWithResult>> = combine(repo.observeResources(), repo.observeLatestResults()) { res, results ->
         val map = results.associateBy { it.resourceId }
         res.map { ResourceWithResult(it, map[it.id]) }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val _settings = MutableStateFlow(Settings())
+    private val _settings = MutableStateFlow(Settings(checkIntervalSeconds = repo.checkIntervalSeconds()))
     val settings = _settings.asStateFlow()
     val historyDay = repo.observeHistory(24L * 60L * 60L * 1000L).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -36,7 +36,7 @@ class MainViewModel @Inject constructor(private val repo: NetWeatherRepository) 
     fun toggle(id: Long, enabled: Boolean) = viewModelScope.launch { repo.setEnabled(id, enabled); refreshNow() }
     fun addResource(name: String, url: String, group: ResourceGroup) = viewModelScope.launch { repo.addResource(MonitoredResource(name = name, url = url, group = group)); refreshNow() }
     fun delete(resource: MonitoredResource) = viewModelScope.launch { repo.deleteResource(resource); refreshNow() }
-    fun setInterval(seconds: Int) { _settings.value = _settings.value.copy(checkIntervalSeconds = seconds); MonitoringScheduler.reschedule(AppContextHolder.context, seconds) }
+    fun setInterval(seconds: Int) { repo.setCheckIntervalSeconds(seconds); _settings.value = _settings.value.copy(checkIntervalSeconds = seconds); MonitoringScheduler.reschedule(AppContextHolder.context, seconds) }
     private val _exportJson = MutableStateFlow("")
     val exportJson = _exportJson.asStateFlow()
     fun exportResources() = viewModelScope.launch { _exportJson.value = repo.exportResourcesJson() }

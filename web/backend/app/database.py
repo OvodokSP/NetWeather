@@ -7,6 +7,7 @@ from typing import Any
 
 from .config import AGENT_STALE_SECONDS, DB_PATH, DEFAULT_INTERVAL, DEFAULT_RESOURCES, SEED_DEFAULTS, SERVER_PROBE_KEY, SERVER_PROBE_NAME
 from .resource_catalog import catalog_match
+from .availability import is_reachable
 
 
 @contextmanager
@@ -83,6 +84,7 @@ def init_db() -> None:
             ("resources","last_success_at","INTEGER NOT NULL DEFAULT 0"),
             ("resources","last_failure_at","INTEGER NOT NULL DEFAULT 0"),
             ("resources","catalog_key","TEXT"),
+            ("resources","allow_http_rejected","INTEGER NOT NULL DEFAULT 0"),
             ("checks","tls_days_left","INTEGER"),
             ("checks","final_url","TEXT"),
             ("checks","location","TEXT"),
@@ -100,7 +102,7 @@ def init_db() -> None:
             if match:
                 try:
                     conn.execute(
-                        "UPDATE resources SET catalog_key=?,target=?,group_name=? WHERE id=?",
+                        "UPDATE resources SET catalog_key=?,target=?,group_name=?,allow_http_rejected=1 WHERE id=?",
                         (match.key, match.target, match.group_key, row["id"]),
                     )
                 except sqlite3.IntegrityError:
@@ -145,14 +147,14 @@ def seed_defaults() -> None:
             conn.execute("""INSERT INTO resources(
               name,target,group_name,interval_seconds,enabled,created_at,updated_at,last_checked_at,
               expected_status_min,expected_status_max,slow_threshold_ms,failure_threshold,alerts_enabled,
-              last_success_at,last_failure_at,catalog_key
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+              last_success_at,last_failure_at,catalog_key,allow_http_rejected
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
               match.name if match else name,
               match.target if match else target,
               match.group_key if match else group,
               DEFAULT_INTERVAL,1,now,now,0,200,399,1800,2,1,0,0,
-              match.key if match else None,
+              match.key if match else None, 1 if match else 0,
             ))
 
 
@@ -189,16 +191,16 @@ def summary() -> dict[str, Any]:
     if not checked:
         groups={name:{"total":len(rows),"checked":0,"available":0,"problematic":0,"availability":None} for name,rows in by_group.items()}
         return {"availability_index":0,"mode":"INITIALIZING","total":len(resources),"checked":0,"available":0,"problematic":0,"last_updated":0,"groups":groups,"avg_latency_ms":None,"active_incidents":0,"tls_expiring":0}
-    available=sum(1 for r in checked if r.get("status")=="OK")
+    available=sum(1 for r in checked if is_reachable(r.get("status")))
     score=round(available/len(checked)*100)
     def ratio(name:str):
         rows=[r for r in by_group.get(name,[]) if r.get("checked_at")]
-        return None if not rows else sum(1 for r in rows if r.get("status")=="OK")/len(rows)
+        return None if not rows else sum(1 for r in rows if is_reachable(r.get("status")))/len(rows)
     ru,intl=ratio("RUSSIAN"),ratio("INTERNATIONAL")
     mode="NO_INTERNET" if score<35 else "RESTRICTED_ACCESS" if ru is not None and intl is not None and intl<.30 and ru>.70 else "PARTIAL_DEGRADATION" if score<70 else "NORMAL"
     groups={}
     for name,rows in by_group.items():
-        seen=[r for r in rows if r.get("checked_at")]; ok=sum(1 for r in seen if r.get("status")=="OK")
+        seen=[r for r in rows if r.get("checked_at")]; ok=sum(1 for r in seen if is_reachable(r.get("status")))
         groups[name]={"total":len(rows),"checked":len(seen),"available":ok,"problematic":len(seen)-ok,"availability":round(ok/len(seen)*100) if seen else None}
     lat=[r["response_time_ms"] for r in checked if r.get("response_time_ms") is not None]
     return {"availability_index":score,"mode":mode,"total":len(resources),"checked":len(checked),"available":available,
@@ -252,19 +254,19 @@ def resource_matrix() -> list[dict[str, Any]]:
                 diagnosis = "DOMESTIC_UNKNOWN"
                 diagnosis_text = "Нет актуальных данных из российского контура"
                 confidence = "none"
-            elif ext_d and ext_d.get("status") == "OK" and dom_d.get("status") == "OK":
+            elif ext_d and is_reachable(ext_d.get("status")) and is_reachable(dom_d.get("status")):
                 diagnosis = "AVAILABLE"
                 diagnosis_text = "Доступен снаружи и из российского контура"
                 confidence = "high"
-            elif ext_d and ext_d.get("status") == "OK" and dom_d.get("status") != "OK":
+            elif ext_d and is_reachable(ext_d.get("status")) and not is_reachable(dom_d.get("status")):
                 diagnosis = "LIKELY_RESTRICTION"
                 diagnosis_text = "Снаружи доступен, из российского контура недоступен"
                 confidence = "medium"
-            elif ext_d and ext_d.get("status") != "OK" and dom_d.get("status") != "OK":
+            elif ext_d and not is_reachable(ext_d.get("status")) and not is_reachable(dom_d.get("status")):
                 diagnosis = "LIKELY_OUTAGE"
                 diagnosis_text = "Недоступен из обеих точек наблюдения"
                 confidence = "medium"
-            elif ext_d and ext_d.get("status") != "OK" and dom_d.get("status") == "OK":
+            elif ext_d and not is_reachable(ext_d.get("status")) and is_reachable(dom_d.get("status")):
                 diagnosis = "EXTERNAL_PATH_ISSUE"
                 diagnosis_text = "В российском контуре доступен, внешний probe видит проблему"
                 confidence = "medium"

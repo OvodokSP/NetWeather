@@ -17,6 +17,7 @@ class NetWeatherApiTest(unittest.TestCase):
         os.environ["NETWEATHER_AGENT_TOKEN"] = "agent-token"
         os.environ["NETWEATHER_SEED_DEFAULTS"] = "true"
         os.environ["NETWEATHER_SCHEDULER_ENABLED"] = "false"
+        os.environ["NETWEATHER_ALLOW_OPEN_ACCESS"] = "true"
         os.environ["FRONTEND_DIR"] = str(Path(__file__).resolve().parents[2] / "frontend")
         import app.config as config
         import app.database as database
@@ -62,6 +63,35 @@ class NetWeatherApiTest(unittest.TestCase):
         self.assertEqual(login.status_code, 200)
         self.assertTrue(login.json()["open_access"])
         self.assertTrue(self.client.get("/api/session").json()["authenticated"])
+
+    def test_required_owner_session_blocks_writes_until_login(self):
+        self.main.AUTH_REQUIRED = True
+        status = self.client.get("/api/session").json()
+        self.assertTrue(status["auth_required"])
+        self.assertFalse(status["authenticated"])
+        blocked = self.client.post("/api/groups", json={"title":"Blocked"})
+        self.assertEqual(blocked.status_code, 401)
+        login = self.client.post("/api/session/login", json={"password":"owner-pass"})
+        self.assertEqual(login.status_code, 200)
+        self.assertTrue(self.client.get("/api/session").json()["authenticated"])
+        created = self.client.post("/api/groups", json={"title":"Owner group","key":"OWNER"})
+        self.assertEqual(created.status_code, 200)
+
+    def test_catalog_http_rejection_is_reachable_not_an_incident(self):
+        added = self.client.post("/api/resource-catalog/add", json={"resource_keys":["int-chatgpt"]}).json()
+        rid = added["added"][0]["id"]
+        detail = self.client.get("/api/resources/%d" % rid).json()["resource"]
+        self.assertEqual(detail["allow_http_rejected"], 1)
+        rejected = {"status":"HTTP_REJECTED","response_time_ms":220,"dns_ms":10,"tcp_ms":20,"tls_ms":30,
+                    "http_ms":160,"http_status":403,"resolved_ip":"93.184.216.34","tls_days_left":90,
+                    "final_url":"https://chatgpt.com","location":None,"message":"probe rejected"}
+        self.main.write_check(rid, rejected)
+        self.main.write_check(rid, rejected)
+        active = self.client.get("/api/incidents?active=true").json()
+        self.assertFalse(any(item["resource_id"] == rid for item in active))
+        dashboard = self.client.get("/api/dashboard").json()
+        row = next(item for item in dashboard["resources"] if item["id"] == rid)
+        self.assertEqual(row["external"]["status"], "HTTP_REJECTED")
 
         created = self.client.post("/api/groups", json={"title":"Рабочие сервисы","key":"WORK","color":"#3A8DFF"})
         self.assertEqual(created.status_code, 200)

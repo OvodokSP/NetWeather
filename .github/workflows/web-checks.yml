@@ -57,7 +57,7 @@ jobs:
           trap cleanup EXIT
 
           docker volume create netweather_security_test_data >/dev/null
-          docker run -d             --name netweather-security-test             --read-only             --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m             --cap-drop ALL             --security-opt no-new-privileges=true             --pids-limit 256             --memory 512m             --memory-swap 512m             --cpus 0.75             --user 10001:10001             --publish 127.0.0.1:18081:8000             --mount type=volume,source=netweather_security_test_data,target=/data             --env NETWEATHER_API_TOKEN=test-ci-only             --env NETWEATHER_AUTH_REQUIRED=false             --env ALLOW_PRIVATE_TARGETS=false             netweather-web:security-test >/dev/null
+          docker run -d             --name netweather-security-test             --read-only             --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m             --cap-drop ALL             --security-opt no-new-privileges=true             --pids-limit 256             --memory 512m             --memory-swap 512m             --cpus 0.75             --user 10001:10001             --publish 127.0.0.1:18081:8000             --mount type=volume,source=netweather_security_test_data,target=/data             --env NETWEATHER_API_TOKEN=test-ci-only             --env NETWEATHER_ALLOW_OPEN_ACCESS=false             --env ALLOW_PRIVATE_TARGETS=false             netweather-web:security-test >/dev/null
 
           ready=0
           for _ in $(seq 1 30); do
@@ -78,3 +78,7 @@ jobs:
 
           curl -fsS --max-time 3 http://127.0.0.1:18081/api/system >/dev/null
           curl -fsS --max-time 3 http://127.0.0.1:18081/api/groups >/dev/null
+          test "$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
+            http://127.0.0.1:18081/api/groups -d '{"title":"blocked"}')" = "401"
+          curl -fsS --max-time 3 -H 'Authorization: Bearer test-ci-only' \
+            http://127.0.0.1:18081/api/auth/verify >/dev/null

@@ -18,7 +18,7 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
-    @Provides @Singleton fun db(@ApplicationContext context: Context): AppDatabase = Room.databaseBuilder(context, AppDatabase::class.java, "netweather.db").fallbackToDestructiveMigration().build()
+    @Provides @Singleton fun db(@ApplicationContext context: Context): AppDatabase = Room.databaseBuilder(context, AppDatabase::class.java, "netweather.db").build()
     @Provides @Singleton fun diagnostics() = NetworkDiagnostics()
     @Provides @Singleton fun analyzer() = NetworkAnalyzer()
     @Provides @Singleton fun stateStore(@ApplicationContext context: Context) = StateStore(context)

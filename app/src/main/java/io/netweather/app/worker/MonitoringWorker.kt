@@ -19,5 +19,5 @@ class MonitoringWorker(context: Context, params: WorkerParameters) : CoroutineWo
         if (interval < 900) MonitoringScheduler.scheduleOneTime(applicationContext, interval)
         Result.success()
     } catch (e: Exception) { Result.retry() }
-    companion object { fun createRepo(context: Context): NetWeatherRepository { val db = Room.databaseBuilder(context, AppDatabase::class.java, "netweather.db").fallbackToDestructiveMigration().build(); return NetWeatherRepositoryImpl(context, db, NetworkDiagnostics(), NetworkAnalyzer(), StateStore(context), AppNotifier(context)) } }
+    companion object { fun createRepo(context: Context): NetWeatherRepository { val db = Room.databaseBuilder(context, AppDatabase::class.java, "netweather.db").build(); return NetWeatherRepositoryImpl(context, db, NetworkDiagnostics(), NetworkAnalyzer(), StateStore(context), AppNotifier(context)) } }
 }

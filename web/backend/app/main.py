@@ -25,6 +25,7 @@ from .database import (
 from .incidents import write_check
 from .monitor import discover_target_metadata, perform_check, traceroute_to_resource
 from .resource_catalog import CATALOG_BY_KEY, catalog_match, catalog_payload
+from .availability import is_reachable
 
 
 SESSION_COOKIE = "netweather_owner"
@@ -103,6 +104,8 @@ async def scheduler() -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    if AUTH_REQUIRED and not _owner_secret():
+        raise RuntimeError("Owner authentication secret is required")
     init_db()
     seed_defaults()
     task = asyncio.create_task(scheduler()) if SCHEDULER_ENABLED else None
@@ -261,10 +264,10 @@ def _insert_catalog_resource(conn, item, now:int, *, interval_seconds:int=DEFAUL
     cur=conn.execute("""INSERT INTO resources(
       name,target,group_name,interval_seconds,enabled,created_at,updated_at,last_checked_at,
       expected_status_min,expected_status_max,slow_threshold_ms,failure_threshold,alerts_enabled,
-      last_success_at,last_failure_at,catalog_key
-    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+      last_success_at,last_failure_at,catalog_key,allow_http_rejected
+    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
     (item.name,normalize_target(item.target),item.group_key,interval_seconds,int(enabled),now,now,0,
-     expected_status_min,expected_status_max,slow_threshold_ms,failure_threshold,int(alerts_enabled),0,0,item.key))
+     expected_status_min,expected_status_max,slow_threshold_ms,failure_threshold,int(alerts_enabled),0,0,item.key,1))
     return int(cur.lastrowid),True
 
 
@@ -373,8 +376,8 @@ def create_resource(payload:ResourceCreate):
         cur=conn.execute("""INSERT INTO resources(
           name,target,group_name,interval_seconds,enabled,created_at,updated_at,last_checked_at,
           expected_status_min,expected_status_max,slow_threshold_ms,failure_threshold,alerts_enabled,
-          last_success_at,last_failure_at,catalog_key
-        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)""",
+          last_success_at,last_failure_at,catalog_key,allow_http_rejected
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,0)""",
         (payload.name,target,group_name,payload.interval_seconds,int(payload.enabled),now,now,0,
          payload.expected_status_min,payload.expected_status_max,payload.slow_threshold_ms,payload.failure_threshold,
          int(payload.alerts_enabled),0,0))
@@ -396,8 +399,10 @@ def patch_resource(resource_id:int,payload:ResourcePatch):
             values["name"]=match.name
             values["group_name"]=match.group_key
             values["catalog_key"]=match.key
+            values["allow_http_rejected"]=1
         else:
             values["catalog_key"]=None
+            values["allow_http_rejected"]=0
     if "group_name" in values:
         values["group_name"]=normalize_group(values["group_name"])
         now_group=int(time.time())
@@ -538,7 +543,7 @@ async def check_all():
     results=await asyncio.gather(*(perform_check(row) for row in rows))
     for row,result in zip(rows,results): write_check(row["id"],result)
     scheduled_domestic = schedule_domestic_checks([int(row["id"]) for row in rows])
-    return {"checked":len(rows),"ok":sum(1 for r in results if r["status"]=="OK"),"failed":sum(1 for r in results if r["status"]!="OK"),"scheduled_domestic":scheduled_domestic}
+    return {"checked":len(rows),"ok":sum(1 for r in results if is_reachable(r["status"])),"failed":sum(1 for r in results if not is_reachable(r["status"])),"scheduled_domestic":scheduled_domestic}
 
 
 @app.get("/api/incidents")
@@ -579,7 +584,7 @@ def realtime(minutes:int=Query(default=60,ge=5,le=10080), scope:str=Query(defaul
           (since-availability_window,scope)).fetchall()
         stats24=conn.execute("""SELECT resource_id,
           COUNT(*) total,
-          SUM(CASE WHEN status='OK' THEN 1 ELSE 0 END) ok,
+          SUM(CASE WHEN status IN ('OK','HTTP_REJECTED') THEN 1 ELSE 0 END) ok,
           AVG(response_time_ms) avg_latency,
           MAX(checked_at) last_checked
           FROM checks WHERE checked_at>=? AND probe_scope=? GROUP BY resource_id""",
@@ -592,7 +597,7 @@ def realtime(minutes:int=Query(default=60,ge=5,le=10080), scope:str=Query(defaul
         target=by_resource.setdefault(rid,{})
         point=target.setdefault(b,{"timestamp":b,"total":0,"ok":0,"latency_sum":0,"latency_count":0})
         point["total"]+=1
-        point["ok"]+=int(row["status"]=="OK")
+        point["ok"]+=int(is_reachable(row["status"]))
         if row["response_time_ms"] is not None:
             point["latency_sum"]+=int(row["response_time_ms"])
             point["latency_count"]+=1
@@ -668,8 +673,8 @@ def recent_events(limit:int=Query(default=30,ge=1,le=100)):
                 "time":row["checked_at"],
                 "resource_id":row["resource_id"],
                 "resource_name":row["resource_name"],
-                "severity":"info" if row["status"]=="OK" else "warning",
-                "title":("Восстановление " if row["status"]=="OK" else "Изменение состояния ")+row["resource_name"],
+                "severity":"info" if is_reachable(row["status"]) else "warning",
+                "title":("Восстановление " if is_reachable(row["status"]) else "Изменение состояния ")+row["resource_name"],
                 "message":f"{row['probe_scope']}: {old} → {row['status']} · {row['message'] or ''}",
                 "kind":"STATUS_CHANGE",
             })
@@ -689,7 +694,7 @@ def history(hours:int=24, scope:str=Query(default="EXTERNAL")):
     buckets={}; size=max(60,(hours*3600)//240)
     for row in rows:
         bucket=(row["checked_at"]//size)*size; data=buckets.setdefault(bucket,{"timestamp":bucket,"total":0,"ok":0,"latency_sum":0})
-        data["total"]+=1; data["ok"]+=int(row["status"]=="OK"); data["latency_sum"]+=row["response_time_ms"]
+        data["total"]+=1; data["ok"]+=int(is_reachable(row["status"])); data["latency_sum"]+=row["response_time_ms"]
     return [{"timestamp":v["timestamp"],"availability":round(v["ok"]/v["total"]*100) if v["total"] else 0,
       "avg_latency_ms":round(v["latency_sum"]/v["total"]) if v["total"] else 0,"checks":v["total"]} for v in buckets.values()]
 

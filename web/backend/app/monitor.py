@@ -71,8 +71,12 @@ async def perform_check(resource) -> dict[str,Any]:
             async with client.stream("GET",target) as response:
                 out["http_ms"]=round((time.perf_counter()-hs)*1000); out["http_status"]=response.status_code; out["location"]=response.headers.get("location"); out["final_url"]=str(response.url)
         lo,hi=resource["expected_status_min"] or 200,resource["expected_status_max"] or 399
-        if lo<=out["http_status"]<=hi: out.update(status="OK",message=f"HTTP {out['http_status']}")
-        else: out.update(status="HTTP_ERROR",message=f"HTTP {out['http_status']}, expected {lo}-{hi}")
+        if lo<=out["http_status"]<=hi:
+            out.update(status="OK",message=f"HTTP {out['http_status']}")
+        elif resource["allow_http_rejected"] and out["http_status"] in {401,403,405,429}:
+            out.update(status="HTTP_REJECTED",message=f"HTTP {out['http_status']}: сервис доступен, но отклонил автоматическую проверку")
+        else:
+            out.update(status="HTTP_ERROR",message=f"HTTP {out['http_status']}, expected {lo}-{hi}")
     except httpx.TimeoutException: out.update(status="TIMEOUT",message="HTTP timeout")
     except Exception as e: out.update(status="HTTP_ERROR",message=str(e))
     out["response_time_ms"]=round((time.perf_counter()-started)*1000); return out

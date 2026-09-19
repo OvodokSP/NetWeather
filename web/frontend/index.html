@@ -30,7 +30,7 @@
 
     <div class="side-spacer"></div>
 
-    <article class="sidebar-cta">
+    <article class="sidebar-cta owner-only">
       <h3>Больше данных<br>Больше уверенности</h3>
       <p>Подключите свои ресурсы и получайте детальную аналитику.</p>
       <button class="btn primary wide-btn" id="sidebarAddResource">+ Добавить ресурс</button>
@@ -43,7 +43,7 @@
 
     <div class="user-card">
       <div class="user-avatar">NW</div>
-      <div><b>Локальный режим</b><span>без авторизации</span></div>
+      <div><b id="ownerModeTitle">Режим просмотра</b><span id="ownerModeHint">публичные данные</span></div>
       <button type="button" title="Открыть настройки" aria-label="Открыть настройки" data-view-jump="settings">⋮</button>
     </div>
     <div class="side-version">netweather.online · <span id="versionLabel">—</span></div>
@@ -81,7 +81,7 @@
               <h1 id="welcomeTitle">Хорошая связь сегодня</h1>
               <p id="welcomeSubtitle">Мониторим доступность интернет-ресурсов по всему миру. В реальном времени. Для вас.</p>
             </div>
-            <div class="headline-actions"><blockquote>«Стабильный интернет — более спокойный мир»</blockquote><button class="btn dashboard-config-btn" id="customizeOverview" type="button">⚙ Настроить экран</button></div>
+            <div class="headline-actions"><button class="btn dashboard-config-btn" id="customizeOverview" type="button">⚙ Настроить экран</button></div>
           </div>
 
           <div class="kpi-grid">
@@ -192,7 +192,7 @@
           <div class="overview-row overview-row-bottom">
             <article class="panel resources-panel" data-dashboard-panel="resources_table">
               <div class="panel-head compact">
-                <div class="resource-headline"><h2>Ресурсы</h2><button class="btn tiny primary" id="overviewAddResource">+ Добавить</button></div>
+                <div class="resource-headline"><h2>Ресурсы</h2><button class="btn tiny primary owner-only" id="overviewAddResource">+ Добавить</button></div>
               </div>
               <div class="compact-table" id="overviewResourceTable"></div>
             </article>
@@ -218,7 +218,7 @@
       <section class="view" id="view-resources">
         <div class="page-head">
           <div><h1>Мониторинг</h1><p>Ресурсы, группы, интервалы и диагностические этапы.</p></div>
-          <div class="page-actions"><button class="btn secondary" id="manageGroups">Группы</button><button class="btn primary" id="openAddResource">+ Добавить ресурс</button></div>
+          <div class="page-actions owner-only"><button class="btn secondary" id="manageGroups">Группы</button><button class="btn primary" id="openAddResource">+ Добавить ресурс</button></div>
         </div>
         <article class="panel page-panel">
           <div class="filters">
@@ -231,12 +231,12 @@
       </section>
 
       <section class="view" id="view-groups">
-        <div class="page-head"><div><h1>Группы ресурсов</h1><p>Сегменты мониторинга и распределение ресурсов.</p></div><button class="btn primary" id="openAddGroup">+ Новая группа</button></div>
+        <div class="page-head"><div><h1>Группы ресурсов</h1><p>Сегменты мониторинга и распределение ресурсов.</p></div><button class="btn primary owner-only" id="openAddGroup">+ Новая группа</button></div>
         <div id="groupsGrid" class="groups-management"></div>
       </section>
 
       <section class="view" id="view-alerts">
-        <div class="page-head"><div><h1>Инциденты</h1><p>Активные тревоги и журнал событий.</p></div><button class="btn secondary" id="ackAllIncidents">✓ Отметить все прочитанными</button></div>
+        <div class="page-head"><div><h1>Инциденты</h1><p>Активные тревоги и журнал событий.</p></div><button class="btn secondary owner-only" id="ackAllIncidents">✓ Отметить все прочитанными</button></div>
         <div class="two-col">
           <article class="panel page-panel"><div class="panel-head"><h2>Активные</h2></div><div id="activeIncidents" class="incident-list"></div></article>
           <article class="panel page-panel"><div class="panel-head"><h2>История</h2></div><div id="incidentHistory" class="incident-list"></div></article>
@@ -300,15 +300,15 @@
       <section class="view" id="view-integrations">
         <div class="page-head"><div><h1>Интеграции</h1><p>API, probes и внешние каналы.</p></div></div>
         <div class="settings-grid">
-          <article class="panel setting-card"><span>API</span><h2>NetWeather API</h2><p>REST endpoints доступны в текущем development-mode без авторизации.</p><div class="setting-box">/api/dashboard · /api/resources · /api/incidents · /api/realtime</div></article>
+          <article class="panel setting-card"><span>API</span><h2>NetWeather API</h2><p>Чтение публичных данных доступно без входа; управляющие запросы требуют права владельца.</p><div class="setting-box">/api/dashboard · /api/resources · /api/incidents · /api/realtime</div></article>
           <article class="panel setting-card"><span>PROBE</span><h2>Agent API</h2><p>Подключение Keenetic/устройств использует отдельный agent token.</p><div class="setting-box">/api/agent/config.tsv · /api/agent/result</div></article>
         </div>
       </section>
 
       <section class="view" id="view-settings">
-        <div class="page-head"><div><h1>Настройки</h1><p>Состояние Core и параметры development-режима.</p></div></div>
+        <div class="page-head"><div><h1>Настройки</h1><p>Состояние Core, доступ владельца и параметры мониторинга.</p></div></div>
         <div class="settings-grid">
-          <article class="panel setting-card"><span>ДОСТУП</span><h2>Открытый режим разработки</h2><p>Все функции интерфейса сейчас доступны без пользовательской авторизации. Разделение прав будет добавлено после завершения базовой диагностики.</p><div id="tokenState" class="setting-box"></div></article>
+          <article class="panel setting-card"><span>ДОСТУП</span><h2>Публичный просмотр</h2><p>Состояние сети видно всем. Изменение ресурсов, ручные проверки и подтверждение инцидентов доступны только владельцу.</p><div id="tokenState" class="setting-box"></div><button class="btn primary" id="ownerAuthAction" type="button">Войти как владелец</button></article>
           <article class="panel setting-card"><span>ТОЧКИ НАБЛЮДЕНИЯ</span><h2>Probes</h2><div id="probeSettings" class="probe-settings"></div></article>
           <article class="panel setting-card"><span>ТРЕВОГИ</span><h2>Триггеры</h2><p>Последовательные ошибки, высокая задержка и срок TLS.</p><div id="alertSystemState" class="setting-box"></div></article>
           <article class="panel setting-card"><span>CORE</span><h2>Runtime</h2><div id="systemInfo" class="system-info"></div></article>
@@ -407,7 +407,7 @@
 <dialog id="detailDialog" class="modal detail-modal">
   <div class="modal-head"><div><span>РЕСУРС</span><h2 id="detailTitle">—</h2></div><button type="button" class="modal-close" aria-label="Закрыть окно">×</button></div>
   <div id="detailBody"></div>
-  <div class="modal-actions split"><button class="btn danger" id="deleteResource">Удалить</button><div><button class="btn secondary" id="editResource">Изменить</button><button class="btn secondary" id="detailTrace">Traceroute</button><button class="btn primary" id="detailCheck">Проверить</button></div></div>
+  <div class="modal-actions split owner-only"><button class="btn danger" id="deleteResource">Удалить</button><div><button class="btn secondary" id="editResource">Изменить</button><button class="btn secondary" id="detailTrace">Traceroute</button><button class="btn primary" id="detailCheck">Проверить</button></div></div>
 </dialog>
 
 <dialog id="groupDialog" class="modal small-modal">
@@ -434,6 +434,18 @@
     <button type="button" class="btn secondary" id="confirmCancel">Отмена</button>
     <button type="button" class="btn danger" id="confirmAccept">Продолжить</button>
   </div>
+</dialog>
+
+<dialog id="ownerLoginDialog" class="modal small-modal" aria-labelledby="ownerLoginTitle">
+  <form id="ownerLoginForm">
+    <div class="modal-head">
+      <div><span>ДОСТУП ВЛАДЕЛЬЦА</span><h2 id="ownerLoginTitle">Войти в режим управления</h2></div>
+      <button type="button" class="modal-close" aria-label="Закрыть окно">×</button>
+    </div>
+    <label class="field-label">Пароль<input class="input" id="ownerPassword" type="password" required maxlength="512" autocomplete="current-password"></label>
+    <p class="auth-note">Пароль передаётся только текущему NetWeather Core и не сохраняется в браузере.</p>
+    <div class="modal-actions"><button type="button" class="btn secondary modal-close">Отмена</button><button type="submit" class="btn primary">Войти</button></div>
+  </form>
 </dialog>
 
 <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>

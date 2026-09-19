@@ -19,10 +19,13 @@
 - NetWeather cannot initiate connections to host/private/VPN networks.
 - Deployment key is forced-command only.
 - Production image build happens off-host.
+- Production UI is public read-only; mutations require an owner session.
+- Catalog anti-bot HTTP rejections are represented as reachable rather than false outages.
+- Android latest results and interval settings use persisted reactive state.
 
 ## Deployment channel
 
-End-to-end auto-deploy is being finalized.
+End-to-end auto-deploy is verified and active for the development branch.
 
 Verified:
 - repository variable enables workflow;
@@ -30,9 +33,8 @@ Verified:
 - production image builds off-host;
 - non-root image assertion succeeds;
 - artifact reaches VPS over restricted SSH.
-
-Last remaining deployment corrective:
-- deploy helper temporary files moved from shared `/tmp` to root-owned deployment state directory.
+- deploy helper uses root-owned state, verifies the exact image identity, and waits for Docker health;
+- production starts in mandatory owner-auth mode and fails closed if no owner secret is configured.
 
 ## Current UI checkpoint
 
@@ -48,9 +50,12 @@ Completed in 0.3.10:
 - real map-region filter;
 - live probe layer on the map page;
 - GitHub project documentation/templates refresh.
+- public read-only / owner-session access model;
+- privacy-safe local resource icons without third-party browser requests;
+- fault-domain panel hidden until an independent comparison probe exists.
 
 Next UI work:
-- responsive pass on narrow layouts;
+- final device-level responsive verification on narrow layouts;
 - contextual help/tooltips;
 - remaining empty/error-state polish;
 - browser-probe panels when capability exists.
@@ -60,6 +65,6 @@ Next UI work:
 1. Keenetic Domestic Probe.
 2. Browser Probe.
 3. Unified probe comparison.
-4. Explainable fault-domain.
+4. Explainable fault-domain after at least two independent probes exist.
 5. Alerts/reporting refinement.
 6. Accounts/capabilities/licensing only after the base tool is complete.

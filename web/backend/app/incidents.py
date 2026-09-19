@@ -8,6 +8,7 @@ import httpx
 
 from .config import ALERT_WEBHOOK_URL, SERVER_PROBE_KEY
 from .database import db
+from .availability import is_reachable
 
 
 def _open(conn, resource_id: int, kind: str, severity: str, message: str, now: int):
@@ -85,8 +86,8 @@ def _evaluate_restriction(conn, resource, now: int, notices: list[dict[str, Any]
            ORDER BY checked_at DESC,id DESC LIMIT ?""",
         (resource["id"], dom["probe_key"], threshold),
     ).fetchall()
-    domestic_confirmed_fail = len(recent_dom) >= threshold and all(r["status"] != "OK" for r in recent_dom)
-    restriction = ext["status"] == "OK" and domestic_confirmed_fail
+    domestic_confirmed_fail = len(recent_dom) >= threshold and all(not is_reachable(r["status"]) for r in recent_dom)
+    restriction = is_reachable(ext["status"]) and domestic_confirmed_fail
 
     if restriction:
         msg = (
@@ -135,7 +136,7 @@ def write_check(
         )
 
         if probe_scope == "EXTERNAL":
-            if payload["status"] == "OK":
+            if is_reachable(payload["status"]):
                 conn.execute(
                     "UPDATE resources SET last_checked_at=?,last_success_at=?,updated_at=? WHERE id=?",
                     (now, now, now, resource_id),
@@ -158,20 +159,20 @@ def write_check(
                    ORDER BY checked_at DESC,id DESC LIMIT ?""",
                 (resource_id, threshold),
             ).fetchall()
-            failing = len(recent) >= threshold and all(x["status"] != "OK" for x in recent)
+            failing = len(recent) >= threshold and all(not is_reachable(x["status"]) for x in recent)
             if failing:
                 msg = f"{resource['name']}: {payload['status']} — {payload.get('message','')}"
                 iid = _open(conn, resource_id, "DOWN", "critical", msg, now)
                 if iid:
                     notices.append(_notice("incident_opened", iid, resource["name"], "DOWN", "critical", msg, now))
-            elif payload["status"] == "OK":
+            elif is_reachable(payload["status"]):
                 for iid in _close(conn, resource_id, "DOWN", now):
                     notices.append(_notice(
                         "incident_closed", iid, resource["name"], "DOWN", "info",
                         "Внешняя доступность восстановлена", now,
                     ))
 
-            slow = payload["status"] == "OK" and payload["response_time_ms"] >= int(resource["slow_threshold_ms"] or 1500)
+            slow = is_reachable(payload["status"]) and payload["response_time_ms"] >= int(resource["slow_threshold_ms"] or 1500)
             if slow:
                 msg = (
                     f"{resource['name']}: внешний отклик {payload['response_time_ms']} мс "
@@ -180,7 +181,7 @@ def write_check(
                 iid = _open(conn, resource_id, "SLOW", "warning", msg, now)
                 if iid:
                     notices.append(_notice("incident_opened", iid, resource["name"], "SLOW", "warning", msg, now))
-            elif payload["status"] == "OK":
+            elif is_reachable(payload["status"]):
                 for iid in _close(conn, resource_id, "SLOW", now):
                     notices.append(_notice(
                         "incident_closed", iid, resource["name"], "SLOW", "info",

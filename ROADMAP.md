@@ -22,12 +22,14 @@ Roadmap отражает текущую продуктовую концепци�
 
 ### Сейчас
 
-- [ ] единый interaction contract для кнопок, форм и dialog
-- [ ] финальная типографика и spacing всех экранов
-- [ ] состояния loading / empty / error / disabled
-- [ ] keyboard navigation и accessibility
-- [ ] полировка resource/groups flows
-- [ ] успешный end-to-end production auto-deploy
+- [x] единый interaction contract для кнопок, форм и dialog
+- [x] минимальная типографика и spacing основных экранов
+- [x] состояния loading / empty / error / disabled для основных потоков
+- [x] keyboard navigation и базовая accessibility
+- [x] полировка resource/groups flows
+- [x] успешный end-to-end production auto-deploy
+- [x] публичное чтение + защищённая owner-session для изменений
+- [ ] device-level responsive QA на узких экранах
 
 ## 0.4 — Probe convergence
 

@@ -23,6 +23,14 @@ MAX_BYTES=$((320 * 1024 * 1024))
 
 install -d -o root -g root -m 0700 "${STATE}"
 [[ -f "${ENV_FILE}" ]] || { echo "missing ${ENV_FILE}" >&2; exit 78; }
+awk -F= '
+  /^[[:space:]]*#/ { next }
+  $1 ~ /^[[:space:]]*NETWEATHER_(API_TOKEN|UI_PASSWORD)[[:space:]]*$/ {
+    value=substr($0,index($0,"=")+1); gsub(/^[[:space:]]+|[[:space:]]+$/,"",value)
+    if (value != "" && value != "\"\"" && value != "\047\047") found=1
+  }
+  END { exit found ? 0 : 1 }
+' "${ENV_FILE}" || { echo "owner authentication secret is not configured" >&2; exit 78; }
 
 # The deploy channel accepts only a bounded Docker image archive on stdin.
 head -c $((MAX_BYTES + 1)) > "${ARCHIVE}"
@@ -88,6 +96,7 @@ run_locked() {
     --publish 127.0.0.1:18081:8000 \
     --mount type=volume,source="${VOLUME}",target=/data \
     --env-file "${ENV_FILE}" \
+    --env NETWEATHER_ALLOW_OPEN_ACCESS=false \
     --env ALLOW_PRIVATE_TARGETS=false \
     --log-driver local \
     --log-opt max-size=10m \

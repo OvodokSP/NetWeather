@@ -18,7 +18,8 @@ interface ResourceDao {
 @Dao
 interface CheckResultDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insert(result: CheckResultEntity): Long
-    @Query("SELECT * FROM check_results WHERE timestamp IN (SELECT MAX(timestamp) FROM check_results GROUP BY resourceId)") suspend fun latest(): List<CheckResultEntity>
+    @Query("SELECT cr.* FROM check_results cr WHERE cr.id = (SELECT cr2.id FROM check_results cr2 WHERE cr2.resourceId = cr.resourceId ORDER BY cr2.timestamp DESC, cr2.id DESC LIMIT 1)") suspend fun latest(): List<CheckResultEntity>
+    @Query("SELECT cr.* FROM check_results cr WHERE cr.id = (SELECT cr2.id FROM check_results cr2 WHERE cr2.resourceId = cr.resourceId ORDER BY cr2.timestamp DESC, cr2.id DESC LIMIT 1)") fun observeLatest(): Flow<List<CheckResultEntity>>
     @Query("SELECT * FROM check_results WHERE timestamp >= :from ORDER BY timestamp DESC") fun observeSince(from: Long): Flow<List<CheckResultEntity>>
     @Query("SELECT * FROM check_results WHERE resourceId = :resourceId AND status = 'OK' ORDER BY timestamp DESC LIMIT 1") suspend fun lastSuccess(resourceId: Long): CheckResultEntity?
 }
