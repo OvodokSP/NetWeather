@@ -258,3 +258,123 @@ def resource_matrix() -> list[dict[str, Any]]:
     with db() as conn:
         resources = conn.execute("SELECT * FROM resources ORDER BY group_name,name").fetchall()
         probes = {r["probe_key"]: dict(r) for r in conn.execute("SELECT * FROM probes").fetchall()}
+        result = []
+        for r in resources:
+            ext = _latest_probe_check(conn, r["id"], "EXTERNAL")
+            dom = _latest_probe_check(conn, r["id"], "DOMESTIC")
+            ext_d = dict(ext) if ext else None
+            dom_d = dict(dom) if dom else None
+            dom_fresh = False
+            if dom_d:
+                p = probes.get(dom_d.get("probe_key"))
+                dom_fresh = bool(p and p.get("last_seen_at") and now - int(p["last_seen_at"]) <= AGENT_STALE_SECONDS)
+            if not dom_d or not dom_fresh:
+                diagnosis = "DOMESTIC_UNKNOWN"
+                diagnosis_text = "Нет актуальных данных из российского контура"
+                confidence = "none"
+            elif ext_d and is_reachable(ext_d.get("status")) and is_reachable(dom_d.get("status")):
+                diagnosis = "AVAILABLE"
+                diagnosis_text = "Доступен снаружи и из российского контура"
+                confidence = "high"
+            elif ext_d and is_reachable(ext_d.get("status")) and not is_reachable(dom_d.get("status")):
+                diagnosis = "LIKELY_RESTRICTION"
+                diagnosis_text = "Снаружи доступен, из российского контура недоступен"
+                confidence = "medium"
+            elif ext_d and not is_reachable(ext_d.get("status")) and not is_reachable(dom_d.get("status")):
+                diagnosis = "LIKELY_OUTAGE"
+                diagnosis_text = "Недоступен из обеих точек наблюдения"
+                confidence = "medium"
+            elif ext_d and not is_reachable(ext_d.get("status")) and is_reachable(dom_d.get("status")):
+                diagnosis = "EXTERNAL_PATH_ISSUE"
+                diagnosis_text = "В российском контуре доступен, внешний probe видит проблему"
+                confidence = "medium"
+            else:
+                diagnosis = "INSUFFICIENT_DATA"
+                diagnosis_text = "Недостаточно данных для классификации"
+                confidence = "none"
+            legacy = {
+                "status": ext_d.get("status") if ext_d else None,
+                "response_time_ms": ext_d.get("response_time_ms") if ext_d else None,
+                "dns_ms": ext_d.get("dns_ms") if ext_d else None,
+                "tcp_ms": ext_d.get("tcp_ms") if ext_d else None,
+                "tls_ms": ext_d.get("tls_ms") if ext_d else None,
+                "http_ms": ext_d.get("http_ms") if ext_d else None,
+                "http_status": ext_d.get("http_status") if ext_d else None,
+                "resolved_ip": ext_d.get("resolved_ip") if ext_d else None,
+                "message": ext_d.get("message") if ext_d else None,
+                "checked_at": ext_d.get("checked_at") if ext_d else None,
+                "tls_days_left": ext_d.get("tls_days_left") if ext_d else None,
+            }
+            result.append({
+                **dict(r),
+                **legacy,
+                "external": ext_d,
+                "domestic": dom_d if dom_fresh else None,
+                "domestic_stale": bool(dom_d and not dom_fresh),
+                "diagnosis": diagnosis,
+                "diagnosis_text": diagnosis_text,
+                "confidence": confidence,
+            })
+    return result
+
+
+def dual_summary() -> dict[str, Any]:
+    rows = [r for r in resource_matrix() if r["enabled"]]
+    probes = probe_statuses()
+    domestic_online = any(p["scope"] == "DOMESTIC" and p["online"] for p in probes)
+    counts = {
+        "available": 0, "likely_restriction": 0, "likely_outage": 0,
+        "external_path_issue": 0, "unknown": 0,
+    }
+    domestic_lat = []
+    last_updated = 0
+    groups: dict[str, dict[str, int]] = {}
+    for r in rows:
+        d = r["diagnosis"]
+        if d == "AVAILABLE": counts["available"] += 1
+        elif d == "LIKELY_RESTRICTION": counts["likely_restriction"] += 1
+        elif d == "LIKELY_OUTAGE": counts["likely_outage"] += 1
+        elif d == "EXTERNAL_PATH_ISSUE": counts["external_path_issue"] += 1
+        else: counts["unknown"] += 1
+        g = groups.setdefault(r["group_name"], {"total":0,"available":0,"restriction":0,"outage":0,"unknown":0})
+        g["total"] += 1
+        if d == "AVAILABLE": g["available"] += 1
+        elif d == "LIKELY_RESTRICTION": g["restriction"] += 1
+        elif d == "LIKELY_OUTAGE": g["outage"] += 1
+        else: g["unknown"] += 1
+        if r["domestic"]:
+            last_updated = max(last_updated, int(r["domestic"]["checked_at"] or 0))
+            if r["domestic"].get("response_time_ms") is not None:
+                domestic_lat.append(int(r["domestic"]["response_time_ms"]))
+        elif r["external"]:
+            last_updated = max(last_updated, int(r["external"]["checked_at"] or 0))
+    if not domestic_online:
+        mode = "NO_DOMESTIC_PROBE"
+        score = None
+    else:
+        confirmed = max(1, len(rows) - counts["unknown"])
+        score = round(counts["available"] / confirmed * 100)
+        if counts["likely_restriction"]:
+            mode = "RESTRICTIONS_DETECTED"
+        elif counts["likely_outage"]:
+            mode = "OUTAGES_DETECTED"
+        elif counts["external_path_issue"]:
+            mode = "PROBE_PATH_ISSUES"
+        else:
+            mode = "NORMAL"
+    return {
+        "mode": mode, "availability_index": score, "total": len(rows),
+        "last_updated": last_updated, "groups": groups, "probes": probes,
+        "domestic_probe_online": domestic_online,
+        "avg_domestic_latency_ms": round(sum(domestic_lat)/len(domestic_lat)) if domestic_lat else None,
+        **counts,
+    }
+
+
+
+def resource_groups() -> list[dict[str, Any]]:
+    with db() as conn:
+        rows = conn.execute("""SELECT g.*,
+          (SELECT COUNT(*) FROM resources r WHERE r.group_name=g.group_key) resource_count
+          FROM resource_groups g ORDER BY g.sort_order,g.title""").fetchall()
+    return [dict(r) for r in rows]
