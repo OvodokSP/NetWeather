@@ -181,5 +181,19 @@ jobs:
         run: |
           set -euo pipefail
           IMAGE_ARCHIVE=/tmp/netweather-artifact/netweather-web-image.tar.gz
+          DEPLOY_LOG=/tmp/netweather-deploy-result.log
           gzip -t "$IMAGE_ARCHIVE"
-          cat "$IMAGE_ARCHIVE" |             ssh               -p "${VPS_PORT:-22}"               -i ~/.ssh/netweather_deploy               -o BatchMode=yes               -o IdentitiesOnly=yes               -o StrictHostKeyChecking=yes               "$VPS_USER@$VPS_HOST"               "deploy $GITHUB_SHA"
+          cat "$IMAGE_ARCHIVE" | \
+            ssh \
+              -p "${VPS_PORT:-22}" \
+              -i ~/.ssh/netweather_deploy \
+              -o BatchMode=yes \
+              -o IdentitiesOnly=yes \
+              -o StrictHostKeyChecking=yes \
+              "$VPS_USER@$VPS_HOST" \
+              "deploy $GITHUB_SHA" | tee "$DEPLOY_LOG"
+
+          grep -Fq '=== FINAL RUNTIME IDENTITY ===' "$DEPLOY_LOG"
+          grep -Eq "^REVISION=$GITHUB_SHA IMAGE_ID=sha256:[0-9a-f]{64}$" "$DEPLOY_LOG"
+          grep -Eq '^NAME=netweather-web STATUS=.*\(healthy\)' "$DEPLOY_LOG"
+          grep -Fq '=== DEPLOY PASS ===' "$DEPLOY_LOG"
