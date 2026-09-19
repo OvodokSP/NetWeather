@@ -667,7 +667,11 @@ def recent_events(limit:int=Query(default=30,ge=1,le=100)):
     for row in reversed(checks):
         key=(row["resource_id"],row["probe_scope"])
         old=previous.get(key)
-        if old is not None and old!=row["status"]:
+        if (
+            old is not None
+            and old != row["status"]
+            and is_reachable(old) != is_reachable(row["status"])
+        ):
             events.append({
                 "type":"status_change",
                 "time":row["checked_at"],

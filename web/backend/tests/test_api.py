@@ -94,6 +94,15 @@ class NetWeatherApiTest(unittest.TestCase):
         row = next(item for item in dashboard["resources"] if item["id"] == rid)
         self.assertEqual(row["external"]["status"], "HTTP_REJECTED")
 
+        ok = {**rejected, "status":"OK", "http_status":200, "message":"HTTP 200"}
+        self.main.write_check(rid, ok)
+        self.main.write_check(rid, rejected)
+        events = self.client.get("/api/events?limit=30").json()
+        self.assertFalse(any(
+            item.get("resource_id") == rid and item.get("type") == "status_change"
+            for item in events
+        ))
+
     def test_catalog_migration_repairs_existing_http_rejection_telemetry(self):
         with self.main.db() as conn:
             resource = conn.execute(
