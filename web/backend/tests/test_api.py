@@ -29,6 +29,7 @@ class NetWeatherApiTest(unittest.TestCase):
         importlib.reload(incidents)
         importlib.reload(monitor)
         self.main = importlib.reload(main)
+        self.database = database
         self.client_ctx = TestClient(self.main.app, base_url="https://testserver")
         self.client = self.client_ctx.__enter__()
         self.auth = {"Authorization": "Bearer test-token"}
@@ -92,6 +93,43 @@ class NetWeatherApiTest(unittest.TestCase):
         dashboard = self.client.get("/api/dashboard").json()
         row = next(item for item in dashboard["resources"] if item["id"] == rid)
         self.assertEqual(row["external"]["status"], "HTTP_REJECTED")
+
+    def test_catalog_migration_repairs_existing_http_rejection_telemetry(self):
+        with self.main.db() as conn:
+            resource = conn.execute(
+                "SELECT id,name FROM resources WHERE catalog_key IS NOT NULL LIMIT 1"
+            ).fetchone()
+            self.assertIsNotNone(resource)
+            rid = int(resource["id"])
+            now = int(time.time())
+            conn.execute("UPDATE resources SET allow_http_rejected=0 WHERE id=?", (rid,))
+            conn.execute(
+                """INSERT INTO checks(
+                     resource_id,checked_at,status,response_time_ms,http_status,message,probe_scope
+                   ) VALUES(?,?,?,?,?,?,?)""",
+                (rid, now, "HTTP_ERROR", 220, 403, "HTTP 403, expected 200-399", "EXTERNAL"),
+            )
+            conn.execute(
+                """INSERT INTO incidents(resource_id,kind,severity,opened_at,message)
+                   VALUES(?,?,?,?,?)""",
+                (rid, "DOWN", "critical", now, f"{resource['name']}: HTTP_ERROR — HTTP 403, expected 200-399"),
+            )
+
+        self.database.init_db()
+
+        with self.main.db() as conn:
+            repaired = conn.execute(
+                "SELECT allow_http_rejected FROM resources WHERE id=?", (rid,)
+            ).fetchone()
+            latest = conn.execute(
+                "SELECT status FROM checks WHERE resource_id=? ORDER BY id DESC LIMIT 1", (rid,)
+            ).fetchone()
+            false_incidents = conn.execute(
+                "SELECT COUNT(*) FROM incidents WHERE resource_id=? AND kind='DOWN'", (rid,)
+            ).fetchone()[0]
+        self.assertEqual(repaired["allow_http_rejected"], 1)
+        self.assertEqual(latest["status"], "HTTP_REJECTED")
+        self.assertEqual(false_incidents, 0)
 
         created = self.client.post("/api/groups", json={"title":"Рабочие сервисы","key":"WORK","color":"#3A8DFF"})
         self.assertEqual(created.status_code, 200)
