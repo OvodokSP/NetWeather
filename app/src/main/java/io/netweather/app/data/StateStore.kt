@@ -5,6 +5,7 @@ import io.netweather.app.domain.model.NetworkMode
 import io.netweather.app.domain.model.NetworkSummary
 
 class StateStore(context: Context) {
+    companion object { const val DEFAULT_INTERVAL_SECONDS = 300 }
     private val prefs = context.getSharedPreferences("netweather_state", Context.MODE_PRIVATE)
     fun save(summary: NetworkSummary) {
         prefs.edit()
@@ -23,4 +24,8 @@ class StateStore(context: Context) {
         val mode = runCatching { NetworkMode.valueOf(prefs.getString("mode", NetworkMode.NO_INTERNET.name)!!) }.getOrDefault(NetworkMode.NO_INTERNET)
         return NetworkSummary(prefs.getInt("index", 0), mode, last, prefs.getInt("total",0), prefs.getInt("available",0), prefs.getInt("problematic",0), prefs.getString("problems", "")!!.lines().filter { it.isNotBlank() })
     }
+    fun saveIntervalSeconds(seconds: Int) {
+        prefs.edit().putInt("checkIntervalSeconds", seconds.coerceIn(30, 86400)).apply()
+    }
+    fun loadIntervalSeconds(): Int = prefs.getInt("checkIntervalSeconds", DEFAULT_INTERVAL_SECONDS).coerceIn(30, 86400)
 }

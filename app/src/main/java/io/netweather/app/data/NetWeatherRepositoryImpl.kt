@@ -30,7 +30,10 @@ class NetWeatherRepositoryImpl(
     override suspend fun deleteResource(resource: MonitoredResource) = db.resourceDao().delete(resource.toEntity())
     override suspend fun setEnabled(id: Long, enabled: Boolean) = db.resourceDao().setEnabled(id, enabled)
     override suspend fun latestResults(): List<CheckResult> = db.checkResultDao().latest().map { it.toDomain() }
+    override fun observeLatestResults(): Flow<List<CheckResult>> = db.checkResultDao().observeLatest().map { list -> list.map { it.toDomain() } }
     override fun observeHistory(periodMillis: Long): Flow<List<NetworkSummary>> = db.historyDao().observeSince(System.currentTimeMillis() - periodMillis).map { list -> list.map { NetworkSummary(it.availabilityIndex, it.mode, it.timestamp, it.total, it.available, it.problematic) } }
+    override fun checkIntervalSeconds(): Int = stateStore.loadIntervalSeconds()
+    override fun setCheckIntervalSeconds(seconds: Int) = stateStore.saveIntervalSeconds(seconds)
 
     override suspend fun runChecks(): NetworkSummary {
         ensureDefaultResources()

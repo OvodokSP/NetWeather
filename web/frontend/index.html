@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="ru" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#08111f">
+  <meta name="description" content="NetWeather — мониторинг доступности ресурсов и диагностика сетевых проблем в реальном времени.">
+  <title>NetWeather</title>
+  <link rel="stylesheet" href="/assets/dashboard.css?v=0.3.10">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-logo" aria-hidden="true">☁</div>
+      <div><strong>NetWeather</strong><span>Интернет под контролем</span></div>
+    </div>
+
+    <nav class="side-nav" aria-label="Основная навигация">
+      <button class="side-item active" data-view="overview"><span>⌂</span>Обзор</button>
+      <button class="side-item" data-view="resources"><span>▱</span>Мониторинг</button>
+      <button class="side-item" data-view="alerts"><span>△</span>Инциденты <i id="alertBadge" class="badge hidden">0</i></button>
+      <button class="side-item" data-view="map"><span>◇</span>Карта сбоев</button>
+      <button class="side-item" data-view="probes"><span>⌾</span>Точки наблюдения</button>
+      <button class="side-item" data-view="history"><span>▥</span>Отчёты</button>
+      <button class="side-item" data-view="notifications"><span>♢</span>Уведомления</button>
+      <button class="side-item" data-view="integrations"><span>⌘</span>Интеграции</button>
+      <button class="side-item" data-view="settings"><span>⚙</span>Настройки</button>
+    </nav>
+
+    <div class="side-spacer"></div>
+
+    <article class="sidebar-cta owner-only">
+      <h3>Больше данных<br>Больше уверенности</h3>
+      <p>Подключите свои ресурсы и получайте детальную аналитику.</p>
+      <button class="btn primary wide-btn" id="sidebarAddResource">+ Добавить ресурс</button>
+    </article>
+
+    <div class="side-health">
+      <div class="pulse-dot"></div>
+      <div><b>NetWeather Core</b><span id="apiStatus" role="status" aria-live="polite">проверка…</span></div>
+    </div>
+
+    <div class="user-card">
+      <div class="user-avatar">NW</div>
+      <div><b id="ownerModeTitle">Режим просмотра</b><span id="ownerModeHint">публичные данные</span></div>
+      <button type="button" title="Открыть настройки" aria-label="Открыть настройки" data-view-jump="settings">⋮</button>
+    </div>
+    <div class="side-version">netweather.online · <span id="versionLabel">—</span></div>
+  </aside>
+
+  <div class="workspace">
+    <header class="topbar">
+      <div class="search-wrap">
+        <span class="search-icon">⌕</span>
+        <input id="globalSearch" autocomplete="off" placeholder="Поиск ресурса, домена или IP…" aria-label="Глобальный поиск" aria-controls="searchResults" aria-expanded="false">
+        <kbd>⌘ K</kbd>
+        <div id="searchResults" class="search-results hidden" role="listbox" aria-label="Результаты поиска"></div>
+      </div>
+
+      <div class="top-actions">
+        <div class="health-pill" id="topSystemStatus" role="status" aria-live="polite">
+          <i></i><div><b>Система запускается</b><span>получаем данные</span></div>
+        </div>
+        <div class="clock">
+          <b id="clockTime">—</b>
+          <span id="clockDate">—</span>
+          <small>UTC+3 (Москва)</small>
+        </div>
+        <button class="icon-btn notify-btn" id="openAlerts" title="Инциденты" aria-label="Открыть инциденты">♢<i id="notifyCount" class="notify-count hidden">0</i></button>
+        <button class="icon-btn" id="themeToggle" title="Сменить тему" aria-label="Сменить тему">◉</button>
+        <button class="icon-btn" id="worldButton" title="Регион" aria-label="Открыть карту сбоев">◎</button>
+      </div>
+    </header>
+
+    <main class="content">
+      <section class="view active overview-view" id="view-overview">
+        <div class="overview-grid">
+          <div class="headline-row">
+            <div>
+              <h1 id="welcomeTitle">Хорошая связь сегодня</h1>
+              <p id="welcomeSubtitle">Мониторим доступность интернет-ресурсов по всему миру. В реальном времени. Для вас.</p>
+            </div>
+            <div class="headline-actions"><button class="btn dashboard-config-btn" id="customizeOverview" type="button">⚙ Настроить экран</button></div>
+          </div>
+
+          <div class="kpi-grid">
+            <article class="kpi-card" id="kpiGlobalCard" data-dashboard-panel="global_kpi">
+              <div class="kpi-icon blue">◎</div>
+              <div class="kpi-body">
+                <span>Глобальная доступность</span>
+                <div><strong id="kpiGlobal">—</strong><em id="kpiGlobalDelta">внешний VPS</em></div>
+                <small id="kpiGlobalHint">нет истории</small>
+              </div>
+              <canvas class="mini-spark" id="kpiGlobalSpark"></canvas>
+            </article>
+            <article class="kpi-card" id="kpiDomesticCard" data-dashboard-panel="domestic_kpi">
+              <div class="kpi-icon violet">◒</div>
+              <div class="kpi-body">
+                <span>Российский контур</span>
+                <div><strong id="kpiRu">—</strong><em id="kpiRuDelta">нет probe</em></div>
+                <small id="kpiRuHint">данные не получены</small>
+              </div>
+              <canvas class="mini-spark" id="kpiRuSpark"></canvas>
+            </article>
+            <article class="kpi-card" id="kpiPersonalCard" data-dashboard-panel="personal_kpi">
+              <div class="kpi-icon green">⌘</div>
+              <div class="kpi-body">
+                <span>Моя сеть</span>
+                <div><strong id="kpiPersonal">—</strong><em>устройство</em></div>
+                <small id="kpiPersonalHint">device-probe ещё не подключён</small>
+              </div>
+              <canvas class="mini-spark" id="kpiPersonalSpark"></canvas>
+            </article>
+            <article class="kpi-card danger-card" id="kpiIncidentsCard" data-dashboard-panel="incidents_kpi">
+              <div class="kpi-icon red">!</div>
+              <div class="kpi-body">
+                <span>Активные инциденты</span>
+                <div><strong id="kpiIncidents">0</strong><em id="kpiIncidentDelta">сейчас</em></div>
+                <small id="kpiIncidentHint">критических событий нет</small>
+              </div>
+              <canvas class="mini-spark" id="kpiIncidentSpark"></canvas>
+            </article>
+          </div>
+
+          <div class="overview-row overview-row-chart">
+            <article class="panel streams-panel" data-dashboard-panel="realtime">
+              <div class="panel-head compact">
+                <div><h2>Доступность ресурсов в реальном времени <span class="info-dot">i</span></h2></div>
+                <div class="panel-actions">
+                  <div class="segmented">
+                    <button class="seg active" data-minutes="60">1ч</button>
+                    <button class="seg" data-minutes="360">6ч</button>
+                    <button class="seg" data-minutes="1440">24ч</button>
+                    <button class="seg" data-minutes="10080">7д</button>
+                  </div>
+                  <button class="icon-btn mini-icon" id="expandChart" title="Развернуть" aria-label="Развернуть график">↗</button>
+                </div>
+              </div>
+              <div class="chart-wrap stream-chart-wrap">
+                <canvas id="streamChart"></canvas>
+                <div id="streamEmpty" class="chart-empty hidden">Пока нет измерений</div>
+                <div id="chartTooltip" class="chart-tooltip hidden"></div>
+              </div>
+              <div id="streamLegend" class="stream-legend"></div>
+            </article>
+
+            <article class="panel events-panel" data-dashboard-panel="events">
+              <div class="panel-head compact">
+                <div><h2>Последние события</h2></div>
+                <button class="link-btn" data-view-jump="alerts">Все события →</button>
+              </div>
+              <div id="eventFeed" class="event-feed"></div>
+            </article>
+          </div>
+
+          <div class="overview-row overview-row-middle">
+            <section class="resource-cards-section" data-dashboard-panel="pinned_resources">
+              <div id="resourceCards" class="resource-cards"></div>
+            </section>
+
+            <article class="panel map-panel" id="faultMap" data-dashboard-panel="map">
+              <div class="panel-head compact">
+                <div><h2>Карта сбоев (мир)</h2></div>
+                <select class="select map-select" id="mapRegion">
+                  <option value="WORLD">Весь мир</option>
+                  <option value="RU">Россия</option>
+                  <option value="EU">Европа</option>
+                </select>
+              </div>
+              <div class="world-map" aria-label="Карта сбоев">
+                <svg id="worldMapSvg" viewBox="0 0 760 320" role="img" aria-label="Карта мира">
+                  <g class="continents">
+                    <path d="M65 92l45-35 57 8 37 24 44 6 27 27-16 31-39 5-12 30-42 22-53-17-23-31-42-10-15-29 32-31z"/>
+                    <path d="M224 191l31 12 19 32-5 42-19 35-18-11-4-32-19-34z"/>
+                    <path d="M347 72l37-19 66 8 37 21 53-10 78 19 58 34-10 26-53 10-23 25-45-3-34-20-38 11-22-22-48 7-38-18-30-1-19-29 18-34z"/>
+                    <path d="M429 176l41 3 28 31-4 47-31 47-31-14-18-48 4-42z"/>
+                    <path d="M615 236l41-8 33 15 17 27-24 17-50-8-26-24z"/>
+                  </g>
+                  <g id="mapPoints"></g>
+                </svg>
+                <div class="map-zoom">
+                  <button type="button" id="mapZoomIn">+</button>
+                  <button type="button" id="mapZoomOut">−</button>
+                </div>
+                <div id="mapEmpty" class="map-empty">География точек наблюдения пока не задана.</div>
+              </div>
+              <div class="map-status neutral" id="mapStatus"><i></i><span>Нет данных о состоянии точек</span></div>
+            </article>
+          </div>
+
+          <div class="overview-row overview-row-bottom">
+            <article class="panel resources-panel" data-dashboard-panel="resources_table">
+              <div class="panel-head compact">
+                <div class="resource-headline"><h2>Ресурсы</h2><button class="btn tiny primary owner-only" id="overviewAddResource">+ Добавить</button></div>
+              </div>
+              <div class="compact-table" id="overviewResourceTable"></div>
+            </article>
+
+            <article class="panel fault-panel" data-dashboard-panel="fault_domain">
+              <div class="panel-head compact">
+                <div><h2>Трассировка / fault domain</h2></div>
+                <select id="faultResourceSelect" class="select compact-select"></select>
+              </div>
+              <div id="faultPath" class="fault-path"></div>
+              <div id="faultConclusion" class="fault-conclusion neutral">
+                <b>Недостаточно данных</b><span>Выберите ресурс с измерениями.</span>
+              </div>
+              <div class="fault-footer">
+                <span>ⓘ Трассировка помогает определить, где именно возникает проблема в цепочке доставки.</span>
+                <button class="link-btn" id="faultMore" data-view-jump="diagnostics">Подробнее →</button>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-resources">
+        <div class="page-head">
+          <div><h1>Мониторинг</h1><p>Ресурсы, группы, интервалы и диагностические этапы.</p></div>
+          <div class="page-actions owner-only"><button class="btn secondary" id="manageGroups">Группы</button><button class="btn primary" id="openAddResource">+ Добавить ресурс</button></div>
+        </div>
+        <article class="panel page-panel">
+          <div class="filters">
+            <input class="input" id="searchInput" placeholder="Поиск по имени, адресу или IP">
+            <select class="select" id="groupFilter"><option value="ALL">Все группы</option></select>
+            <select class="select" id="statusFilter"><option value="ALL">Все состояния</option><option value="AVAILABLE">Доступны</option><option value="RESTRICTION">Вероятно ограничены</option><option value="OUTAGE">Вероятно упали</option><option value="UNKNOWN">Нет данных РФ</option></select>
+          </div>
+          <div id="resourcesTable" class="full-table"></div>
+        </article>
+      </section>
+
+      <section class="view" id="view-groups">
+        <div class="page-head"><div><h1>Группы ресурсов</h1><p>Сегменты мониторинга и распределение ресурсов.</p></div><button class="btn primary owner-only" id="openAddGroup">+ Новая группа</button></div>
+        <div id="groupsGrid" class="groups-management"></div>
+      </section>
+
+      <section class="view" id="view-alerts">
+        <div class="page-head"><div><h1>Инциденты</h1><p>Активные тревоги и журнал событий.</p></div><button class="btn secondary owner-only" id="ackAllIncidents">✓ Отметить все прочитанными</button></div>
+        <div class="two-col">
+          <article class="panel page-panel"><div class="panel-head"><h2>Активные</h2></div><div id="activeIncidents" class="incident-list"></div></article>
+          <article class="panel page-panel"><div class="panel-head"><h2>История</h2></div><div id="incidentHistory" class="incident-list"></div></article>
+        </div>
+      </section>
+
+      <section class="view" id="view-map">
+        <div class="page-head"><div><h1>Карта сбоев</h1><p>Точки наблюдения и активные проблемы.</p></div></div>
+        <article class="panel page-panel map-page-panel">
+          <div class="world-map large-map"><svg id="worldMapPageSvg" viewBox="0 0 760 320" role="img" aria-label="Карта точек наблюдения"><g class="continents"><path d="M65 92l45-35 57 8 37 24 44 6 27 27-16 31-39 5-12 30-42 22-53-17-23-31-42-10-15-29 32-31z"/><path d="M224 191l31 12 19 32-5 42-19 35-18-11-4-32-19-34z"/><path d="M347 72l37-19 66 8 37 21 53-10 78 19 58 34-10 26-53 10-23 25-45-3-34-20-38 11-22-22-48 7-38-18-30-1-19-29 18-34z"/><path d="M429 176l41 3 28 31-4 47-31 47-31-14-18-48 4-42z"/><path d="M615 236l41-8 33 15 17 27-24 17-50-8-26-24z"/></g><g id="mapPagePoints"></g></svg><div id="mapPageEmpty" class="map-empty">Точки с координатами пока не подключены.</div></div>
+          <div id="probeMapLegend" class="probe-map-legend"></div>
+        </article>
+      </section>
+
+      <section class="view" id="view-probes">
+        <div class="page-head"><div><h1>Точки наблюдения</h1><p>Все probes, их роль, состояние и последнее измерение.</p></div></div>
+        <div id="probesGrid" class="probe-page-grid"></div>
+      </section>
+
+      <section class="view" id="view-diagnostics">
+        <div class="page-head"><div><h1>Диагностика</h1><p>Сравнение маршрутов и этапов соединения.</p></div></div>
+        <article class="panel page-panel">
+          <div class="diag-controls">
+            <select class="select" id="diagResource"></select>
+            <button class="btn primary" id="diagCheck">Проверить</button>
+            <button class="btn secondary" id="diagTrace">Traceroute VPS</button>
+            <button class="btn secondary" id="diagTraceDomestic">Traceroute РФ</button>
+          </div>
+          <div id="diagSummary" class="diag-summary"></div>
+          <div class="diag-pipeline">
+            <div class="diag-step" id="stageDns"><span>DNS</span><b>—</b><small>разрешение имени</small></div>
+            <div class="diag-arrow">→</div>
+            <div class="diag-step" id="stageTcp"><span>TCP</span><b>—</b><small>соединение</small></div>
+            <div class="diag-arrow">→</div>
+            <div class="diag-step" id="stageTls"><span>TLS</span><b>—</b><small>рукопожатие</small></div>
+            <div class="diag-arrow">→</div>
+            <div class="diag-step" id="stageHttp"><span>HTTP</span><b>—</b><small>ответ сервера</small></div>
+          </div>
+          <div class="trace-head"><h3>Маршрут</h3><span id="traceMeta">Traceroute ещё не запускался</span></div>
+          <div id="traceOutput" class="trace-output"><div class="empty-state">Выберите ресурс и запустите traceroute.</div></div>
+        </article>
+      </section>
+
+      <section class="view" id="view-history">
+        <div class="page-head"><div><h1>Отчёты</h1><p>Доступность, задержка и история проверок.</p></div><select class="select" id="historyRange"><option value="6">6 часов</option><option value="24" selected>24 часа</option><option value="72">3 дня</option><option value="168">7 дней</option><option value="720">30 дней</option></select></div>
+        <div class="two-col">
+          <article class="panel page-panel"><div class="panel-head"><h2>Доступность</h2><b id="historyAvailability">—</b></div><div class="history-chart"><canvas id="historyChart"></canvas><div id="historyEmpty" class="chart-empty hidden">Нет данных</div></div></article>
+          <article class="panel page-panel"><div class="panel-head"><h2>Задержка</h2><b id="historyLatency">—</b></div><div class="history-chart"><canvas id="latencyChart"></canvas><div id="latencyEmpty" class="chart-empty hidden">Нет данных</div></div></article>
+        </div>
+        <article class="panel page-panel"><div class="panel-head"><h2>Последние интервалы</h2></div><div id="historyTable" class="history-table"></div></article>
+      </section>
+
+      <section class="view" id="view-notifications">
+        <div class="page-head"><div><h1>Уведомления</h1><p>Каналы и политика оповещений.</p></div><button class="btn primary" id="enableNotifications">Включить уведомления браузера</button></div>
+        <div class="settings-grid">
+          <article class="panel setting-card"><span>БРАУЗЕР</span><h2>Browser Notifications</h2><p>Локальные уведомления об активных инцидентах.</p><div id="browserNotifyState" class="setting-box"></div></article>
+          <article class="panel setting-card"><span>WEBHOOK</span><h2>Server webhook</h2><p>Отправка JSON при открытии и закрытии инцидентов.</p><div id="notifyWebhookState" class="setting-box"></div></article>
+        </div>
+      </section>
+
+      <section class="view" id="view-integrations">
+        <div class="page-head"><div><h1>Интеграции</h1><p>API, probes и внешние каналы.</p></div></div>
+        <div class="settings-grid">
+          <article class="panel setting-card"><span>API</span><h2>NetWeather API</h2><p>Чтение публичных данных доступно без входа; управляющие запросы требуют права владельца.</p><div class="setting-box">/api/dashboard · /api/resources · /api/incidents · /api/realtime</div></article>
+          <article class="panel setting-card"><span>PROBE</span><h2>Agent API</h2><p>Подключение Keenetic/устройств использует отдельный agent token.</p><div class="setting-box">/api/agent/config.tsv · /api/agent/result</div></article>
+        </div>
+      </section>
+
+      <section class="view" id="view-settings">
+        <div class="page-head"><div><h1>Настройки</h1><p>Состояние Core, доступ владельца и параметры мониторинга.</p></div></div>
+        <div class="settings-grid">
+          <article class="panel setting-card"><span>ДОСТУП</span><h2>Публичный просмотр</h2><p>Состояние сети видно всем. Изменение ресурсов, ручные проверки и подтверждение инцидентов доступны только владельцу.</p><div id="tokenState" class="setting-box"></div><button class="btn primary" id="ownerAuthAction" type="button">Войти как владелец</button></article>
+          <article class="panel setting-card"><span>ТОЧКИ НАБЛЮДЕНИЯ</span><h2>Probes</h2><div id="probeSettings" class="probe-settings"></div></article>
+          <article class="panel setting-card"><span>ТРЕВОГИ</span><h2>Триггеры</h2><p>Последовательные ошибки, высокая задержка и срок TLS.</p><div id="alertSystemState" class="setting-box"></div></article>
+          <article class="panel setting-card"><span>CORE</span><h2>Runtime</h2><div id="systemInfo" class="system-info"></div></article>
+          <article class="panel setting-card wide"><span>БЕЗОПАСНОСТЬ</span><h2>Изоляция NetWeather</h2><p>NetWeather работает через собственный контейнер и upstream. Конфигурация VPN/Xray не является частью deployment сайта.</p><div id="securityState" class="setting-box"></div></article>
+        </div>
+      </section>
+
+      
+    </main>
+  </div>
+</div>
+
+<dialog id="dashboardPreferencesDialog" class="modal dashboard-preferences-modal">
+  <form id="dashboardPreferencesForm">
+    <div class="modal-head">
+      <div><span>ГЛАВНЫЙ ЭКРАН</span><h2>Настроить обзор</h2><p>Закрепите важные ресурсы и оставьте только нужные панели.</p></div>
+      <button type="button" class="modal-close" aria-label="Закрыть окно">×</button>
+    </div>
+    <div class="dashboard-preferences-body">
+      <section class="preferences-section">
+        <div class="preferences-section-head">
+          <div><h3>Закреплённые ресурсы</h3><p>До 6 карточек на главном экране. Ресурсы сгруппированы так же, как в мониторинге.</p></div>
+          <span id="pinnedResourceCount" class="preferences-counter">0 / 6</span>
+        </div>
+        <div id="pinnedResourceGroups" class="pinned-resource-groups"></div>
+      </section>
+      <section class="preferences-section">
+        <div class="preferences-section-head">
+          <div><h3>Панели Overview</h3><p>Недоступные технически панели здесь не показываются вообще.</p></div>
+        </div>
+        <div id="dashboardPanelChoices" class="dashboard-panel-choices"></div>
+      </section>
+    </div>
+    <div class="modal-actions dashboard-preferences-actions">
+      <button type="button" class="btn secondary" id="resetDashboardPreferences">По умолчанию</button>
+      <div><button type="button" class="btn secondary modal-close">Отмена</button><button type="submit" class="btn primary">Сохранить</button></div>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="resourceDialog" class="modal resource-picker-modal">
+  <form id="resourceCatalogForm">
+    <div class="modal-head catalog-modal-head">
+      <div><span>КАТАЛОГ МОНИТОРИНГА</span><h2>Добавить ресурсы</h2><p>Выберите популярные сервисы или добавьте свой адрес.</p></div>
+      <button type="button" class="modal-close" aria-label="Закрыть окно">×</button>
+    </div>
+    <div class="catalog-toolbar">
+      <div class="catalog-search-wrap"><span>⌕</span><input class="input" id="catalogSearch" placeholder="Найти ресурс в каталоге…"></div>
+      <div class="catalog-selection-pill"><b id="catalogSelectedCount">0</b><span>выбрано</span></div>
+    </div>
+    <div id="resourceCatalogGroups" class="resource-catalog-groups">
+      <div class="catalog-loading">Загружаем каталог…</div>
+    </div>
+
+    <section class="custom-resource-block">
+      <div class="custom-resource-head">
+        <div><span>СВОЙ РЕСУРС</span><h3>Не нашли нужный сервис?</h3><p>Вставьте URL — NetWeather определит название и проверит, нет ли его уже в каталоге.</p></div>
+      </div>
+      <div class="custom-resource-grid">
+        <label>URL или домен<input class="input" id="customResourceTarget" maxlength="2048" placeholder="https://example.com"></label>
+        <label>Название<input class="input" id="customResourceName" maxlength="120" placeholder="Определится автоматически"></label>
+        <label>Группа<select class="select" id="customResourceGroup"></select></label>
+      </div>
+      <div id="customCatalogMatch" class="custom-match hidden"></div>
+    </section>
+
+    <div class="catalog-modal-actions">
+      <div id="catalogSelectionSummary" class="catalog-selection-summary">Ничего не выбрано</div>
+      <div class="catalog-action-buttons">
+        <button type="button" class="btn secondary modal-close">Отмена</button>
+        <button type="submit" class="btn primary" id="addCatalogResources">Добавить выбранные</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="resourceEditDialog" class="modal edit-resource-modal">
+  <form id="resourceForm">
+    <div class="modal-head"><div><span>РЕСУРС</span><h2 id="resourceDialogTitle">Изменить ресурс</h2></div><button type="button" class="modal-close" aria-label="Закрыть окно">×</button></div>
+    <input type="hidden" id="resourceId">
+    <div class="form-grid">
+      <label>Название<div class="resource-name-field"><span id="resourceIdentityPreview" class="resource-identity-preview"><span>NW</span></span><input class="input" id="resourceName" required maxlength="120"></div></label>
+      <label>URL или домен<input class="input" id="resourceTarget" required maxlength="2048"><small id="resourceTargetHint" class="field-hint"></small></label>
+      <label>Группа<input class="input" id="resourceGroup" list="groupOptions" required><datalist id="groupOptions"></datalist></label>
+      <label>Интервал<select class="select" id="resourceInterval"><option value="30">30 сек</option><option value="60">1 мин</option><option value="300">5 мин</option><option value="900">15 мин</option><option value="3600">1 час</option></select></label>
+      <label>HTTP от<input class="input" id="statusMin" type="number" min="100" max="599" value="200"></label>
+      <label>HTTP до<input class="input" id="statusMax" type="number" min="100" max="599" value="399"></label>
+      <label>Медленный ответ, мс<input class="input" id="slowThreshold" type="number" min="100" max="120000" value="1500"></label>
+      <label>Ошибок до тревоги<input class="input" id="failureThreshold" type="number" min="1" max="10" value="2"></label>
+    </div>
+    <div class="switch-row"><label><input type="checkbox" id="resourceEnabled" checked> Мониторинг включён</label><label><input type="checkbox" id="alertsEnabled" checked> Тревоги включены</label></div>
+    <div class="modal-actions"><button type="button" class="btn secondary modal-close">Отмена</button><button type="submit" class="btn primary">Сохранить изменения</button></div>
+  </form>
+</dialog>
+
+<dialog id="detailDialog" class="modal detail-modal">
+  <div class="modal-head"><div><span>РЕСУРС</span><h2 id="detailTitle">—</h2></div><button type="button" class="modal-close" aria-label="Закрыть окно">×</button></div>
+  <div id="detailBody"></div>
+  <div class="modal-actions split owner-only"><button class="btn danger" id="deleteResource">Удалить</button><div><button class="btn secondary" id="editResource">Изменить</button><button class="btn secondary" id="detailTrace">Traceroute</button><button class="btn primary" id="detailCheck">Проверить</button></div></div>
+</dialog>
+
+<dialog id="groupDialog" class="modal small-modal">
+  <form id="groupForm">
+    <div class="modal-head"><div><span>ГРУППА РЕСУРСОВ</span><h2 id="groupDialogTitle">Новая группа</h2></div><button type="button" class="modal-close" aria-label="Закрыть окно">×</button></div>
+    <input type="hidden" id="groupKey">
+    <label class="field-label">Название<input class="input" id="groupTitle" required maxlength="80" placeholder="Рабочие сервисы"></label>
+    <label class="field-label">Цвет<input class="input color-input" id="groupColor" type="color" value="#3A8DFF"></label>
+    <div class="modal-actions"><button type="button" class="btn secondary modal-close">Отмена</button><button type="submit" class="btn primary">Сохранить</button></div>
+  </form>
+</dialog>
+
+
+<dialog id="confirmDialog" class="modal small-modal confirm-modal" aria-labelledby="confirmTitle">
+  <div class="modal-head">
+    <div><span id="confirmEyebrow">ПОДТВЕРЖДЕНИЕ</span><h2 id="confirmTitle">Подтвердите действие</h2></div>
+    <button type="button" class="modal-close" aria-label="Закрыть окно">×</button>
+  </div>
+  <div class="confirm-body">
+    <p id="confirmMessage">Продолжить?</p>
+    <small id="confirmHint"></small>
+  </div>
+  <div class="modal-actions">
+    <button type="button" class="btn secondary" id="confirmCancel">Отмена</button>
+    <button type="button" class="btn danger" id="confirmAccept">Продолжить</button>
+  </div>
+</dialog>
+
+<dialog id="ownerLoginDialog" class="modal small-modal" aria-labelledby="ownerLoginTitle">
+  <form id="ownerLoginForm">
+    <div class="modal-head">
+      <div><span>ДОСТУП ВЛАДЕЛЬЦА</span><h2 id="ownerLoginTitle">Войти в режим управления</h2></div>
+      <button type="button" class="modal-close" aria-label="Закрыть окно">×</button>
+    </div>
+    <label class="field-label">Пароль<input class="input" id="ownerPassword" type="password" required maxlength="512" autocomplete="current-password"></label>
+    <p class="auth-note">Пароль передаётся только текущему NetWeather Core и не сохраняется в браузере.</p>
+    <div class="modal-actions"><button type="button" class="btn secondary modal-close">Отмена</button><button type="submit" class="btn primary">Войти</button></div>
+  </form>
+</dialog>
+
+<div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+<script src="/assets/dashboard.js?v=0.3.10"></script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+services:
+  netweather:
+    build:
+      context: .
+      args:
+        NETWEATHER_VCS_REF: local-compose
+    restart: unless-stopped
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 0.75
+    ulimits:
+      nofile:
+        soft: 1024
+        hard: 4096
+    environment:
+      NETWEATHER_API_TOKEN: ${NETWEATHER_API_TOKEN:-}
+      NETWEATHER_UI_PASSWORD: ${NETWEATHER_UI_PASSWORD:-}
+      NETWEATHER_SESSION_MAX_AGE: ${NETWEATHER_SESSION_MAX_AGE:-2592000}
+      NETWEATHER_ALLOW_OPEN_ACCESS: ${NETWEATHER_ALLOW_OPEN_ACCESS:-true}
+      DEFAULT_INTERVAL_SECONDS: ${DEFAULT_INTERVAL_SECONDS:-60}
+      REQUEST_TIMEOUT_SECONDS: ${REQUEST_TIMEOUT_SECONDS:-8}
+      ALLOW_PRIVATE_TARGETS: "false"
+      NETWEATHER_SEED_DEFAULTS: ${NETWEATHER_SEED_DEFAULTS:-true}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      NETWEATHER_AGENT_TOKEN: ${NETWEATHER_AGENT_TOKEN:-}
+      NETWEATHER_AGENT_STALE_SECONDS: ${NETWEATHER_AGENT_STALE_SECONDS:-180}
+      NETWEATHER_SERVER_PROBE_KEY: ${NETWEATHER_SERVER_PROBE_KEY:-VPS_EU}
+      NETWEATHER_SERVER_PROBE_NAME: ${NETWEATHER_SERVER_PROBE_NAME:-Внешний VPS}
+    volumes:
+      - netweather_data:/data
+    networks:
+      netweather-isolated:
+        ipv4_address: 172.30.250.2
+    ports:
+      - "127.0.0.1:${NETWEATHER_BIND_PORT:-18081}:8000"
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  netweather_data:
+    external: true
+    name: web_netweather_data
+
+networks:
+  netweather-isolated:
+    external: true
+    name: netweather-isolated

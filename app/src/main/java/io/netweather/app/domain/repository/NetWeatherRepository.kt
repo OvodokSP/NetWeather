@@ -11,7 +11,10 @@ interface NetWeatherRepository {
     suspend fun setEnabled(id: Long, enabled: Boolean)
     suspend fun runChecks(): NetworkSummary
     suspend fun latestResults(): List<CheckResult>
+    fun observeLatestResults(): Flow<List<CheckResult>>
     fun observeHistory(periodMillis: Long): Flow<List<NetworkSummary>>
+    fun checkIntervalSeconds(): Int
+    fun setCheckIntervalSeconds(seconds: Int)
     suspend fun ensureDefaultResources()
     suspend fun exportResourcesJson(): String
     suspend fun importResourcesJson(json: String): Int

@@ -1,0 +1,50 @@
+name: Ошибка
+description: Сообщить о воспроизводимой проблеме NetWeather
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Контур
+      options:
+        - Web
+        - Android
+        - Keenetic / Router Probe
+        - Deployment
+        - API / Backend
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Что происходит
+      description: Фактическое поведение.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Что должно происходить
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Как воспроизвести
+      placeholder: |
+        1. Открыть ...
+        2. Нажать ...
+        3. Получить ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Версия
+      placeholder: 0.3.9-web / commit SHA
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Логи / скриншоты
+      description: Не публикуйте секреты, ключи, токены и приватные данные.
