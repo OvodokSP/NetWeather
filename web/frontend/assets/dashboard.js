@@ -751,6 +751,7 @@ function renderSearch(value){
   S.searchIndex=-1;
   S.searchAddTarget=null;
   if(!v){hideSearch();el.innerHTML="";return}
+  if(!S.dashboard){el.innerHTML=empty("Загружаем ресурсы","Поиск станет доступен через несколько секунд.");el.classList.remove("hidden");input.setAttribute("aria-expanded","true");return}
   var candidate=searchTargetCandidate(raw),candidateHost=candidate?targetMeta(candidate).host:"";
   var rows=(S.dashboard&&S.dashboard.resources||[]).filter(function(r){
     return r.name.toLowerCase().indexOf(v)>=0||r.target.toLowerCase().indexOf(v)>=0||String(r.resolved_ip||"").indexOf(v)>=0||(candidateHost&&targetMeta(r.target).host===candidateHost)

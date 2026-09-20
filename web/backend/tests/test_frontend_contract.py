@@ -188,6 +188,7 @@ class FrontendContractTest(unittest.TestCase):
             "S.pendingSearchTarget=target",
             "openResourceCatalog(target)",
             "if(initialTarget)await inspectCustomResource()",
+            'if(!S.dashboard){el.innerHTML=empty("Загружаем ресурсы"',
         ):
             self.assertIn(token, self.js)
 
