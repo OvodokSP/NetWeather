@@ -800,6 +800,16 @@ dialog.modal[open]{
   .search-wrap{min-width:0;flex:1 1 auto;width:auto}
   .top-actions{flex:0 0 auto}
   .content{max-width:100%;overflow-x:clip}
+  .overview-view{height:auto;overflow:visible}
+  .overview-grid{height:auto;display:block}
+  .overview-grid>*{margin-bottom:10px}
+  .overview-row-chart,.overview-row-middle,.overview-row-bottom{grid-template-columns:minmax(0,1fr)}
+  .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .resource-cards{grid-template-columns:repeat(2,minmax(0,1fr));height:auto}
+  .resource-card{height:132px}
+  .streams-panel{height:330px}
+  .events-panel{height:300px}
+  .map-panel,.resources-panel,.fault-panel{height:300px}
   .page-head{align-items:flex-start;flex-wrap:wrap}
   .page-actions,.panel-actions{flex-wrap:wrap}
   .chart-expanded{inset:calc(var(--mobile-nav-h) + var(--topbar-h) + 8px) 8px 8px!important}
@@ -813,6 +823,11 @@ dialog.modal[open]{
   .search-wrap input{padding-right:12px}
   .search-wrap kbd{display:none}
   .content{padding-left:8px;padding-right:8px}
+  .kpi-grid,.overview-row-chart,.overview-row-middle,.overview-row-bottom,.resource-cards{grid-template-columns:minmax(0,1fr)!important}
+  .kpi-card{min-height:104px}
+  .streams-panel{height:300px}
+  .events-panel{height:340px}
+  .resource-card{height:128px}
   .headline-actions{width:100%;justify-content:space-between}
   .page-head{display:grid;grid-template-columns:minmax(0,1fr)}
   .page-actions{width:100%}
@@ -828,6 +843,10 @@ dialog.modal[open]{
   .modal-actions>div>.btn{flex:1 1 auto}
   .toast{left:12px;right:12px;bottom:12px;max-width:none}
 }
+
+.search-add-result{border-top:1px solid rgba(88,199,255,.28);background:rgba(88,199,255,.055)}
+.search-add-result b{color:#7bd7ff}
+.search-add-result em{color:#7bd7ff}
 
 @supports (height:100dvh){
   @media(max-width:640px){

@@ -175,6 +175,21 @@ class FrontendContractTest(unittest.TestCase):
             ".chart-expanded{inset:calc(var(--mobile-nav-h)",
         ):
             self.assertIn(token, self.css)
+        self.assertIn(
+            ".kpi-grid,.overview-row-chart,.overview-row-middle,.overview-row-bottom,.resource-cards{grid-template-columns:minmax(0,1fr)!important}",
+            self.css,
+        )
+
+    def test_global_search_can_offer_resource_addition(self):
+        for token in (
+            "function searchTargetCandidate(",
+            "data-search-add=\"1\"",
+            "Добавить ресурс",
+            "S.pendingSearchTarget=target",
+            "openResourceCatalog(target)",
+            "if(initialTarget)await inspectCustomResource()",
+        ):
+            self.assertIn(token, self.js)
 
     def test_no_runtime_cdn_dependency(self):
         lower = self.html.lower()

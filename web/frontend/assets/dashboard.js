@@ -7,7 +7,7 @@ var S={
   historyExt:[],historyDom:[],streamMinutes:60,detailId:null,diagId:null,
   faultId:null,view:"overview",poll:null,streamMeta:null,authRequired:false,
   owner:true,mapScale:1,metaCache:{},catalog:null,catalogSelected:{},customCatalogMatch:null,customAutoCatalogKey:null,
-  dashboardPrefs:null,searchIndex:-1,coreOnline:false,lastSuccessAt:null
+  dashboardPrefs:null,searchIndex:-1,searchAddTarget:null,pendingSearchTarget:null,coreOnline:false,lastSuccessAt:null
 };
 
 var DASHBOARD_PREFS_KEY="netweather_dashboard_v1";
@@ -233,7 +233,7 @@ function hideSearch(){
   el.classList.add("hidden");input.setAttribute("aria-expanded","false");S.searchIndex=-1
 }
 function handleSearchKeydown(e){
-  var results=qa("#searchResults [data-search-id]");
+  var results=qa("#searchResults [data-search-option]");
   if(e.key==="Escape"){hideSearch();return}
   if(!results.length)return;
   if(e.key==="ArrowDown"){
@@ -382,7 +382,8 @@ async function submitOwnerLogin(e){
   e.preventDefault();var password=q("#ownerPassword").value,button=e.submitter||q("#ownerLoginForm [type=submit]");
   try{await withBusy(button,"Входим…",async function(){
     await api("/api/session/login",{method:"POST",body:JSON.stringify({password:password})});
-    localStorage.removeItem("netweather_token");q("#ownerLoginDialog").close();await loadAll(true);toast("Режим владельца включён")
+    localStorage.removeItem("netweather_token");q("#ownerLoginDialog").close();await loadAll(true);toast("Режим владельца включён");
+    var pending=S.pendingSearchTarget;S.pendingSearchTarget=null;if(pending)await openResourceCatalog(pending)
   })}catch(err){toast(err.message);q("#ownerPassword").focus()}
 }
 async function ownerAuthAction(){
@@ -746,20 +747,44 @@ function renderFaultPanel(){
 }
 
 function renderSearch(value){
-  var el=q("#searchResults"),input=q("#globalSearch");if(!el||!input)return;var v=(value||"").trim().toLowerCase();
+  var el=q("#searchResults"),input=q("#globalSearch");if(!el||!input)return;var raw=(value||"").trim(),v=raw.toLowerCase();
   S.searchIndex=-1;
+  S.searchAddTarget=null;
   if(!v){hideSearch();el.innerHTML="";return}
-  var rows=(S.dashboard&&S.dashboard.resources||[]).filter(function(r){return r.name.toLowerCase().indexOf(v)>=0||r.target.toLowerCase().indexOf(v)>=0||String(r.resolved_ip||"").indexOf(v)>=0}).slice(0,8);
-  el.innerHTML=rows.length?rows.map(function(r,i){return '<button class="search-result" role="option" id="search-result-'+i+'" data-search-id="'+r.id+'"><div><b>'+esc(r.name)+'</b><span>'+esc(r.target)+'</span></div><em>'+diagText(r.diagnosis)+'</em></button>'}).join(""):empty("Ничего не найдено","");
+  var candidate=searchTargetCandidate(raw),candidateHost=candidate?targetMeta(candidate).host:"";
+  var rows=(S.dashboard&&S.dashboard.resources||[]).filter(function(r){
+    return r.name.toLowerCase().indexOf(v)>=0||r.target.toLowerCase().indexOf(v)>=0||String(r.resolved_ip||"").indexOf(v)>=0||(candidateHost&&targetMeta(r.target).host===candidateHost)
+  }).slice(0,8);
+  var html=rows.map(function(r,i){return '<button class="search-result" role="option" id="search-result-'+i+'" data-search-option data-search-id="'+r.id+'"><div><b>'+esc(r.name)+'</b><span>'+esc(r.target)+'</span></div><em>'+diagText(r.diagnosis)+'</em></button>'}).join("");
+  if(candidate&&!rows.some(function(r){return targetMeta(r.target).host===candidateHost})){
+    S.searchAddTarget=candidate;
+    html+='<button class="search-result search-add-result" role="option" data-search-option data-search-add="1"><div><b>Добавить ресурс</b><span>'+esc(candidate)+'</span></div><em>'+(S.owner?"Добавить":"Войти")+'</em></button>'
+  }
+  el.innerHTML=html||empty("Ничего не найдено","Введите название или адрес сайта.");
   el.classList.remove("hidden");input.setAttribute("aria-expanded","true");
-  qa("[data-search-id]").forEach(function(b,index){
-    b.onclick=function(){hideSearch();input.value="";openDetail(Number(b.dataset.searchId))};
+  qa("#searchResults [data-search-option]").forEach(function(b,index){
+    b.onclick=function(){
+      if(b.dataset.searchAdd){
+        var target=S.searchAddTarget;hideSearch();input.value="";
+        if(S.authRequired&&!S.owner){S.pendingSearchTarget=target;openOwnerLogin()}else openResourceCatalog(target);
+        return
+      }
+      hideSearch();input.value="";openDetail(Number(b.dataset.searchId))
+    };
     b.onkeydown=function(e){
-      if(e.key==="ArrowDown"){e.preventDefault();var next=qa("#searchResults [data-search-id]")[index+1];if(next)next.focus()}
-      if(e.key==="ArrowUp"){e.preventDefault();var prev=qa("#searchResults [data-search-id]")[index-1];if(prev)prev.focus();else input.focus()}
+      if(e.key==="ArrowDown"){e.preventDefault();var next=qa("#searchResults [data-search-option]")[index+1];if(next)next.focus()}
+      if(e.key==="ArrowUp"){e.preventDefault();var prev=qa("#searchResults [data-search-option]")[index-1];if(prev)prev.focus();else input.focus()}
       if(e.key==="Escape"){e.preventDefault();hideSearch();input.focus()}
     }
   })
+}
+
+function searchTargetCandidate(value){
+  var raw=String(value||"").trim();if(!raw||/\s/.test(raw))return null;
+  var u=targetUrl(raw);if(!u)return null;
+  var host=(u.hostname||"").toLowerCase();
+  if(!host||(!host.includes(".")&&!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)))return null;
+  return raw
 }
 
 function groupStats(key){
@@ -988,14 +1013,15 @@ function fillCustomGroupOptions(){
   var groups=(S.groups||[]).slice().sort(function(a,b){return Number(a.sort_order||0)-Number(b.sort_order||0)});
   sel.innerHTML=groups.map(function(g){return '<option value="'+esc(g.id)+'" '+(g.id==="CUSTOM"?"selected":"")+'>'+esc(g.title)+'</option>'}).join("")
 }
-async function openResourceCatalog(){
+async function openResourceCatalog(initialTarget){
+  initialTarget=typeof initialTarget==="string"?initialTarget:"";
   S.catalogSelected={};S.customCatalogMatch=null;S.customAutoCatalogKey=null;
-  q("#catalogSearch").value="";q("#customResourceTarget").value="";q("#customResourceName").value="";q("#customResourceName").dataset.autoSuggested="1";
+  q("#catalogSearch").value="";q("#customResourceTarget").value=initialTarget;q("#customResourceName").value="";q("#customResourceName").dataset.autoSuggested="1";
   q("#customCatalogMatch").className="custom-match hidden";q("#customCatalogMatch").innerHTML="";
   fillCustomGroupOptions();q("#resourceCatalogGroups").innerHTML='<div class="catalog-loading">Загружаем каталог…</div>';
-  openDialog(q("#resourceDialog"),"#catalogSearch");
+  openDialog(q("#resourceDialog"),initialTarget?"#customResourceTarget":"#catalogSearch");
   try{await loadResourceCatalog(true);renderCatalog("")}catch(e){q("#resourceCatalogGroups").innerHTML=empty("Каталог не загружен",e.message);toast(e.message)}
-  updateCatalogSelection()
+  updateCatalogSelection();if(initialTarget)await inspectCustomResource()
 }
 async function inspectCustomResource(){
   var input=q("#customResourceTarget"),raw=String(input.value||"").trim(),notice=q("#customCatalogMatch"),name=q("#customResourceName");
@@ -1141,7 +1167,7 @@ function setup(){
   q("#ownerLoginForm").onsubmit=submitOwnerLogin;
   q("#ownerAuthAction").onclick=ownerAuthAction;
   q("#resetDashboardPreferences").onclick=resetDashboardPreferences;
-  [q("#sidebarAddResource"),q("#openAddResource"),q("#overviewAddResource")].forEach(function(b){if(b)b.onclick=openResourceCatalog});
+  [q("#sidebarAddResource"),q("#openAddResource"),q("#overviewAddResource")].forEach(function(b){if(b)b.onclick=function(){openResourceCatalog()}});
   q("#resourceCatalogForm").onsubmit=submitResourceCatalog;
   q("#catalogSearch").oninput=function(){renderCatalog(this.value)};
   var customTimer=null;
