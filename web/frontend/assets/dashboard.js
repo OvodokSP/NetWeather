@@ -7,12 +7,15 @@ var S={
   historyExt:[],historyDom:[],streamMinutes:60,detailId:null,diagId:null,
   faultId:null,view:"overview",poll:null,streamMeta:null,authRequired:false,
   owner:true,mapScale:1,metaCache:{},catalog:null,catalogSelected:{},customCatalogMatch:null,customAutoCatalogKey:null,
-  dashboardPrefs:null,searchIndex:-1,searchAddTarget:null,pendingSearchTarget:null,coreOnline:false,lastSuccessAt:null
+  dashboardPrefs:null,searchIndex:-1,searchAddTarget:null,pendingSearchTarget:null,coreOnline:false,lastSuccessAt:null,
+  overviewResourceMode:"ALL"
 };
 
 var DASHBOARD_PREFS_KEY="netweather_dashboard_v1";
 var DASHBOARD_PANEL_LABELS={
   global_kpi:"Глобальная доступность",
+  resources_kpi:"Доступные ресурсы",
+  latency_kpi:"Типичный отклик",
   domestic_kpi:"Российский контур",
   personal_kpi:"Моя сеть",
   incidents_kpi:"Активные инциденты",
@@ -23,13 +26,13 @@ var DASHBOARD_PANEL_LABELS={
   resources_table:"Таблица ресурсов",
   fault_domain:"Трассировка / fault domain"
 };
-var DASHBOARD_PANEL_ORDER=["global_kpi","domestic_kpi","personal_kpi","incidents_kpi","realtime","events","pinned_resources","map","resources_table","fault_domain"];
+var DASHBOARD_PANEL_ORDER=["global_kpi","resources_kpi","latency_kpi","incidents_kpi","domestic_kpi","personal_kpi","realtime","events","pinned_resources","map","resources_table","fault_domain"];
 
 function defaultDashboardPreferences(){
   return{
     pinned_resource_ids:[],
     panels:{
-      global_kpi:true,domestic_kpi:true,personal_kpi:true,incidents_kpi:true,
+      global_kpi:true,resources_kpi:true,latency_kpi:true,domestic_kpi:true,personal_kpi:true,incidents_kpi:true,
       realtime:true,events:true,pinned_resources:true,map:true,resources_table:true,fault_domain:true
     }
   }
@@ -59,6 +62,8 @@ function dashboardCapabilities(){
   var hasRealtime=!!(S.realtime&&S.realtime.resources&&S.realtime.resources.length);
   return{
     global_kpi:true,
+    resources_kpi:true,
+    latency_kpi:true,
     domestic_kpi:hasDomestic,
     personal_kpi:hasPersonal,
     incidents_kpi:true,
@@ -86,20 +91,14 @@ function applyDashboardPreferences(){
   });
   var kpis=qa(".kpi-grid > [data-dashboard-panel]").filter(function(n){return !n.classList.contains("dashboard-hidden")});
   q(".kpi-grid").classList.toggle("dashboard-row-hidden",kpis.length===0);
-  q(".kpi-grid").style.gridTemplateColumns=kpis.length?"repeat("+kpis.length+",minmax(0,1fr))":"1fr";
+  q(".kpi-grid").style.removeProperty("grid-template-columns");
   [[".overview-row-chart"],[".overview-row-middle"],[".overview-row-bottom"]].forEach(function(entry){
     var row=q(entry[0]);if(!row)return;
     var visible=Array.from(row.children).filter(function(n){return !n.classList.contains("dashboard-hidden")});
     row.classList.toggle("dashboard-row-hidden",visible.length===0);
     row.classList.toggle("single-panel",visible.length===1)
   });
-  var grid=q(".overview-grid"),tracks=[];
-  if(!q(".headline-row").classList.contains("dashboard-hidden"))tracks.push("55px");
-  if(kpis.length)tracks.push("82px");
-  if(!q(".overview-row-chart").classList.contains("dashboard-row-hidden"))tracks.push("minmax(0,1.1fr)");
-  if(!q(".overview-row-middle").classList.contains("dashboard-row-hidden"))tracks.push("148px");
-  if(!q(".overview-row-bottom").classList.contains("dashboard-row-hidden"))tracks.push("minmax(0,1fr)");
-  grid.style.gridTemplateRows=tracks.join(" ");
+  q(".overview-grid").style.removeProperty("grid-template-rows");
 }
 function renderDashboardPreferencesModal(){
   if(!S.dashboard)return;
@@ -501,15 +500,27 @@ function renderAll(){
 function renderOverview(){
   if(!S.dashboard)return;
   var summary=S.dashboard.summary||{},legacy=S.dashboard.legacy_summary||{};
+  var resources=(S.dashboard.resources||[]).filter(function(r){return r.enabled!==false&&r.enabled!==0});
   var globalAvail=historyAverage(S.historyExt,"availability"),ruAvail=historyAverage(S.historyDom,"availability");
   var globalDelta=historyDelta(S.historyExt,"availability"),ruDelta=historyDelta(S.historyDom,"availability");
   var active=S.incidents.filter(function(i){return !i.closed_at});
   var unread=active.filter(function(i){return !i.acknowledged_at});
+  var available=resources.filter(function(r){return isReachable((r.external||{}).status)});
+  var latencies=available.map(function(r){return Number((r.external||{}).response_time_ms)}).filter(Number.isFinite).sort(function(a,b){return a-b});
+  var medianLatency=latencies.length?latencies.length%2?latencies[(latencies.length-1)/2]:Math.round((latencies[latencies.length/2-1]+latencies[latencies.length/2])/2):null;
+  var latestCheck=resources.reduce(function(last,r){return Math.max(last,Number(r.checked_at||0))},0);
 
   q("#kpiGlobal").textContent=pct(globalAvail,2);
   q("#kpiGlobalDelta").textContent=globalDelta==null?"внешний VPS":((globalDelta>=0?"▲ +":"▼ ")+Math.abs(globalDelta).toFixed(2)+"%");
   q("#kpiGlobalDelta").style.color=globalDelta==null?"var(--muted)":globalDelta>=0?"var(--green)":"var(--red)";
   q("#kpiGlobalHint").textContent=globalAvail==null?"нет истории":"среднее за выбранный период";
+
+  q("#kpiResources").textContent=available.length;
+  q("#kpiResourcesDelta").textContent="из "+resources.length;
+  q("#kpiResourcesDelta").style.color=available.length===resources.length?"var(--green)":available.length?"var(--orange)":"var(--red)";
+  q("#kpiResourcesHint").textContent=!resources.length?"добавьте первый ресурс":available.length===resources.length?"все отвечают сейчас":(resources.length-available.length)+" требуют внимания";
+  q("#kpiLatency").textContent=medianLatency==null?"—":Math.round(medianLatency);
+  q("#kpiLatencyHint").textContent=medianLatency==null?"нет свежих измерений":medianLatency<500?"быстрый отклик":medianLatency<1500?"умеренная задержка":"высокая задержка";
 
   q("#kpiRu").textContent=pct(ruAvail,2);
   q("#kpiRuDelta").textContent=summary.domestic_probe_online?(ruDelta==null?"живые данные":((ruDelta>=0?"▲ +":"▼ ")+Math.abs(ruDelta).toFixed(2)+"%")):"нет probe";
@@ -524,12 +535,17 @@ function renderOverview(){
   q("#kpiIncidentHint").textContent=active.length?(unread.length+" непрочитанных из "+active.length):"критических событий нет";
 
   drawSpark(q("#kpiGlobalSpark"),S.historyExt.map(function(x){return x.availability}),COLORS[1]);
+  drawBars(q("#kpiResourcesSpark"),resources.map(function(r){return isReachable((r.external||{}).status)?1:0}),available.length===resources.length?COLORS[3]:COLORS[4]);
+  drawSpark(q("#kpiLatencySpark"),latencies,COLORS[5]);
   drawSpark(q("#kpiRuSpark"),S.historyDom.map(function(x){return x.availability}),COLORS[0]);
   drawSpark(q("#kpiPersonalSpark"),[],COLORS[3]);
   drawBars(q("#kpiIncidentSpark"),incidentSpark(),COLORS[0]);
 
   var state=overviewState(summary,legacy,active.length);
   q("#welcomeTitle").textContent=state.title;q("#welcomeSubtitle").textContent=state.text;
+  var freshness=q("#overviewFreshness"),freshnessWrap=freshness.closest(".overview-freshness");
+  freshness.textContent=latestCheck?ago(latestCheck):"ожидаются";
+  freshnessWrap.classList.toggle("stale",!latestCheck||Date.now()/1000-latestCheck>90);
   var health=q("#topSystemStatus");health.className="health-pill "+state.cls;health.querySelector("b").textContent=state.short;health.querySelector("span").textContent=state.healthText;
 
   q("#alertBadge").textContent=unread.length;q("#alertBadge").classList.toggle("hidden",!unread.length);
@@ -625,6 +641,8 @@ function handleChartMove(e){
 
 function renderEvents(){
   var el=q("#eventFeed"),rows=S.events||[];
+  var important=rows.filter(function(ev){return ev.severity==="critical"||ev.severity==="warning"}).length;
+  q("#eventSummary").textContent=important?important+" важных за период":"Критичных изменений нет";
   if(!rows.length){el.innerHTML=empty("Событий пока нет","Изменения состояния появятся здесь.");return}
   el.innerHTML=rows.slice(0,7).map(function(ev){
     var sev=ev.severity==="critical"?"critical":ev.severity==="warning"?"warning":"",label=sev==="critical"?"Критический":sev==="warning"?"Предупреждение":"Информация";
@@ -641,11 +659,9 @@ function renderResourceCards(){
   var current=S.dashboard.resources||[],pinned=visiblePinnedResourceIds();
   var cards=pinned.map(function(id){return rows.find(function(r){return Number(r.id)===Number(id)})}).filter(Boolean).slice(0,6);
   el.innerHTML=cards.map(function(r,i){
-    var rr=current.find(function(x){return x.id===r.id})||{},cls=diagClass(rr.diagnosis);
-    var pts=(r.points||[]).filter(function(p){return p.availability!=null});
+    var rr=current.find(function(x){return x.id===r.id})||{},cls=resourceDisplayClass(rr);
     var latency=(rr.domestic||rr.external||{}).response_time_ms;
-    var delta=pts.length>2?Number(pts[pts.length-1].availability)-Number(pts[0].availability):0;
-    return '<article class="resource-card" data-resource="'+r.id+'" tabindex="0" role="button" aria-label="Открыть ресурс «'+esc(r.name)+'»"><div class="resource-card-top"><div class="resource-card-name">'+resourceIconHtml(r.target,r.name)+'<b>'+esc(r.name)+'</b></div><span class="resource-state '+(cls==="bad"?"bad":cls==="warn"?"warn":"")+'">'+(delta>=0?"↑ ":"↓ ")+Math.abs(delta).toFixed(1)+'%</span></div><div class="resource-card-metrics"><strong>'+pct(r.availability_24h,1)+'</strong><span>'+num(latency," мс")+'</span></div><canvas data-card-spark="'+r.id+'"></canvas><div class="resource-card-foot"><span>◴ '+num(latency," мс")+'</span><span>'+esc(groupTitle(r.group_name))+'</span></div></article>'
+    return '<article class="resource-card" data-resource="'+r.id+'" tabindex="0" role="button" aria-label="Открыть ресурс «'+esc(r.name)+'»"><div class="resource-card-top"><div class="resource-card-name">'+resourceIconHtml(r.target,r.name)+'<b>'+esc(r.name)+'</b></div><span class="resource-state '+cls+'"><i></i>'+esc(resourceDisplayText(rr))+'</span></div><div class="resource-card-metrics"><div><span>Доступность · 24ч</span><strong>'+pct(r.availability_24h,1)+'</strong></div><div><span>Отклик сейчас</span><strong>'+num(latency," мс")+'</strong></div></div><canvas data-card-spark="'+r.id+'"></canvas><div class="resource-card-foot"><span>'+esc(groupTitle(r.group_name))+'</span><span>Проверен '+ago(r.last_checked_at||rr.checked_at)+'</span></div></article>'
   }).join("");
   qa(".resource-card").forEach(function(card){
     card.onclick=function(){openDetail(Number(card.dataset.resource))};
@@ -653,6 +669,24 @@ function renderResourceCards(){
   });
   cards.forEach(function(r,i){var c=document.querySelector('[data-card-spark="'+r.id+'"]');drawSpark(c,(r.points||[]).map(function(p){return p.availability}).filter(function(v){return v!=null}),COLORS[i%COLORS.length])});
   hydrateResourceIcons()
+}
+
+function resourceDisplayClass(r){
+  var ext=(r.external||{}).status,cls=diagClass(r.diagnosis);
+  if(cls==="bad"||cls==="warn")return cls;
+  return ext?stClass(ext):"neutral"
+}
+function resourceDisplayText(r){
+  var cls=diagClass(r.diagnosis),ext=(r.external||{}).status;
+  if(cls==="bad"||cls==="warn")return diagText(r.diagnosis);
+  return ext?stText(ext):diagText(r.diagnosis)
+}
+function resourceAttentionRank(r){
+  var cls=resourceDisplayClass(r),latency=Number((r.external||{}).response_time_ms),slow=Number(r.slow_threshold_ms||1500);
+  if(cls==="bad")return 0;
+  if(cls==="warn"||(Number.isFinite(latency)&&latency>=slow))return 1;
+  if(cls==="neutral")return 2;
+  return 3
 }
 
 function probeInRegion(p,region){
@@ -705,10 +739,14 @@ function renderProbeLegend(){
 function renderOverviewTable(){
   var rows=S.dashboard.resources||[],el=q("#overviewResourceTable");
   if(!rows.length){el.innerHTML=empty("Нет ресурсов","Добавьте первую цель.");return}
-  var visible=rows;
+  var ordered=rows.slice().sort(function(a,b){var rank=resourceAttentionRank(a)-resourceAttentionRank(b);return rank||String(a.name).localeCompare(String(b.name),"ru")});
+  var matching=S.overviewResourceMode==="ISSUES"?ordered.filter(function(r){return resourceAttentionRank(r)<3}):ordered;
+  var visible=matching.slice(0,8),issues=ordered.filter(function(r){return resourceAttentionRank(r)<3}).length;
+  q("#overviewResourceSummary").textContent=S.overviewResourceMode==="ISSUES"?(issues?issues+" требуют внимания":"Проблем не обнаружено"):(issues?issues+" требуют внимания · проблемные показаны первыми":rows.length+" ресурсов · всё спокойно");
+  if(!visible.length){el.innerHTML=empty("Всё спокойно","Сейчас нет ресурсов, требующих внимания.");return}
   el.innerHTML='<div class="table-head"><div>Ресурс</div><div>Статус</div><div>Доступность (24ч)</div><div>Время ответа</div><div>DNS</div><div>TCP</div><div>TLS</div><div>HTTP</div><div>Тренд (1ч)</div><div></div></div>'+visible.map(function(r){
     var rt=realtimeById(r.id)||{},x=r.domestic||r.external||{};
-    return '<div class="table-row" data-resource="'+r.id+'" tabindex="0" aria-label="Открыть ресурс «'+esc(r.name)+'»"><div class="table-resource with-logo">'+resourceIconHtml(r.target,r.name)+'<div><b>'+esc(r.name)+'</b><span>'+esc(r.target)+'</span></div></div><div><span class="status-chip '+diagClass(r.diagnosis)+'">'+diagText(r.diagnosis)+'</span></div><div>'+pct(rt.availability_24h,1)+'</div><div>'+num(x.response_time_ms," мс")+'</div><div><i class="stage-dot '+stageState("DNS",r,x)+'"></i></div><div><i class="stage-dot '+stageState("TCP",r,x)+'"></i></div><div><i class="stage-dot '+stageState("TLS",r,x)+'"></i></div><div><i class="stage-dot '+stageState("HTTP",r,x)+'"></i></div><div><canvas class="trend-canvas" data-trend="'+r.id+'"></canvas></div><button type="button" class="row-more" data-row-more="'+r.id+'" aria-label="Открыть «'+esc(r.name)+'»">⋮</button></div>'
+    return '<div class="table-row" data-resource="'+r.id+'" tabindex="0" aria-label="Открыть ресурс «'+esc(r.name)+'»"><div class="table-resource with-logo">'+resourceIconHtml(r.target,r.name)+'<div><b>'+esc(r.name)+'</b><span>'+esc(r.target)+'</span></div></div><div><span class="status-chip '+resourceDisplayClass(r)+'">'+esc(resourceDisplayText(r))+'</span></div><div>'+pct(rt.availability_24h,1)+'</div><div>'+num(x.response_time_ms," мс")+'</div><div><i class="stage-dot '+stageState("DNS",r,x)+'"></i></div><div><i class="stage-dot '+stageState("TCP",r,x)+'"></i></div><div><i class="stage-dot '+stageState("TLS",r,x)+'"></i></div><div><i class="stage-dot '+stageState("HTTP",r,x)+'"></i></div><div><canvas class="trend-canvas" data-trend="'+r.id+'"></canvas></div><button type="button" class="row-more" data-row-more="'+r.id+'" aria-label="Открыть «'+esc(r.name)+'»">⋮</button></div>'
   }).join("");
   qa("#overviewResourceTable .table-row").forEach(function(row){
     row.onclick=function(e){if(e.target.closest("[data-row-more]"))return;openDetail(Number(row.dataset.resource))};
@@ -1180,7 +1218,8 @@ function setup(){
   q("#customResourceName").oninput=function(){this.dataset.autoSuggested="0"};
   q("#resourceForm").onsubmit=saveResource;q("#groupForm").onsubmit=saveGroup;q("#openAddGroup").onclick=function(){openGroupForm(null)};
   qa(".modal-close").forEach(function(b){b.onclick=function(){closeDialog(b.closest("dialog"))}});
-  qa(".seg").forEach(function(b){b.onclick=async function(){if(b.dataset.busy==="1")return;qa(".seg").forEach(function(x){x.classList.remove("active")});b.classList.add("active");S.streamMinutes=Number(b.dataset.minutes);try{await withBusy(b,"…",async function(){S.realtime=await api("/api/realtime?minutes="+S.streamMinutes+"&scope=EXTERNAL");renderRealtime();renderResourceCards();renderOverviewTable()})}catch(e){toast(e.message)}}});
+  qa('.seg[data-minutes]').forEach(function(b){b.onclick=async function(){if(b.dataset.busy==="1")return;qa('.seg[data-minutes]').forEach(function(x){x.classList.remove("active")});b.classList.add("active");S.streamMinutes=Number(b.dataset.minutes);try{await withBusy(b,"…",async function(){S.realtime=await api("/api/realtime?minutes="+S.streamMinutes+"&scope=EXTERNAL");renderRealtime();renderResourceCards();renderOverviewTable()})}catch(e){toast(e.message)}}});
+  qa("[data-overview-resource-mode]").forEach(function(b){b.onclick=function(){S.overviewResourceMode=b.dataset.overviewResourceMode;qa("[data-overview-resource-mode]").forEach(function(x){x.classList.toggle("active",x===b)});renderOverviewTable()}});
   q("#streamChart").addEventListener("mousemove",handleChartMove);q("#streamChart").addEventListener("mouseleave",function(){q("#chartTooltip").classList.add("hidden")});
   q("#expandChart").onclick=function(){var panel=q(".streams-panel"),expanded=panel.classList.toggle("chart-expanded");this.setAttribute("aria-expanded",expanded?"true":"false");this.setAttribute("title",expanded?"Свернуть график":"Развернуть график")};
   q("#mapZoomIn").onclick=function(){S.mapScale=Math.min(2,S.mapScale+.15);q("#worldMapSvg").style.transform="scale("+S.mapScale+")"};

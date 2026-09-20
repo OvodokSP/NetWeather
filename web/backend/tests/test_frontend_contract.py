@@ -33,9 +33,10 @@ class FrontendContractTest(unittest.TestCase):
 
     def test_reference_overview_sections_exist(self):
         required = (
-            "globalSearch","topSystemStatus","kpiGlobal","kpiRu","kpiPersonal","kpiIncidents",
+            "globalSearch","topSystemStatus","kpiGlobal","kpiResources","kpiLatency","kpiRu","kpiPersonal","kpiIncidents",
             "streamChart","eventFeed","resourceCards","faultMap","overviewResourceTable",
             "faultPath","faultConclusion","faultResourceSelect","mapRegion","mapZoomIn","mapZoomOut",
+            "overviewFreshness","overviewResourceSummary","eventSummary",
         )
         for item in required:
             self.assertIn(f'id="{item}"', self.html)
@@ -128,11 +129,13 @@ class FrontendContractTest(unittest.TestCase):
         self.assertIn("var ticks=[100,99,98,95,90]", self.js)
         self.assertIn("function availabilityY(", self.js)
 
-    def test_overview_resource_window_scrolls(self):
+    def test_overview_resources_are_problem_first_and_bounded(self):
         self.assertIn(".compact-table{", self.css)
-        self.assertIn("overflow-y:auto", self.css)
-        self.assertIn("var visible=rows;", self.js)
-        self.assertNotIn("var visible=rows.slice(0,6)", self.js)
+        self.assertIn("overflow-y:visible", self.css)
+        self.assertIn("function resourceAttentionRank(", self.js)
+        self.assertIn('S.overviewResourceMode==="ISSUES"', self.js)
+        self.assertIn("var visible=matching.slice(0,8)", self.js)
+        self.assertIn("data-overview-resource-mode", self.html)
 
     def test_dashboard_preferences_and_capability_gating(self):
         for token in (
@@ -156,10 +159,13 @@ class FrontendContractTest(unittest.TestCase):
         self.assertIn("--nw-fs-2xs:10px", self.css)
         self.assertIn("html,body,button,input,select,textarea{font-family:var(--nw-font)}", self.css)
 
-    def test_overview_is_desktop_no_scroll(self):
+    def test_overview_scrolls_for_readable_operational_detail(self):
         self.assertIn("html,body{margin:0;width:100%;height:100%;overflow:hidden", self.css)
-        self.assertIn(".overview-view{height:100%;overflow:hidden}", self.css)
-        self.assertIn(".overview-grid{height:100%;display:grid", self.css)
+        self.assertIn(".overview-view{height:auto;overflow:visible}", self.css)
+        self.assertIn("grid-template-rows:none", self.css)
+        self.assertIn("padding-bottom:34px", self.css)
+        self.assertIn('q(".overview-grid").style.removeProperty("grid-template-rows")', self.js)
+        self.assertNotIn("grid.style.gridTemplateRows=", self.js)
 
     def test_responsive_viewport_and_touch_contract(self):
         self.assertIn(

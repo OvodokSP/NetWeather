@@ -24,7 +24,9 @@ Prefer:
 Avoid:
 - oversized empty surfaces;
 - decorative cards with no information;
-- scrolling the whole Overview when the same information can fit in panel scroll areas.
+- forcing the whole Overview into one viewport by shrinking or clipping useful information;
+- nested vertical scroll areas for primary dashboard content. Use natural page scrolling when it
+  keeps charts, resource cards and problem rows readable.
 
 ## 3. Groups
 
@@ -133,3 +135,13 @@ The Overview answers, without navigation:
 Pinned resources: maximum 6.
 
 The Overview must remain customizable without producing empty holes.
+
+Operational hierarchy is fixed even when optional capabilities are hidden:
+
+1. current health, freshness and four core KPIs;
+2. time-series evidence and recent events;
+3. pinned resources;
+4. a problem-first resource table and capability-specific diagnostics.
+
+The resource table on Overview is a bounded summary, not a duplicate of Monitoring. It shows at
+most 8 rows, sorts items requiring attention first and offers an explicit problem-only filter.

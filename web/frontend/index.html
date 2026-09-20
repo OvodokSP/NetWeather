@@ -77,11 +77,15 @@
       <section class="view active overview-view" id="view-overview">
         <div class="overview-grid">
           <div class="headline-row">
-            <div>
+            <div class="headline-copy">
+              <span class="eyebrow">ОПЕРАТИВНАЯ СВОДКА</span>
               <h1 id="welcomeTitle">Хорошая связь сегодня</h1>
               <p id="welcomeSubtitle">Мониторим доступность интернет-ресурсов по всему миру. В реальном времени. Для вас.</p>
             </div>
-            <div class="headline-actions"><button class="btn dashboard-config-btn" id="customizeOverview" type="button">⚙ Настроить экран</button></div>
+            <div class="headline-actions">
+              <div class="overview-freshness" title="Время последнего полученного измерения"><i></i><span>Данные</span><b id="overviewFreshness">обновляются</b></div>
+              <button class="btn dashboard-config-btn" id="customizeOverview" type="button">⚙ Настроить экран</button>
+            </div>
           </div>
 
           <div class="kpi-grid">
@@ -93,6 +97,24 @@
                 <small id="kpiGlobalHint">нет истории</small>
               </div>
               <canvas class="mini-spark" id="kpiGlobalSpark"></canvas>
+            </article>
+            <article class="kpi-card" id="kpiResourcesCard" data-dashboard-panel="resources_kpi">
+              <div class="kpi-icon green">✓</div>
+              <div class="kpi-body">
+                <span>Ресурсы доступны</span>
+                <div><strong id="kpiResources">—</strong><em id="kpiResourcesDelta">из —</em></div>
+                <small id="kpiResourcesHint">ожидаем измерения</small>
+              </div>
+              <canvas class="mini-spark" id="kpiResourcesSpark"></canvas>
+            </article>
+            <article class="kpi-card" id="kpiLatencyCard" data-dashboard-panel="latency_kpi">
+              <div class="kpi-icon violet">◷</div>
+              <div class="kpi-body">
+                <span>Типичный отклик</span>
+                <div><strong id="kpiLatency">—</strong><em>мс</em></div>
+                <small id="kpiLatencyHint">медиана доступных ресурсов</small>
+              </div>
+              <canvas class="mini-spark" id="kpiLatencySpark"></canvas>
             </article>
             <article class="kpi-card" id="kpiDomesticCard" data-dashboard-panel="domestic_kpi">
               <div class="kpi-icon violet">◒</div>
@@ -147,7 +169,7 @@
 
             <article class="panel events-panel" data-dashboard-panel="events">
               <div class="panel-head compact">
-                <div><h2>Последние события</h2></div>
+                <div><h2>Последние события</h2><span class="panel-subtitle" id="eventSummary">Изменения состояния ресурсов</span></div>
                 <button class="link-btn" data-view-jump="alerts">Все события →</button>
               </div>
               <div id="eventFeed" class="event-feed"></div>
@@ -156,6 +178,10 @@
 
           <div class="overview-row overview-row-middle">
             <section class="resource-cards-section" data-dashboard-panel="pinned_resources">
+              <div class="section-head">
+                <div><span class="eyebrow">В ФОКУСЕ</span><h2>Выбранные ресурсы</h2><p>Ключевые цели и их состояние за последние 24 часа.</p></div>
+                <button class="link-btn" data-view-jump="resources">Все ресурсы →</button>
+              </div>
               <div id="resourceCards" class="resource-cards"></div>
             </section>
 
@@ -192,7 +218,15 @@
           <div class="overview-row overview-row-bottom">
             <article class="panel resources-panel" data-dashboard-panel="resources_table">
               <div class="panel-head compact">
-                <div class="resource-headline"><h2>Ресурсы</h2><button class="btn tiny primary" id="overviewAddResource">+ Добавить</button></div>
+                <div><h2>Состояние ресурсов</h2><span class="panel-subtitle" id="overviewResourceSummary">Все наблюдаемые цели</span></div>
+                <div class="panel-actions overview-resource-actions">
+                  <div class="segmented" aria-label="Фильтр ресурсов на обзоре">
+                    <button class="seg active" type="button" data-overview-resource-mode="ALL">Все</button>
+                    <button class="seg" type="button" data-overview-resource-mode="ISSUES">Требуют внимания</button>
+                  </div>
+                  <button class="link-btn" data-view-jump="resources">Полный список →</button>
+                  <button class="btn tiny primary" id="overviewAddResource">+ Добавить</button>
+                </div>
               </div>
               <div class="compact-table" id="overviewResourceTable"></div>
             </article>
