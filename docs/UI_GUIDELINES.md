@@ -40,6 +40,9 @@ Every resource flow must preserve group context:
 
 Resources from the curated catalog must not be duplicated across groups.
 
+Basic resource addition is a public action. Owner authentication must only be requested for
+management actions or capability-gated checks; the add flow must not redirect a viewer to login.
+
 ## 4. Capability-aware UI
 
 If functionality is unavailable, hide it instead of showing a dead panel.

@@ -78,7 +78,9 @@ root:root 600
 
 - wildcard CORS не используется;
 - SPA file serving ограничен frontend root;
-- production по умолчанию работает как public read-only, write API требует owner-session или API token;
+- production разрешает без входа только чтение и базовое добавление ресурса в общий GLOBAL-мониторинг;
+- публичное добавление custom-target ограничено по частоте и всегда использует безопасный фиксированный профиль без alerts;
+- изменение/удаление ресурсов, ручные проверки, группы, инциденты и служебные write API требуют owner-session или API token;
 - отсутствие owner secret останавливает запуск production-контейнера;
 - пользовательский target проходит private-target protection;
 - browser-facing ошибки не должны раскрывать секреты или host paths.

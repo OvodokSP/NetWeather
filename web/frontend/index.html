@@ -30,7 +30,7 @@
 
     <div class="side-spacer"></div>
 
-    <article class="sidebar-cta owner-only">
+    <article class="sidebar-cta">
       <h3>Больше данных<br>Больше уверенности</h3>
       <p>Подключите свои ресурсы и получайте детальную аналитику.</p>
       <button class="btn primary wide-btn" id="sidebarAddResource">+ Добавить ресурс</button>
@@ -192,7 +192,7 @@
           <div class="overview-row overview-row-bottom">
             <article class="panel resources-panel" data-dashboard-panel="resources_table">
               <div class="panel-head compact">
-                <div class="resource-headline"><h2>Ресурсы</h2><button class="btn tiny primary owner-only" id="overviewAddResource">+ Добавить</button></div>
+                <div class="resource-headline"><h2>Ресурсы</h2><button class="btn tiny primary" id="overviewAddResource">+ Добавить</button></div>
               </div>
               <div class="compact-table" id="overviewResourceTable"></div>
             </article>
@@ -218,7 +218,7 @@
       <section class="view" id="view-resources">
         <div class="page-head">
           <div><h1>Мониторинг</h1><p>Ресурсы, группы, интервалы и диагностические этапы.</p></div>
-          <div class="page-actions owner-only"><button class="btn secondary" id="manageGroups">Группы</button><button class="btn primary" id="openAddResource">+ Добавить ресурс</button></div>
+          <div class="page-actions"><button class="btn secondary owner-only" id="manageGroups">Группы</button><button class="btn primary" id="openAddResource">+ Добавить ресурс</button></div>
         </div>
         <article class="panel page-panel">
           <div class="filters">
@@ -308,7 +308,7 @@
       <section class="view" id="view-settings">
         <div class="page-head"><div><h1>Настройки</h1><p>Состояние Core, доступ владельца и параметры мониторинга.</p></div></div>
         <div class="settings-grid">
-          <article class="panel setting-card"><span>ДОСТУП</span><h2>Публичный просмотр</h2><p>Состояние сети видно всем. Изменение ресурсов, ручные проверки и подтверждение инцидентов доступны только владельцу.</p><div id="tokenState" class="setting-box"></div><button class="btn primary" id="ownerAuthAction" type="button">Войти как владелец</button></article>
+          <article class="panel setting-card"><span>ДОСТУП</span><h2>Публичный режим</h2><p>Просмотр и добавление ресурсов доступны всем. Изменение и удаление ресурсов, ручные проверки и служебные действия доступны только владельцу.</p><div id="tokenState" class="setting-box"></div><button class="btn primary" id="ownerAuthAction" type="button">Войти как владелец</button></article>
           <article class="panel setting-card"><span>ТОЧКИ НАБЛЮДЕНИЯ</span><h2>Probes</h2><div id="probeSettings" class="probe-settings"></div></article>
           <article class="panel setting-card"><span>ТРЕВОГИ</span><h2>Триггеры</h2><p>Последовательные ошибки, высокая задержка и срок TLS.</p><div id="alertSystemState" class="setting-box"></div></article>
           <article class="panel setting-card"><span>CORE</span><h2>Runtime</h2><div id="systemInfo" class="system-info"></div></article>

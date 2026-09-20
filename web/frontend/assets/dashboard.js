@@ -230,7 +230,13 @@ function confirmAction(options){
 }
 function hideSearch(){
   var el=q("#searchResults"),input=q("#globalSearch");if(!el||!input)return;
-  el.classList.add("hidden");input.setAttribute("aria-expanded","false");S.searchIndex=-1
+  el.classList.add("hidden");input.setAttribute("aria-expanded","false");S.searchIndex=-1;
+  document.body.classList.remove("search-open");document.documentElement.style.removeProperty("--search-results-height")
+}
+function showSearch(){
+  var el=q("#searchResults"),input=q("#globalSearch");if(!el||!input)return;
+  el.classList.remove("hidden");input.setAttribute("aria-expanded","true");
+  document.documentElement.style.setProperty("--search-results-height",Math.min(el.scrollHeight,320)+"px");document.body.classList.add("search-open")
 }
 function handleSearchKeydown(e){
   var results=qa("#searchResults [data-search-option]");
@@ -370,7 +376,7 @@ function applyOwnerMode(){
   document.body.classList.toggle("viewer-mode",viewer);
   var title=q("#ownerModeTitle"),hint=q("#ownerModeHint"),button=q("#ownerAuthAction");
   if(title)title.textContent=S.owner?"Режим владельца":"Режим просмотра";
-  if(hint)hint.textContent=S.owner?"управление доступно":"публичные данные";
+  if(hint)hint.textContent=S.owner?"управление доступно":"просмотр и добавление";
   if(button){button.textContent=!S.authRequired?"Авторизация отключена":S.owner?"Выйти из режима владельца":"Войти как владелец";button.disabled=!S.authRequired;button.className="btn "+(S.owner&&S.authRequired?"secondary":"primary")}
 }
 function openOwnerLogin(){
@@ -751,7 +757,7 @@ function renderSearch(value){
   S.searchIndex=-1;
   S.searchAddTarget=null;
   if(!v){hideSearch();el.innerHTML="";return}
-  if(!S.dashboard){el.innerHTML=empty("Загружаем ресурсы","Поиск станет доступен через несколько секунд.");el.classList.remove("hidden");input.setAttribute("aria-expanded","true");return}
+  if(!S.dashboard){el.innerHTML=empty("Загружаем ресурсы","Поиск станет доступен через несколько секунд.");showSearch();return}
   var candidate=searchTargetCandidate(raw),candidateHost=candidate?targetMeta(candidate).host:"";
   var rows=(S.dashboard&&S.dashboard.resources||[]).filter(function(r){
     return r.name.toLowerCase().indexOf(v)>=0||r.target.toLowerCase().indexOf(v)>=0||String(r.resolved_ip||"").indexOf(v)>=0||(candidateHost&&targetMeta(r.target).host===candidateHost)
@@ -759,15 +765,15 @@ function renderSearch(value){
   var html=rows.map(function(r,i){return '<button class="search-result" role="option" id="search-result-'+i+'" data-search-option data-search-id="'+r.id+'"><div><b>'+esc(r.name)+'</b><span>'+esc(r.target)+'</span></div><em>'+diagText(r.diagnosis)+'</em></button>'}).join("");
   if(candidate&&!rows.some(function(r){return targetMeta(r.target).host===candidateHost})){
     S.searchAddTarget=candidate;
-    html+='<button class="search-result search-add-result" role="option" data-search-option data-search-add="1"><div><b>Добавить ресурс</b><span>'+esc(candidate)+'</span></div><em>'+(S.owner?"Добавить":"Войти")+'</em></button>'
+    html+='<button class="search-result search-add-result" role="option" data-search-option data-search-add="1"><div><b>Добавить ресурс</b><span>'+esc(candidate)+'</span></div><em>Добавить</em></button>'
   }
   el.innerHTML=html||empty("Ничего не найдено","Введите название или адрес сайта.");
-  el.classList.remove("hidden");input.setAttribute("aria-expanded","true");
+  showSearch();
   qa("#searchResults [data-search-option]").forEach(function(b,index){
     b.onclick=function(){
       if(b.dataset.searchAdd){
         var target=S.searchAddTarget;hideSearch();input.value="";
-        if(S.authRequired&&!S.owner){S.pendingSearchTarget=target;openOwnerLogin()}else openResourceCatalog(target);
+        openResourceCatalog(target);
         return
       }
       hideSearch();input.value="";openDetail(Number(b.dataset.searchId))
@@ -921,7 +927,7 @@ function drawBars(canvas,values,color){
 
 function renderSettings(){
   if(!S.system||!S.dashboard)return;
-  q("#tokenState").textContent=S.authRequired?(S.owner?"Режим владельца активен. Управляющие действия разрешены.":"Публичный режим: доступно безопасное чтение данных."):"Локальная разработка: авторизация отключена.";
+  q("#tokenState").textContent=S.authRequired?(S.owner?"Режим владельца активен. Управляющие действия разрешены.":"Публичный режим: просмотр и базовое добавление ресурсов доступны без входа."):"Локальная разработка: авторизация отключена.";
   q("#alertSystemState").textContent=S.system.webhook_configured?"Server webhook настроен.":"Webhook не настроен; инциденты сохраняются в журнале.";
   q("#securityState").textContent=S.system.private_targets_allowed?"Private targets разрешены.":"Private/loopback/link-local цели заблокированы.";
   var vals=[["Версия",S.system.version],["Uptime",duration(S.system.uptime_seconds)],["Ресурсы",S.system.resources],["Проверки",S.system.checks],["Инциденты",S.system.active_incidents],["Traceroute",S.system.traceroute_available?"готов":"нет"],["База",S.system.database],["Scheduler",S.system.scheduler_enabled?"включён":"выключен"]];
@@ -1059,7 +1065,7 @@ async function submitResourceCatalog(e){
     await withBusy(button,"Добавляем…",async function(){
       if(S.customCatalogMatch&&S.customCatalogMatch.matched&&!S.customCatalogMatch.already_added&&keys.indexOf(S.customCatalogMatch.resource.key)<0)keys.push(S.customCatalogMatch.resource.key);
       if(keys.length){
-        var batch=await api("/api/resource-catalog/add",{method:"POST",body:JSON.stringify({resource_keys:keys})},true);
+        var batch=await api("/api/resource-catalog/add",{method:"POST",body:JSON.stringify({resource_keys:keys})});
         added+=batch.added.length;existing+=batch.existing.length
       }
       if(customTarget&&!S.customCatalogMatch){
@@ -1068,7 +1074,7 @@ async function submitResourceCatalog(e){
         var custom=await api("/api/resources",{method:"POST",body:JSON.stringify({
           name:customName,target:customTarget,group_name:q("#customResourceGroup").value||"CUSTOM",
           interval_seconds:60,expected_status_min:200,expected_status_max:399,slow_threshold_ms:1500,failure_threshold:2,enabled:true,alerts_enabled:true
-        })},true);
+        })});
         if(custom.used_catalog){
           var matchedName=custom.catalog_match&&custom.catalog_match.name||customName;
           messages.push("«"+matchedName+"» найден в каталоге — использован каталоговый вариант")

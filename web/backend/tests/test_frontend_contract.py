@@ -75,7 +75,7 @@ class FrontendContractTest(unittest.TestCase):
         self.assertIn('role="status" aria-live="polite"', self.html)
         self.assertIn('aria-controls="searchResults"', self.html)
 
-    def test_public_read_only_mode_has_owner_session_controls(self):
+    def test_public_add_mode_has_owner_session_controls(self):
         for obsolete in ("tokenDialog","tokenForm","tokenInput","openToken2","clearToken"):
             self.assertNotIn(f'id="{obsolete}"', self.html)
             self.assertNotIn(obsolete, self.js)
@@ -84,6 +84,8 @@ class FrontendContractTest(unittest.TestCase):
         self.assertIn("function applyOwnerMode(", self.js)
         self.assertIn("function submitOwnerLogin(", self.js)
         self.assertIn("viewer-mode", self.css)
+        self.assertNotIn('class="btn tiny primary owner-only" id="overviewAddResource"', self.html)
+        self.assertNotIn('class="page-actions owner-only"', self.html)
 
     def test_ranked_catalog_picker_contract(self):
         for token in (
@@ -183,14 +185,18 @@ class FrontendContractTest(unittest.TestCase):
     def test_global_search_can_offer_resource_addition(self):
         for token in (
             "function searchTargetCandidate(",
+            "function showSearch(",
             "data-search-add=\"1\"",
             "Добавить ресурс",
-            "S.pendingSearchTarget=target",
             "openResourceCatalog(target)",
             "if(initialTarget)await inspectCustomResource()",
             'if(!S.dashboard){el.innerHTML=empty("Загружаем ресурсы"',
+            'document.body.classList.add("search-open")',
         ):
             self.assertIn(token, self.js)
+
+        self.assertIn('.search-open .workspace{', self.css)
+        self.assertNotIn('if(S.authRequired&&!S.owner){S.pendingSearchTarget=target', self.js)
 
     def test_no_runtime_cdn_dependency(self):
         lower = self.html.lower()

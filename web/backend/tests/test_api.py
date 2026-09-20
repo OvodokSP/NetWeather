@@ -72,11 +72,53 @@ class NetWeatherApiTest(unittest.TestCase):
         self.assertFalse(status["authenticated"])
         blocked = self.client.post("/api/groups", json={"title":"Blocked"})
         self.assertEqual(blocked.status_code, 401)
+        public_catalog = self.client.post("/api/resource-catalog/add", json={"resource_keys":["int-chatgpt"]})
+        self.assertEqual(public_catalog.status_code, 200)
+        public_resource = self.client.post("/api/resources", json={
+            "name":"Public resource",
+            "target":"https://public-add.example",
+            "group_name":"UNTRUSTED GROUP",
+            "interval_seconds":30,
+            "expected_status_min":201,
+            "expected_status_max":204,
+            "slow_threshold_ms":100,
+            "failure_threshold":1,
+            "enabled":False,
+            "alerts_enabled":True,
+        })
+        self.assertEqual(public_resource.status_code, 200)
+        detail = self.client.get(f"/api/resources/{public_resource.json()['id']}").json()["resource"]
+        self.assertEqual(detail["group_name"], "CUSTOM")
+        self.assertEqual(detail["interval_seconds"], self.main.DEFAULT_INTERVAL)
+        self.assertEqual(detail["expected_status_min"], 200)
+        self.assertEqual(detail["expected_status_max"], 399)
+        self.assertEqual(detail["slow_threshold_ms"], 1500)
+        self.assertEqual(detail["failure_threshold"], 2)
+        self.assertEqual(detail["enabled"], 1)
+        self.assertEqual(detail["alerts_enabled"], 0)
+        blocked_edit = self.client.patch(f"/api/resources/{public_resource.json()['id']}", json={"name":"Blocked"})
+        self.assertEqual(blocked_edit.status_code, 401)
         login = self.client.post("/api/session/login", json={"password":"owner-pass"})
         self.assertEqual(login.status_code, 200)
         self.assertTrue(self.client.get("/api/session").json()["authenticated"])
         created = self.client.post("/api/groups", json={"title":"Owner group","key":"OWNER"})
         self.assertEqual(created.status_code, 200)
+
+    def test_public_custom_add_is_rate_limited(self):
+        self.main.AUTH_REQUIRED = True
+        self.main.PUBLIC_ADD_LIMIT = 2
+        self.main._public_add_attempts.clear()
+        for index in range(2):
+            added = self.client.post("/api/resources", json={
+                "name":f"Public {index}",
+                "target":f"https://public-{index}.example",
+            })
+            self.assertEqual(added.status_code, 200)
+        limited = self.client.post("/api/resources", json={
+            "name":"Public limited",
+            "target":"https://public-limited.example",
+        })
+        self.assertEqual(limited.status_code, 429)
 
     def test_catalog_http_rejection_is_reachable_not_an_incident(self):
         added = self.client.post("/api/resource-catalog/add", json={"resource_keys":["int-chatgpt"]}).json()

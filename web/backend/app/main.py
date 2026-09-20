@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import (
     AGENT_TOKEN, ALERT_WEBHOOK_URL, ALLOW_PRIVATE_TARGETS, API_TOKEN, APP_VERSION, AUTH_REQUIRED, DEFAULT_INTERVAL,
-    FRONTEND_DIR, KNOWN_GROUPS, ResourceCreate, ResourcePatch, AgentResult, CatalogAddRequest, GroupCreate, GroupPatch,
+    FRONTEND_DIR, KNOWN_GROUPS, PUBLIC_ADD_LIMIT, PUBLIC_ADD_WINDOW_SECONDS, ResourceCreate, ResourcePatch, AgentResult, CatalogAddRequest, GroupCreate, GroupPatch,
     OwnerLogin, SCHEDULER_ENABLED, SESSION_MAX_AGE, STARTED_AT, UI_PASSWORD,
     normalize_group, normalize_target,
 )
@@ -29,6 +29,7 @@ from .availability import is_reachable
 
 
 SESSION_COOKIE = "netweather_owner"
+_public_add_attempts: dict[str, list[float]] = {}
 
 
 def _owner_secret() -> str:
@@ -58,6 +59,21 @@ def require_token(request: Request, authorization: str | None = Header(default=N
         raise HTTPException(503, "Owner authentication is not configured")
     if not _is_owner(request, authorization):
         raise HTTPException(401, "Owner session required")
+
+
+def _limit_public_add(request: Request, authorization: str | None) -> bool:
+    """Return True for owner requests; rate-limit anonymous custom targets."""
+    owner = not AUTH_REQUIRED or _is_owner(request, authorization)
+    if owner:
+        return True
+    address = request.headers.get("x-real-ip") or (request.client.host if request.client else "unknown")
+    now = time.monotonic()
+    attempts = [stamp for stamp in _public_add_attempts.get(address, []) if now - stamp < PUBLIC_ADD_WINDOW_SECONDS]
+    if len(attempts) >= PUBLIC_ADD_LIMIT:
+        raise HTTPException(429, f"Можно добавить не более {PUBLIC_ADD_LIMIT} новых ресурсов в час")
+    attempts.append(now)
+    _public_add_attempts[address] = attempts
+    return False
 
 
 def require_agent(x_netweather_agent: str | None = Header(default=None)) -> None:
@@ -306,7 +322,7 @@ def resource_catalog_match(target:str=Query(min_length=1,max_length=2048)):
     }
 
 
-@app.post("/api/resource-catalog/add", dependencies=[Depends(require_token)])
+@app.post("/api/resource-catalog/add")
 def add_catalog_resources(payload:CatalogAddRequest):
     keys=list(dict.fromkeys(payload.resource_keys))
     unknown=[key for key in keys if key not in CATALOG_BY_KEY]
@@ -338,24 +354,35 @@ def resource_details(resource_id:int):
     return {"resource":rows[0],"checks":[dict(r) for r in checks],"incidents":[i for i in get_incidents(False,200) if i["resource_id"]==resource_id][:20]}
 
 
-@app.post("/api/resources", dependencies=[Depends(require_token)])
-def create_resource(payload:ResourceCreate):
+@app.post("/api/resources")
+def create_resource(payload:ResourceCreate, request:Request, authorization:str|None=Header(default=None)):
     target=normalize_target(payload.target)
-    if payload.expected_status_min>payload.expected_status_max:
+    owner = not AUTH_REQUIRED or _is_owner(request, authorization)
+    interval_seconds = payload.interval_seconds if owner else DEFAULT_INTERVAL
+    expected_status_min = payload.expected_status_min if owner else 200
+    expected_status_max = payload.expected_status_max if owner else 399
+    slow_threshold_ms = payload.slow_threshold_ms if owner else 1500
+    failure_threshold = payload.failure_threshold if owner else 2
+    alerts_enabled = payload.alerts_enabled if owner else False
+    enabled = payload.enabled if owner else True
+    if expected_status_min>expected_status_max:
         raise HTTPException(400,"Expected status min must be <= max")
     now=int(time.time())
     match=catalog_match(target)
     with db() as conn:
         if match:
+            existing=conn.execute("SELECT id FROM resources WHERE catalog_key=? LIMIT 1",(match.key,)).fetchone()
+            if not existing and not owner:
+                _limit_public_add(request, authorization)
             resource_id,created=_insert_catalog_resource(
                 conn,match,now,
-                interval_seconds=payload.interval_seconds,
-                expected_status_min=payload.expected_status_min,
-                expected_status_max=payload.expected_status_max,
-                slow_threshold_ms=payload.slow_threshold_ms,
-                failure_threshold=payload.failure_threshold,
-                alerts_enabled=payload.alerts_enabled,
-                enabled=payload.enabled,
+                interval_seconds=interval_seconds,
+                expected_status_min=expected_status_min,
+                expected_status_max=expected_status_max,
+                slow_threshold_ms=slow_threshold_ms,
+                failure_threshold=failure_threshold,
+                alerts_enabled=alerts_enabled,
+                enabled=enabled,
             )
             return {
                 "id":resource_id,
@@ -372,15 +399,19 @@ def create_resource(payload:ResourceCreate):
             except HTTPException:
                 continue
         group_name=normalize_group(payload.group_name)
+        if not owner and group_name not in KNOWN_GROUPS:
+            group_name="CUSTOM"
+        if not owner:
+            _limit_public_add(request, authorization)
         _ensure_resource_group(conn,group_name,now)
         cur=conn.execute("""INSERT INTO resources(
           name,target,group_name,interval_seconds,enabled,created_at,updated_at,last_checked_at,
           expected_status_min,expected_status_max,slow_threshold_ms,failure_threshold,alerts_enabled,
           last_success_at,last_failure_at,catalog_key,allow_http_rejected
         ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,0)""",
-        (payload.name,target,group_name,payload.interval_seconds,int(payload.enabled),now,now,0,
-         payload.expected_status_min,payload.expected_status_max,payload.slow_threshold_ms,payload.failure_threshold,
-         int(payload.alerts_enabled),0,0))
+        (payload.name,target,group_name,interval_seconds,int(enabled),now,now,0,
+         expected_status_min,expected_status_max,slow_threshold_ms,failure_threshold,
+         int(alerts_enabled),0,0))
     return {"id":int(cur.lastrowid),"created":True,"used_catalog":False,"already_exists":False}
 
 
