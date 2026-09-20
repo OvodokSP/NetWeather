@@ -928,7 +928,6 @@ dialog.modal[open]{
 .fault-panel{min-height:390px}
 
 @media(max-width:1450px) and (min-width:1051px){
-  .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .overview-row-chart{grid-template-columns:minmax(0,1.75fr) minmax(320px,1fr)}
   .overview-row-middle{grid-template-columns:minmax(0,1.7fr) minmax(320px,1fr)}
   .overview-row-bottom{grid-template-columns:minmax(0,1.35fr) minmax(360px,1fr)}
