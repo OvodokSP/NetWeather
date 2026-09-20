@@ -230,11 +230,11 @@ function confirmAction(options){
 }
 function hideSearch(){
   var el=q("#searchResults"),input=q("#globalSearch");if(!el||!input)return;
-  el.classList.add("hidden");input.setAttribute("aria-expanded","false");S.searchIndex=-1
+  el.classList.add("hidden");input.setAttribute("aria-expanded","false");S.searchIndex=-1;S.searchOpen=false
 }
 function showSearch(){
   var el=q("#searchResults"),input=q("#globalSearch");if(!el||!input)return;
-  el.classList.remove("hidden");input.setAttribute("aria-expanded","true")
+  el.classList.remove("hidden");input.setAttribute("aria-expanded","true");S.searchOpen=true
 }
 function handleSearchKeydown(e){
   var results=qa("#searchResults [data-search-option]");
@@ -494,7 +494,7 @@ function renderAll(){
   renderNotifications();
   renderSettings();
   applyCapabilityNavigation();
-  renderSearch("");
+  if(S.searchOpen)renderSearch(q("#globalSearch").value);
   if(S.system)q("#versionLabel").textContent=S.system.version
 }
 

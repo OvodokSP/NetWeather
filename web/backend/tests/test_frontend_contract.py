@@ -197,6 +197,7 @@ class FrontendContractTest(unittest.TestCase):
         self.assertIn('z-index:120', self.css)
         self.assertIn('isolation:isolate', self.css)
         self.assertNotIn('.search-open .workspace{', self.css)
+        self.assertIn('if(S.searchOpen)renderSearch(q("#globalSearch").value)', self.js)
         self.assertNotIn('if(S.authRequired&&!S.owner){S.pendingSearchTarget=target', self.js)
 
     def test_no_runtime_cdn_dependency(self):
