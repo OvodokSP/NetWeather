@@ -213,6 +213,12 @@ class FrontendContractTest(unittest.TestCase):
         self.assertIn('/assets/dashboard.js', self.html)
         self.assertIn('/assets/dashboard.css', self.html)
 
+    def test_frontend_assets_are_cache_busted_together(self):
+        versions = re.findall(r'/assets/(?:dashboard\.css|dashboard\.js)\?v=([^"\']+)', self.html)
+        self.assertEqual(len(versions), 2)
+        self.assertEqual(len(set(versions)), 1)
+        self.assertNotEqual(versions[0], "0.3.10")
+
     def test_no_inline_fake_metrics(self):
         self.assertNotRegex(self.html, r'>\s*9[0-9](?:\.\d+)?%\s*<')
         self.assertIn('id="kpiGlobal">—</strong>', self.html)
