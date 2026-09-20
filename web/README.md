@@ -88,6 +88,8 @@ GLOBAL FAIL + DOMESTIC OK
 - без dead controls;
 - Overview без лишнего пустого пространства.
 
+Глобальный поиск раскрывается как непрозрачный popup поверх dashboard: появление результатов не меняет высоту topbar и не сдвигает страницу. Если введённого HTTP/HTTPS-ресурса ещё нет, любой посетитель может добавить его как базовую проверку; изменение, удаление, ручные проверки, traceroute и расширенные probe-возможности остаются защищёнными.
+
 ## Local development
 
 Для локальной разработки `docker-compose.yml` повторяет ключевые ограничения production:
@@ -195,3 +197,12 @@ The probe:
 - reports DNS/TCP/TLS/HTTP timings;
 - sends heartbeat/results;
 - receives domestic traceroute tasks.
+
+В комплект также входят воспроизводимый установщик и Entware-сервис:
+
+```text
+deploy/keenetic/install-netweather-probe.sh
+deploy/keenetic/S99netweather-probe
+```
+
+Для рабочего роутера прямой ISP-интерфейс зафиксирован как `eth2.4`; агент не стартует без явного `NETWEATHER_DIRECT_INTERFACE` и не должен использовать `opkgtun0`/HRNeo. Подробная процедура и критерии приёмки находятся в [DEPLOYMENT.md](DEPLOYMENT.md).

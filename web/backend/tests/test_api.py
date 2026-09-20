@@ -312,12 +312,13 @@ class NetWeatherApiTest(unittest.TestCase):
         payload = {"resource_id":rid,"status":"TIMEOUT","response_time_ms":8000,"dns_ms":10,"tcp_ms":20,
                    "tls_ms":30,"http_ms":None,"http_status":None,"resolved_ip":"93.184.216.34","message":"timeout"}
         for _ in range(2):
-            r = self.client.post("/api/agent/result?probe_key=RU_TEST&probe_name=RU%20test", headers=headers, json=payload)
+            r = self.client.post("/api/agent/result?probe_key=RU_TEST&probe_name=RU%20test&agent_version=0.3.10", headers=headers, json=payload)
             self.assertEqual(r.status_code, 200)
         dash = self.client.get("/api/dashboard").json()
         row = next(x for x in dash["resources"] if x["id"] == rid)
         self.assertEqual(row["diagnosis"], "LIKELY_RESTRICTION")
         self.assertTrue(dash["summary"]["domestic_probe_online"])
+        self.assertEqual(next(p for p in dash["probes"] if p["probe_key"] == "RU_TEST")["agent_version"], "0.3.10")
         self.assertGreaterEqual(dash["summary"]["likely_restriction"], 1)
         self.assertEqual(len(self.client.get("/api/incidents?active=true").json()), 1)
 

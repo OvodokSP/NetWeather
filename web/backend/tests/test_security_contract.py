@@ -14,6 +14,9 @@ class SecurityContractTest(unittest.TestCase):
         cls.helper = (cls.root / "deploy" / "security" / "netweather-deploy-helper").read_text(encoding="utf-8")
         cls.gate = (cls.root / "deploy" / "security" / "netweather-ssh-gate").read_text(encoding="utf-8")
         cls.guard = (cls.root / "deploy" / "security" / "netweather-egress-guard").read_text(encoding="utf-8")
+        cls.keenetic_probe = (cls.root / "deploy" / "keenetic" / "netweather-probe.sh").read_text(encoding="utf-8")
+        cls.keenetic_installer = (cls.root / "deploy" / "keenetic" / "install-netweather-probe.sh").read_text(encoding="utf-8")
+        cls.keenetic_service = (cls.root / "deploy" / "keenetic" / "S99netweather-probe").read_text(encoding="utf-8")
 
     def test_image_runs_as_non_root(self):
         self.assertIn("USER 10001:10001", self.dockerfile)
@@ -90,6 +93,23 @@ class SecurityContractTest(unittest.TestCase):
         self.assertNotIn("CORSMiddleware", self.main)
         self.assertIn("candidate.relative_to(root)", self.main)
         self.assertIn('raise RuntimeError("Owner authentication secret is required")', self.main)
+
+    def test_keenetic_probe_is_pinned_to_direct_wan_and_supervised(self):
+        for token in (
+            'NETWEATHER_DIRECT_INTERFACE is required',
+            '--interface "$DIRECT_INTERFACE"',
+            '-i "$DIRECT_INTERFACE"',
+            'NETWEATHER_RUN_ONCE',
+            'last-success',
+            'agent_version=$AGENT_VERSION_QUERY',
+        ):
+            self.assertIn(token, self.keenetic_probe)
+        self.assertIn('DIRECT_INTERFACE="${NETWEATHER_DIRECT_INTERFACE:-eth2.4}"', self.keenetic_installer)
+        self.assertIn('NETWEATHER_AGENT_TOKEN must contain 64 hexadecimal characters', self.keenetic_installer)
+        self.assertIn('sha256sum', self.keenetic_installer)
+        self.assertIn('NETWEATHER_REF must be the verified 40-character Git commit', self.keenetic_installer)
+        self.assertIn('/opt/etc/netweather-probe.env', self.keenetic_service)
+        self.assertIn('last successful cycle', self.keenetic_service)
 
 
 if __name__ == "__main__":

@@ -19,7 +19,7 @@
 - NetWeather cannot initiate connections to host/private/VPN networks.
 - Deployment key is forced-command only.
 - Production image build happens off-host.
-- Production UI is public read-only; mutations require an owner session.
+- Production UI is publicly readable; anonymous users can add a basic HTTP/HTTPS resource, while privileged mutations require an owner session.
 - Catalog anti-bot HTTP rejections are represented as reachable rather than false outages.
 - Android latest results and interval settings use persisted reactive state.
 
@@ -50,19 +50,20 @@ Completed in 0.3.10:
 - real map-region filter;
 - live probe layer on the map page;
 - GitHub project documentation/templates refresh.
-- public read-only / owner-session access model;
+- public basic-resource addition / protected privileged-mutation access model;
+- non-shifting opaque search overlay with keyboard navigation;
 - privacy-safe local resource icons without third-party browser requests;
 - fault-domain panel hidden until an independent comparison probe exists.
 
 Next UI work:
-- final device-level responsive verification on narrow layouts;
+- final device-level responsive verification on narrow layouts after the current search-overlay deployment;
 - contextual help/tooltips;
 - remaining empty/error-state polish;
 - browser-probe panels when capability exists.
 
 ## Next functional work
 
-1. Keenetic Domestic Probe.
+1. Connect and verify the prepared Keenetic Domestic Probe service on the physical router.
 2. Browser Probe.
 3. Unified probe comparison.
 4. Explainable fault-domain after at least two independent probes exist.

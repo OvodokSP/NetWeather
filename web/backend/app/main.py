@@ -494,8 +494,8 @@ async def trace_resource(resource_id:int): return await traceroute_to_resource(r
 
 
 @app.get("/api/agent/config.tsv", dependencies=[Depends(require_agent)])
-def agent_config(probe_key: str = Query(min_length=1,max_length=80), probe_name: str = Query(default="Российский probe",max_length=120)):
-    register_probe(probe_key, probe_name, "DOMESTIC")
+def agent_config(probe_key: str = Query(min_length=1,max_length=80), probe_name: str = Query(default="Российский probe",max_length=120), agent_version: str = Query(default="",max_length=32)):
+    register_probe(probe_key, probe_name, "DOMESTIC", agent_version)
     rows = []
     with db() as conn:
         resources = conn.execute("""SELECT id,name,target,expected_status_min,expected_status_max,enabled
@@ -509,8 +509,8 @@ def agent_config(probe_key: str = Query(min_length=1,max_length=80), probe_name:
 
 
 @app.post("/api/agent/result", dependencies=[Depends(require_agent)])
-def agent_result(payload: AgentResult, probe_key: str = Query(min_length=1,max_length=80), probe_name: str = Query(default="Российский probe",max_length=120)):
-    register_probe(probe_key, probe_name, "DOMESTIC")
+def agent_result(payload: AgentResult, probe_key: str = Query(min_length=1,max_length=80), probe_name: str = Query(default="Российский probe",max_length=120), agent_version: str = Query(default="",max_length=32)):
+    register_probe(probe_key, probe_name, "DOMESTIC", agent_version)
     with db() as conn:
         exists = conn.execute("SELECT 1 FROM resources WHERE id=?", (payload.resource_id,)).fetchone()
     if not exists:
@@ -522,8 +522,8 @@ def agent_result(payload: AgentResult, probe_key: str = Query(min_length=1,max_l
 
 
 @app.get("/api/agent/tasks.tsv", dependencies=[Depends(require_agent)])
-def agent_tasks(probe_key: str = Query(min_length=1,max_length=80), probe_name: str = Query(default="Российский probe",max_length=120)):
-    register_probe(probe_key, probe_name, "DOMESTIC")
+def agent_tasks(probe_key: str = Query(min_length=1,max_length=80), probe_name: str = Query(default="Российский probe",max_length=120), agent_version: str = Query(default="",max_length=32)):
+    register_probe(probe_key, probe_name, "DOMESTIC", agent_version)
     with db() as conn:
         rows = conn.execute("""SELECT t.id,t.resource_id,t.task_type,r.target,r.expected_status_min,r.expected_status_max FROM probe_tasks t
           JOIN resources r ON r.id=t.resource_id

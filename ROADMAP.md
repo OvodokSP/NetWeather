@@ -29,12 +29,15 @@ Roadmap отражает текущую продуктовую концепци�
 - [x] полировка resource/groups flows
 - [x] успешный end-to-end production auto-deploy
 - [x] публичное чтение + защищённая owner-session для изменений
-- [ ] device-level responsive QA на узких экранах
+- [ ] финальный device-level responsive QA на узких экранах после deploy search overlay
 
 ## 0.4 — Probe convergence
 
 - [ ] Keenetic → постоянный `DOMESTIC` probe
-- [ ] стабильный heartbeat и version handshake
+- [x] проверяемый Keenetic installer + Entware supervisor
+- [x] принудительная привязка DOMESTIC-измерений к прямому WAN `eth2.4`
+- [ ] стабильный heartbeat физического probe
+- [x] agent version handshake и отображение версии
 - [ ] traceroute от domestic probe
 - [ ] нормализация результатов всех probes
 - [ ] health/status UI для каждой точки наблюдения

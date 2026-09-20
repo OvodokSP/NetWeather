@@ -90,6 +90,7 @@ def init_db() -> None:
             ("checks","location","TEXT"),
             ("checks","probe_key","TEXT NOT NULL DEFAULT 'VPS_EU'"),
             ("checks","probe_scope","TEXT NOT NULL DEFAULT 'EXTERNAL'"),
+            ("probes","agent_version","TEXT NOT NULL DEFAULT ''"),
         ]:
             _ensure_column(conn, table, name, ddl)
         conn.execute("""CREATE UNIQUE INDEX IF NOT EXISTS idx_resources_catalog_key
@@ -228,13 +229,14 @@ def summary() -> dict[str, Any]:
 
 
 
-def register_probe(probe_key: str, name: str, scope: str = "DOMESTIC") -> None:
+def register_probe(probe_key: str, name: str, scope: str = "DOMESTIC", agent_version: str = "") -> None:
     now = int(time.time())
     with db() as conn:
-        conn.execute("""INSERT INTO probes(probe_key,name,scope,last_seen_at,created_at,updated_at)
-          VALUES(?,?,?,?,?,?)
-          ON CONFLICT(probe_key) DO UPDATE SET name=excluded.name,scope=excluded.scope,last_seen_at=excluded.last_seen_at,updated_at=excluded.updated_at""",
-          (probe_key, name, scope, now, now, now))
+        conn.execute("""INSERT INTO probes(probe_key,name,scope,last_seen_at,created_at,updated_at,agent_version)
+          VALUES(?,?,?,?,?,?,?)
+          ON CONFLICT(probe_key) DO UPDATE SET name=excluded.name,scope=excluded.scope,last_seen_at=excluded.last_seen_at,
+            updated_at=excluded.updated_at,agent_version=excluded.agent_version""",
+          (probe_key, name, scope, now, now, now, agent_version))
 
 
 def probe_statuses() -> list[dict[str, Any]]:

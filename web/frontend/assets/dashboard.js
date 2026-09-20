@@ -230,13 +230,11 @@ function confirmAction(options){
 }
 function hideSearch(){
   var el=q("#searchResults"),input=q("#globalSearch");if(!el||!input)return;
-  el.classList.add("hidden");input.setAttribute("aria-expanded","false");S.searchIndex=-1;
-  document.body.classList.remove("search-open");document.documentElement.style.removeProperty("--search-results-height")
+  el.classList.add("hidden");input.setAttribute("aria-expanded","false");S.searchIndex=-1
 }
 function showSearch(){
   var el=q("#searchResults"),input=q("#globalSearch");if(!el||!input)return;
-  el.classList.remove("hidden");input.setAttribute("aria-expanded","true");
-  document.documentElement.style.setProperty("--search-results-height",Math.min(el.scrollHeight,320)+"px");document.body.classList.add("search-open")
+  el.classList.remove("hidden");input.setAttribute("aria-expanded","true")
 }
 function handleSearchKeydown(e){
   var results=qa("#searchResults [data-search-option]");
@@ -701,7 +699,7 @@ function renderMapPage(){
 function renderProbeLegend(){
   var el=q("#probeMapLegend");if(!el||!S.dashboard)return;
   var probes=S.dashboard.probes||[];
-  el.innerHTML=probes.length?probes.map(function(p){return '<div class="probe-map-item '+(p.online?"":"offline")+'"><i></i><div><b>'+esc(p.name)+'</b><span>'+esc(p.scope)+' · '+(p.online?"онлайн":"нет связи")+' · '+ago(p.last_seen_at)+'</span></div></div>'}).join(""):empty("Нет точек наблюдения","")
+  el.innerHTML=probes.length?probes.map(function(p){return '<div class="probe-map-item '+(p.online?"":"offline")+'"><i></i><div><b>'+esc(p.name)+'</b><span>'+esc(p.scope)+(p.agent_version?' · агент '+esc(p.agent_version):'')+' · '+(p.online?"онлайн":"нет связи")+' · '+ago(p.last_seen_at)+'</span></div></div>'}).join(""):empty("Нет точек наблюдения","")
 }
 
 function renderOverviewTable(){
@@ -877,7 +875,7 @@ function renderIncidents(){
 function renderProbes(){
   var el=q("#probesGrid");if(!el||!S.dashboard)return;
   var probes=S.dashboard.probes||[];
-  el.innerHTML=probes.length?probes.map(function(p){return '<article class="probe-page-card"><h2>'+esc(p.name)+'</h2><p>'+esc(p.scope)+' · '+(p.online?"онлайн":"нет связи")+'</p><div class="probe-page-meta"><div><span>Последняя связь</span><b>'+ago(p.last_seen_at)+'</b></div><div><span>Возраст данных</span><b>'+(p.age_seconds==null?"—":duration(p.age_seconds))+'</b></div></div></article>'}).join(""):empty("Точки наблюдения не подключены","")
+  el.innerHTML=probes.length?probes.map(function(p){return '<article class="probe-page-card"><h2>'+esc(p.name)+'</h2><p>'+esc(p.scope)+(p.agent_version?' · агент '+esc(p.agent_version):'')+' · '+(p.online?"онлайн":"нет связи")+'</p><div class="probe-page-meta"><div><span>Последняя связь</span><b>'+ago(p.last_seen_at)+'</b></div><div><span>Возраст данных</span><b>'+(p.age_seconds==null?"—":duration(p.age_seconds))+'</b></div></div></article>'}).join(""):empty("Точки наблюдения не подключены","")
   renderProbeLegend()
 }
 

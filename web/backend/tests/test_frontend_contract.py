@@ -191,11 +191,12 @@ class FrontendContractTest(unittest.TestCase):
             "openResourceCatalog(target)",
             "if(initialTarget)await inspectCustomResource()",
             'if(!S.dashboard){el.innerHTML=empty("Загружаем ресурсы"',
-            'document.body.classList.add("search-open")',
         ):
             self.assertIn(token, self.js)
 
-        self.assertIn('.search-open .workspace{', self.css)
+        self.assertIn('z-index:120', self.css)
+        self.assertIn('isolation:isolate', self.css)
+        self.assertNotIn('.search-open .workspace{', self.css)
         self.assertNotIn('if(S.authRequired&&!S.owner){S.pendingSearchTarget=target', self.js)
 
     def test_no_runtime_cdn_dependency(self):
