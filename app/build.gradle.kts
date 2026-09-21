@@ -14,8 +14,8 @@ android {
         applicationId = "io.netweather.app"
         minSdk = 29
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.4.0-alpha"
+        versionCode = 3
+        versionName = "0.4.1-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
         javaCompileOptions {

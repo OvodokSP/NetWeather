@@ -3,9 +3,13 @@ import os
 import tempfile
 import time
 import unittest
+import asyncio
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
+from app.providers import ProviderSubmission
+from app.diagnostics import DiagnosticPriority
 
 
 class NetWeatherApiTest(unittest.TestCase):
@@ -323,6 +327,52 @@ class NetWeatherApiTest(unittest.TestCase):
         self.assertEqual(next(p for p in dash["probes"] if p["probe_key"] == "ANDROID_TEST_123")["agent_version"], "0.4.0")
         self.assertGreaterEqual(dash["summary"]["local"], 1)
 
+    def test_device_code_pairing_issues_unique_token_and_blocks_spoofed_probe_key(self):
+        self.main.AUTH_REQUIRED = True
+        start = self.client.post("/api/v1/device-auth/start", json={
+            "device_id":"android-installation-1234567890",
+            "device_name":"Galaxy S25",
+            "app_version":"0.4.1",
+        })
+        self.assertEqual(start.status_code, 200)
+        pending = start.json()
+        self.assertRegex(pending["user_code"], r"^[A-Z2-9]{4}-[A-Z2-9]{4}$")
+        blocked = self.client.get("/api/v1/client-probe/resources")
+        self.assertEqual(blocked.status_code, 401)
+        self.client.post("/api/session/login", json={"password":"owner-pass"})
+        approved = self.client.post("/api/device-auth/approve", json={"user_code":pending["user_code"]})
+        self.assertEqual(approved.status_code, 200)
+        token_response = self.client.post("/api/v1/device-auth/poll", json={
+            "session_id":pending["session_id"], "poll_secret":pending["poll_secret"],
+        }).json()
+        self.assertEqual(token_response["status"], "authorized")
+        device_auth = {"Authorization":f"Bearer {token_response['access_token']}"}
+        resources = self.client.get("/api/v1/client-probe/resources", headers=device_auth)
+        self.assertEqual(resources.status_code, 200)
+        rid = resources.json()[0]["id"]
+        result = self.client.post("/api/v1/client-probe/result", headers=device_auth, json={
+            "payload":{"resource_id":rid,"status":"OK","response_time_ms":100,"message":"ok"},
+            "probe":{"probe_key":"SPOOFED_DEVICE","name":"Spoofed","app_version":"0.4.1"},
+        })
+        self.assertEqual(result.status_code, 200)
+        probes = self.client.get("/api/dashboard").json()["probes"]
+        self.assertTrue(any(p["probe_key"] == "android-installation-1234567890" for p in probes))
+        self.assertFalse(any(p["probe_key"] == "SPOOFED_DEVICE" for p in probes))
+
+        restarted = self.client.post("/api/v1/device-auth/start", json={
+            "device_id":"android-installation-1234567890", "device_name":"Galaxy S25", "app_version":"0.4.1",
+        }).json()
+        self.assertNotEqual(restarted["user_code"], pending["user_code"])
+        # Asking for a fresh code does not break an already-authorized installation.
+        self.assertEqual(self.client.get("/api/v1/client-probe/resources", headers=device_auth).status_code, 200)
+
+    def test_device_code_start_is_rate_limited(self):
+        self.main.DEVICE_AUTH_START_LIMIT = 1
+        self.main._device_auth_attempts.clear()
+        body = {"device_id":"android-installation-rate-limit-123", "device_name":"Android", "app_version":"test"}
+        self.assertEqual(self.client.post("/api/v1/device-auth/start", json=body).status_code, 200)
+        self.assertEqual(self.client.post("/api/v1/device-auth/start", json=body).status_code, 429)
+
     def test_diagnostic_quota_status_is_public_and_provider_is_fail_closed(self):
         status = self.client.get("/api/diagnostics/status")
         self.assertEqual(status.status_code, 200)
@@ -331,6 +381,16 @@ class NetWeatherApiTest(unittest.TestCase):
         rid = self.client.get("/api/dashboard").json()["resources"][0]["id"]
         request = self.client.post(f"/api/resources/{rid}/diagnose")
         self.assertEqual(request.status_code, 503)
+
+    def test_external_diagnostic_requests_are_deduplicated(self):
+        rid = self.client.get("/api/dashboard").json()["resources"][0]["id"]
+        submission = ProviderSubmission("globalping", "measurement-1", "queued", {})
+        with patch.object(self.main._diagnostics, "request", new=AsyncMock(return_value=submission)) as submit:
+            first = asyncio.run(self.main.request_external_diagnostic(rid, DiagnosticPriority.NEW_DOWN))
+            second = asyncio.run(self.main.request_external_diagnostic(rid, DiagnosticPriority.MANUAL))
+        self.assertEqual(first["job_id"], second["job_id"])
+        self.assertTrue(second["deduplicated"])
+        submit.assert_awaited_once()
 
     def test_bulk_incident_acknowledgement(self):
         created = self.client.post("/api/resources", json={"name":"Bulk Ack","target":"https://example.com","failure_threshold":1})

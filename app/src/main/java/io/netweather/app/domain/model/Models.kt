@@ -50,6 +50,15 @@ data class GlobalState(
     val error: String? = null,
 )
 
+data class DevicePairingState(
+    val status: String = "unpaired",
+    val userCode: String? = null,
+    val expiresAtSeconds: Long = 0,
+    val sessionId: String? = null,
+    val pollSecret: String? = null,
+    val deviceId: String = "",
+)
+
 data class Settings(
     val darkTheme: Boolean = false,
     val checkIntervalSeconds: Int = 300,

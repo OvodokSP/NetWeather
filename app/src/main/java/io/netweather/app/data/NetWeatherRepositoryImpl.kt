@@ -43,6 +43,11 @@ class NetWeatherRepositoryImpl(
 
     override suspend fun refreshGlobal(): GlobalState {
         val remote = api.dashboard()
+        syncRemoteResources(remote)
+        return remote.global
+    }
+
+    private suspend fun syncRemoteResources(remote: io.netweather.app.data.network.RemoteDashboard): Set<Long> {
         remote.resources.forEach { item ->
             db.resourceDao().upsert(MonitoredResource(
                 id = item.id,
@@ -53,17 +58,23 @@ class NetWeatherRepositoryImpl(
                 enabled = item.enabled,
             ).toEntity())
         }
-        return remote.global
+        return remote.resources.mapTo(mutableSetOf()) { it.id }
     }
 
     override suspend fun runChecks(): NetworkSummary {
-        runCatching { refreshGlobal() }.onFailure { ensureDefaultResources() }
+        val synchronizedResourceIds = runCatching { syncRemoteResources(api.dashboard()) }
+            .onFailure { ensureDefaultResources() }
+            .getOrDefault(emptySet())
         val resources = db.resourceDao().getEnabled().map { it.toDomain() }
         val previous = latestResults().associateBy { it.resourceId }
         val results = coroutineScope { resources.map { r -> async { diagnostics.check(r) } }.map { it.await() } }
         results.forEach { result ->
             val lastOk = if (result.isOk) result.timestamp else db.checkResultDao().lastSuccess(result.resourceId)?.timestamp
             db.checkResultDao().insert(result.copy(lastSuccessfulCheck = lastOk).toEntity())
+        }
+        if (stateStore.accessToken() != null) {
+            results.filter { it.resourceId in synchronizedResourceIds }
+                .forEach { result -> runCatching { api.uploadResult(result) } }
         }
         val summary = analyzer.summarize(resources, results)
         db.historyDao().insert(HistoryEntity(timestamp = summary.lastUpdated, availabilityIndex = summary.availabilityIndex, mode = summary.mode, total = summary.total, available = summary.available, problematic = summary.problematic))
@@ -80,6 +91,10 @@ class NetWeatherRepositoryImpl(
         imported.forEach { db.resourceDao().upsert(it.copy(id = 0).toEntity()) }
         return imported.size
     }
+
+    override fun devicePairing(): DevicePairingState = stateStore.loadPairing()
+    override suspend fun startDevicePairing(): DevicePairingState = api.startPairing()
+    override suspend fun pollDevicePairing(state: DevicePairingState): DevicePairingState = api.pollPairing(state)
 
     override suspend fun ensureDefaultResources() {
         if (db.resourceDao().count() > 0) return

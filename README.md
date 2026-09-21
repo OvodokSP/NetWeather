@@ -9,9 +9,9 @@
 
 | Контур | Состояние |
 |---|---|
-| Web | [netweather.online](https://netweather.online), `0.4.0-web` после успешного auto-deploy |
-| Android | `0.4.0-alpha`; новый APK публикуется только после зелёного Android CI |
-| Источники | VPS baseline работает; Globalping опционален и выключен до настройки; Android local probe необязателен |
+| Web | [netweather.online](https://netweather.online), `0.4.1-web` после успешного auto-deploy |
+| Android | `0.4.1-alpha`; новый APK публикуется только после зелёного Android CI |
+| Источники | VPS baseline, событийные Globalping/OONI/IODA и необязательный авторизованный Android local probe |
 
 ## Что такое NetWeather
 
@@ -57,7 +57,7 @@ Android-клиент использует общий backend как источн
 - виджеты;
 - интеграция с общей моделью NetWeather Probe.
 
-Установочная alpha-preview сборка 0.4.0 публикуется в [GitHub Releases](https://github.com/OvodokSP/NetWeather/releases/tag/android-v0.4.0-alpha-preview.1). Это debug-signed APK для проверки, а не production-signed релиз; точные ограничения описаны в [docs/ANDROID_PREVIEW.md](docs/ANDROID_PREVIEW.md).
+Установочная alpha-preview сборка 0.4.1 публикуется в [GitHub Releases](https://github.com/OvodokSP/NetWeather/releases/tag/android-v0.4.1-alpha-preview.1) после успешного CI. Это debug-signed APK для проверки, а не production-signed релиз; точные ограничения описаны в [docs/ANDROID_PREVIEW.md](docs/ANDROID_PREVIEW.md).
 
 ## Архитектура репозитория
 
@@ -128,7 +128,7 @@ Android:
 
 ## Roadmap
 
-Ближайший продуктовый контур: завершить authenticated Android device enrollment, persisted provider quota/result polling, cached OONI/IODA/status evidence и representative-device QA. Аппаратные router probes в roadmap не входят.
+Ближайший продуктовый контур: live-contract verification внешних источников, official-status providers, долгосрочная evidence timeline и representative-device QA. Аппаратные router probes в roadmap не входят.
 
 См. [ROADMAP.md](ROADMAP.md).
 

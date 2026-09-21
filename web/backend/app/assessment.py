@@ -34,6 +34,8 @@ def assess_incident(
     user_slow: bool = False,
     external_failures: int = 0,
     ooni_signal: bool = False,
+    external_classification: str | None = None,
+    ioda_signal: bool = False,
 ) -> IncidentAssessment:
     """Return a deterministic conclusion without inventing unavailable evidence."""
     if not global_status:
@@ -58,14 +60,18 @@ def assess_incident(
             "Из вашей сети ресурс доступен, но базовая VPS-проверка не прошла",
         )
     if not global_ok:
-        if global_status == "DNS_ERROR" and (not user_status or user_status == "DNS_ERROR"):
-            return IncidentAssessment(IncidentClassification.DNS_FAILURE, "medium", "DNS-разрешение не удалось")
-        if external_failures >= 2:
+        if external_classification == "DNS_FAILURE":
+            return IncidentAssessment(IncidentClassification.DNS_FAILURE, "high", "DNS-сбой подтверждён внешними точками Globalping")
+        if external_classification == "SERVICE_DOWN":
+            return IncidentAssessment(IncidentClassification.SERVICE_DOWN, "high", "Недоступность подтверждена несколькими внешними точками Globalping")
+        if external_classification == "REGIONAL_OUTAGE" or ioda_signal:
             return IncidentAssessment(
                 IncidentClassification.REGIONAL_OUTAGE,
-                "high",
-                "Сбой подтверждён несколькими независимыми внешними точками",
+                "high" if external_classification == "REGIONAL_OUTAGE" and ioda_signal else "medium",
+                "Есть независимые признаки регионального сбоя",
             )
+        if global_status == "DNS_ERROR" and (not user_status or user_status == "DNS_ERROR"):
+            return IncidentAssessment(IncidentClassification.DNS_FAILURE, "medium", "DNS-разрешение не удалось")
         return IncidentAssessment(
             IncidentClassification.SERVICE_DOWN,
             "low" if user_status is None else "medium",

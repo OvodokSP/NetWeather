@@ -2,7 +2,7 @@
 
 ## Current checkpoint
 
-**Web:** `0.4.0-web` candidate
+**Web:** `0.4.1-web` candidate
 **Development branch:** `feature/web-vps-monitoring`
 **Production domain:** `netweather.online`
 
@@ -11,7 +11,9 @@
 - Global VPS monitoring is working and is the hardware-free baseline.
 - Keenetic/Entware/router runtime and agent API have been removed; old telemetry is retained as excluded `LEGACY` data.
 - Deterministic assessment, provider abstraction and a quota reserve are implemented.
-- Globalping remains disabled until production configuration is explicitly verified.
+- Globalping submission, persistent quota accounting, result polling and conservative multi-probe classification are implemented.
+- OONI and IODA evidence adapters are event-driven and cached; external failures do not alter the baseline conclusion.
+- Android device enrollment uses an expiring unique code approved by the owner on the Web site; device tokens are independently revocable.
 - Resource groups are implemented.
 - Ranked resource catalog is implemented.
 - Manual/catalog duplicate protection is implemented.
@@ -25,7 +27,7 @@
 - Production UI is publicly readable; anonymous users can add a basic HTTP/HTTPS resource, while privileged mutations require an owner session.
 - Catalog anti-bot HTTP rejections are represented as reachable rather than false outages.
 - Android latest results and interval settings use persisted reactive state.
-- Installable Android `0.4.0-alpha-debug` preview and SHA-256 are produced by a dedicated prerelease workflow. Publication is only confirmed after that workflow succeeds on the updated branch.
+- Android `0.4.1-alpha` uploads local measurements only after explicit device pairing. Its preview APK is published only after the updated CI/release workflow succeeds.
 
 ## Deployment channel
 
@@ -71,8 +73,8 @@ Next UI work:
 
 ## Next functional work
 
-1. Authenticated Android device enrollment and upload of `USER` measurements.
-2. Persisted Globalping usage and result polling (new DOWN/SLOW incidents already submit event-driven jobs when the provider is enabled).
-3. Cached OONI/IODA/official status evidence.
+1. Verify live Globalping, OONI and IODA responses after production deployment and retain fixtures for contract regression.
+2. Complete representative physical-device pairing and responsive-layout QA.
+3. Add official status providers and long-term evidence timeline.
 4. Alerts/reporting refinement.
 5. Accounts/capabilities/licensing only after the base tool is complete.

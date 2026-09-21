@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-APP_VERSION = "0.4.0-web"
+APP_VERSION = "0.4.1-web"
 STARTED_AT = int(time.time())
 DB_PATH = Path(os.getenv("NETWEATHER_DB", "/data/netweather.db"))
 API_TOKEN = os.getenv("NETWEATHER_API_TOKEN", "")
@@ -32,9 +32,24 @@ SERVER_PROBE_KEY = os.getenv("NETWEATHER_SERVER_PROBE_KEY", "VPS_EU").strip() or
 SERVER_PROBE_NAME = os.getenv("NETWEATHER_SERVER_PROBE_NAME", "NetWeather VPS").strip() or "NetWeather VPS"
 GLOBALPING_ENABLED = os.getenv("NETWEATHER_GLOBALPING_ENABLED", "false").lower() in {"1","true","yes","on"}
 GLOBALPING_TOKEN = os.getenv("NETWEATHER_GLOBALPING_TOKEN", "").strip()
+GLOBALPING_BASE_URL = os.getenv("NETWEATHER_GLOBALPING_BASE_URL", "https://api.globalping.io/v1").rstrip("/")
 GLOBALPING_HOURLY_LIMIT = int(os.getenv("NETWEATHER_GLOBALPING_HOURLY_LIMIT", "250"))
 DIAGNOSTIC_RESERVE_PERCENT = int(os.getenv("NETWEATHER_DIAGNOSTIC_RESERVE_PERCENT", "30"))
 DIAGNOSTIC_COOLDOWN_SECONDS = int(os.getenv("NETWEATHER_DIAGNOSTIC_COOLDOWN_SECONDS", "900"))
+DIAGNOSTIC_POLL_SECONDS = int(os.getenv("NETWEATHER_DIAGNOSTIC_POLL_SECONDS", "10"))
+DIAGNOSTIC_MAX_POLL_ATTEMPTS = int(os.getenv("NETWEATHER_DIAGNOSTIC_MAX_POLL_ATTEMPTS", "30"))
+OONI_ENABLED = os.getenv("NETWEATHER_OONI_ENABLED", "false").lower() in {"1","true","yes","on"}
+OONI_BASE_URL = os.getenv("NETWEATHER_OONI_BASE_URL", "https://api.ooni.io/api/v1").rstrip("/")
+OONI_PROBE_COUNTRY = os.getenv("NETWEATHER_OONI_PROBE_COUNTRY", "RU").strip().upper() or "RU"
+IODA_ENABLED = os.getenv("NETWEATHER_IODA_ENABLED", "false").lower() in {"1","true","yes","on"}
+IODA_BASE_URL = os.getenv("NETWEATHER_IODA_BASE_URL", "https://api.ioda.inetintel.cc.gatech.edu/v2").rstrip("/")
+IODA_COUNTRY = os.getenv("NETWEATHER_IODA_COUNTRY", "RU").strip().upper() or "RU"
+INTELLIGENCE_CACHE_SECONDS = int(os.getenv("NETWEATHER_INTELLIGENCE_CACHE_SECONDS", "21600"))
+DEVICE_CODE_TTL_SECONDS = int(os.getenv("NETWEATHER_DEVICE_CODE_TTL_SECONDS", "600"))
+DEVICE_POLL_INTERVAL_SECONDS = int(os.getenv("NETWEATHER_DEVICE_POLL_INTERVAL_SECONDS", "5"))
+DEVICE_TOKEN_MAX_AGE_SECONDS = int(os.getenv("NETWEATHER_DEVICE_TOKEN_MAX_AGE_SECONDS", "31536000"))
+DEVICE_AUTH_START_LIMIT = int(os.getenv("NETWEATHER_DEVICE_AUTH_START_LIMIT", "5"))
+DEVICE_AUTH_START_WINDOW_SECONDS = int(os.getenv("NETWEATHER_DEVICE_AUTH_START_WINDOW_SECONDS", "3600"))
 
 KNOWN_GROUPS = {
     "RUSSIAN": "Российские",
@@ -106,6 +121,21 @@ class ClientProbeRegistration(BaseModel):
     probe_key: str = Field(min_length=8, max_length=120)
     name: str = Field(default="Android", min_length=1, max_length=120)
     app_version: str = Field(default="", max_length=40)
+
+
+class DeviceAuthorizationStart(BaseModel):
+    device_id: str = Field(min_length=16, max_length=160, pattern=r"^[A-Za-z0-9._:-]+$")
+    device_name: str = Field(default="Android", min_length=1, max_length=120)
+    app_version: str = Field(default="", max_length=40)
+
+
+class DeviceAuthorizationPoll(BaseModel):
+    session_id: str = Field(min_length=20, max_length=160)
+    poll_secret: str = Field(min_length=32, max_length=256)
+
+
+class DeviceAuthorizationApprove(BaseModel):
+    user_code: str = Field(min_length=6, max_length=16)
 
 
 class ResourcePatch(BaseModel):

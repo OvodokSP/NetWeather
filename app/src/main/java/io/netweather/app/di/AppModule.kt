@@ -21,7 +21,7 @@ import javax.inject.Singleton
 object AppModule {
     @Provides @Singleton fun db(@ApplicationContext context: Context): AppDatabase = Room.databaseBuilder(context, AppDatabase::class.java, "netweather.db").build()
     @Provides @Singleton fun diagnostics() = NetworkDiagnostics()
-    @Provides @Singleton fun api() = NetWeatherApi()
+    @Provides @Singleton fun api(stateStore: StateStore) = NetWeatherApi(stateStore = stateStore)
     @Provides @Singleton fun analyzer() = NetworkAnalyzer()
     @Provides @Singleton fun stateStore(@ApplicationContext context: Context) = StateStore(context)
     @Provides @Singleton fun notifier(@ApplicationContext context: Context) = AppNotifier(context)

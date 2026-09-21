@@ -4,9 +4,11 @@ import asyncio
 import base64
 import hashlib
 import hmac
+import json
 import subprocess
 import time
 from contextlib import asynccontextmanager
+from urllib.parse import urlparse
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -14,10 +16,16 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import (
     ALERT_WEBHOOK_URL, ALLOW_PRIVATE_TARGETS, API_TOKEN, APP_VERSION, AUTH_REQUIRED, DEFAULT_INTERVAL,
-    DIAGNOSTIC_COOLDOWN_SECONDS, DIAGNOSTIC_RESERVE_PERCENT, FRONTEND_DIR, GLOBALPING_ENABLED,
-    GLOBALPING_HOURLY_LIMIT, GLOBALPING_TOKEN, KNOWN_GROUPS, PUBLIC_ADD_LIMIT, PUBLIC_ADD_WINDOW_SECONDS,
+    DEVICE_CODE_TTL_SECONDS, DEVICE_POLL_INTERVAL_SECONDS, DEVICE_TOKEN_MAX_AGE_SECONDS,
+    DEVICE_AUTH_START_LIMIT, DEVICE_AUTH_START_WINDOW_SECONDS,
+    DIAGNOSTIC_COOLDOWN_SECONDS, DIAGNOSTIC_MAX_POLL_ATTEMPTS, DIAGNOSTIC_POLL_SECONDS,
+    DIAGNOSTIC_RESERVE_PERCENT, FRONTEND_DIR, GLOBALPING_BASE_URL, GLOBALPING_ENABLED,
+    GLOBALPING_HOURLY_LIMIT, GLOBALPING_TOKEN, INTELLIGENCE_CACHE_SECONDS, IODA_BASE_URL,
+    IODA_COUNTRY, IODA_ENABLED, KNOWN_GROUPS, OONI_BASE_URL, OONI_ENABLED, OONI_PROBE_COUNTRY,
+    PUBLIC_ADD_LIMIT, PUBLIC_ADD_WINDOW_SECONDS,
     ResourceCreate, ResourcePatch, ClientProbeResult, ClientProbeRegistration, CatalogAddRequest, GroupCreate, GroupPatch,
-    OwnerLogin, SCHEDULER_ENABLED, SESSION_MAX_AGE, STARTED_AT, UI_PASSWORD,
+    DeviceAuthorizationApprove, DeviceAuthorizationPoll, DeviceAuthorizationStart, OwnerLogin,
+    SCHEDULER_ENABLED, SESSION_MAX_AGE, STARTED_AT, UI_PASSWORD,
     normalize_group, normalize_target,
 )
 from .database import (
@@ -28,14 +36,24 @@ from .incidents import write_check
 from .monitor import discover_target_metadata, perform_check, traceroute_to_resource
 from .resource_catalog import CATALOG_BY_KEY, catalog_match, catalog_payload
 from .availability import is_reachable
-from .diagnostics import DiagnosticCoordinator, DiagnosticPriority, QuotaManager
+from .diagnostics import DiagnosticCoordinator, DiagnosticPriority, PersistentQuotaManager
 from .providers import GlobalpingProvider
+from .device_auth import (
+    DeviceIdentity, approve_authorization, authenticate_device, list_devices,
+    poll_authorization, revoke_device, start_authorization,
+)
+from .intelligence import IodaProvider, OoniProvider
 
 
 SESSION_COOKIE = "netweather_owner"
 _public_add_attempts: dict[str, list[float]] = {}
-_quota = QuotaManager(GLOBALPING_HOURLY_LIMIT, DIAGNOSTIC_RESERVE_PERCENT)
-_diagnostics = DiagnosticCoordinator(GlobalpingProvider(GLOBALPING_TOKEN), _quota, DIAGNOSTIC_COOLDOWN_SECONDS)
+_device_auth_attempts: dict[str, list[float]] = {}
+_diagnostic_request_lock = asyncio.Lock()
+_quota = PersistentQuotaManager("globalping", GLOBALPING_HOURLY_LIMIT, DIAGNOSTIC_RESERVE_PERCENT)
+_globalping = GlobalpingProvider(GLOBALPING_TOKEN, GLOBALPING_BASE_URL)
+_diagnostics = DiagnosticCoordinator(_globalping, _quota, DIAGNOSTIC_COOLDOWN_SECONDS)
+_ooni = OoniProvider(OONI_BASE_URL, OONI_PROBE_COUNTRY)
+_ioda = IodaProvider(IODA_BASE_URL, IODA_COUNTRY)
 
 
 def _owner_secret() -> str:
@@ -67,6 +85,15 @@ def require_token(request: Request, authorization: str | None = Header(default=N
         raise HTTPException(401, "Owner session required")
 
 
+def require_device(authorization: str | None = Header(default=None)) -> DeviceIdentity:
+    if not AUTH_REQUIRED:
+        return DeviceIdentity("LOCAL_DEVELOPMENT", "Local development")
+    identity = authenticate_device(authorization, _owner_secret())
+    if not identity:
+        raise HTTPException(401, "Paired device token required")
+    return identity
+
+
 def _limit_public_add(request: Request, authorization: str | None) -> bool:
     """Return True for owner requests; rate-limit anonymous custom targets."""
     owner = not AUTH_REQUIRED or _is_owner(request, authorization)
@@ -80,6 +107,17 @@ def _limit_public_add(request: Request, authorization: str | None) -> bool:
     attempts.append(now)
     _public_add_attempts[address] = attempts
     return False
+
+
+def _limit_device_auth_start(request: Request) -> None:
+    address = request.headers.get("x-real-ip") or (request.client.host if request.client else "unknown")
+    now = time.monotonic()
+    attempts = [stamp for stamp in _device_auth_attempts.get(address, [])
+                if now - stamp < DEVICE_AUTH_START_WINDOW_SECONDS]
+    if len(attempts) >= max(1, DEVICE_AUTH_START_LIMIT):
+        raise HTTPException(429, "Слишком много запросов кода подключения. Повторите позже.")
+    attempts.append(now)
+    _device_auth_attempts[address] = attempts
 
 
 async def check_resource(resource_id: int):
@@ -102,13 +140,107 @@ async def run_scheduled(row) -> None:
             "http_ms":None,"http_status":None,"resolved_ip":None,"tls_days_left":None,"final_url":row["target"],
             "location":None,"message":str(exc),
         })
-    if not GLOBALPING_ENABLED:
-        return
     opened = next((notice for notice in notices if notice["event"] == "incident_opened"), None)
     if not opened:
         return
-    priority = DiagnosticPriority.NEW_DOWN if opened["kind"] == "DOWN" else DiagnosticPriority.DEGRADED
-    await request_external_diagnostic(row["id"], priority)
+    if GLOBALPING_ENABLED:
+        priority = DiagnosticPriority.NEW_DOWN if opened["kind"] == "DOWN" else DiagnosticPriority.DEGRADED
+        await request_external_diagnostic(row["id"], priority)
+    await refresh_external_intelligence(row["id"])
+
+
+def _store_evidence(resource_id: int | None, provider: str, scope_key: str, evidence, now: int) -> None:
+    with db() as conn:
+        conn.execute("""INSERT INTO external_evidence(
+          resource_id,provider,scope_key,status,classification,confidence,summary_json,raw_json,fetched_at,expires_at
+        ) VALUES(?,?,?,?,?,?,?,?,?,?)""", (
+            resource_id, provider, scope_key, evidence.status, evidence.classification, evidence.confidence,
+            json.dumps(evidence.summary, ensure_ascii=False, separators=(",", ":")),
+            "{}",
+            now, now + max(300, INTELLIGENCE_CACHE_SECONDS),
+        ))
+
+
+async def refresh_external_intelligence(resource_id: int, force: bool = False) -> dict:
+    with db() as conn:
+        resource = conn.execute("SELECT id,target FROM resources WHERE id=?", (resource_id,)).fetchone()
+    if not resource:
+        raise HTTPException(404, "Resource not found")
+    domain = (urlparse(resource["target"]).hostname or "").lower()
+    now = int(time.time())
+    result = {}
+    if OONI_ENABLED and domain:
+        with db() as conn:
+            cached = conn.execute("""SELECT status,classification,confidence,summary_json,fetched_at,expires_at
+              FROM external_evidence WHERE provider='ooni' AND scope_key=?
+              ORDER BY fetched_at DESC,id DESC LIMIT 1""", (domain,)).fetchone()
+        if cached and int(cached["expires_at"]) > now and not force:
+            result["ooni"] = {**dict(cached), "summary": json.loads(cached["summary_json"] or "{}"), "cached": True}
+        else:
+            try:
+                evidence = await _ooni.fetch(domain)
+                _store_evidence(resource_id, "ooni", domain, evidence, now)
+                result["ooni"] = {**evidence.summary, "status": evidence.status,
+                                  "classification": evidence.classification, "confidence": evidence.confidence}
+            except Exception as exc:
+                result["ooni"] = {"status": "ERROR", "classification": "UNKNOWN", "error": str(exc)[:300]}
+    if IODA_ENABLED:
+        scope_key = f"country:{IODA_COUNTRY}"
+        with db() as conn:
+            cached = conn.execute("""SELECT status,classification,confidence,summary_json,fetched_at,expires_at
+              FROM external_evidence WHERE provider='ioda' AND scope_key=?
+              ORDER BY fetched_at DESC,id DESC LIMIT 1""", (scope_key,)).fetchone()
+        if cached and int(cached["expires_at"]) > now and not force:
+            result["ioda"] = {**dict(cached), "summary": json.loads(cached["summary_json"] or "{}"), "cached": True}
+        else:
+            try:
+                evidence = await _ioda.fetch()
+                _store_evidence(None, "ioda", scope_key, evidence, now)
+                result["ioda"] = {**evidence.summary, "status": evidence.status,
+                                  "classification": evidence.classification, "confidence": evidence.confidence}
+            except Exception as exc:
+                result["ioda"] = {"status": "ERROR", "classification": "UNKNOWN", "error": str(exc)[:300]}
+    return result
+
+
+async def poll_external_diagnostics_once() -> int:
+    now = int(time.time())
+    with db() as conn:
+        jobs = conn.execute("""SELECT id,external_id,poll_attempts FROM diagnostic_jobs
+          WHERE provider='globalping' AND external_id IS NOT NULL
+            AND status IN ('queued','in-progress') AND COALESCE(next_poll_at,0)<=?
+          ORDER BY priority,created_at LIMIT 20""", (now,)).fetchall()
+    completed = 0
+    for job in jobs:
+        attempts = int(job["poll_attempts"] or 0) + 1
+        try:
+            result = await _globalping.get_result(job["external_id"])
+            terminal = result.status in {"finished", "failed", "error"}
+            with db() as conn:
+                conn.execute("""UPDATE diagnostic_jobs SET status=?,classification=?,confidence=?,
+                  result_summary_json=?,raw_json='{}',poll_attempts=?,next_poll_at=?,completed_at=?,updated_at=?,error=NULL
+                  WHERE id=?""", (
+                    result.status, result.classification, result.confidence,
+                    json.dumps(result.summary, ensure_ascii=False, separators=(",", ":")),
+                    attempts, None if terminal else now + max(3, DIAGNOSTIC_POLL_SECONDS),
+                    now if terminal else None, now, job["id"],
+                ))
+            completed += int(terminal)
+        except Exception as exc:
+            terminal = attempts >= max(1, DIAGNOSTIC_MAX_POLL_ATTEMPTS)
+            with db() as conn:
+                conn.execute("""UPDATE diagnostic_jobs SET status=?,poll_attempts=?,next_poll_at=?,updated_at=?,error=?
+                  WHERE id=?""", (
+                    "failed" if terminal else "in-progress", attempts,
+                    None if terminal else now + max(3, DIAGNOSTIC_POLL_SECONDS), now, str(exc)[:500], job["id"],
+                ))
+    return completed
+
+
+async def diagnostic_poller() -> None:
+    while True:
+        await poll_external_diagnostics_once()
+        await asyncio.sleep(max(3, DIAGNOSTIC_POLL_SECONDS))
 
 
 async def scheduler() -> None:
@@ -131,13 +263,15 @@ async def lifespan(_app: FastAPI):
     init_db()
     seed_defaults()
     task = asyncio.create_task(scheduler()) if SCHEDULER_ENABLED else None
+    diagnostic_task = asyncio.create_task(diagnostic_poller()) if SCHEDULER_ENABLED and GLOBALPING_ENABLED else None
     yield
-    if task:
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+    for active_task in (task, diagnostic_task):
+        if active_task:
+            active_task.cancel()
+            try:
+                await active_task
+            except asyncio.CancelledError:
+                pass
 
 
 app = FastAPI(title="NetWeather API", version=APP_VERSION, lifespan=lifespan)
@@ -160,7 +294,7 @@ def system_info():
       "webhook_configured":bool(ALERT_WEBHOOK_URL),"private_targets_allowed":ALLOW_PRIVATE_TARGETS,
       "default_interval_seconds":DEFAULT_INTERVAL,"scheduler_enabled":SCHEDULER_ENABLED,
       "auth_required":AUTH_REQUIRED,"globalping_enabled":GLOBALPING_ENABLED,
-      "diagnostic_quota":_quota.status()}
+      "ooni_enabled":OONI_ENABLED,"ioda_enabled":IODA_ENABLED,"diagnostic_quota":_quota.status()}
 
 
 @app.get("/api/auth/verify", dependencies=[Depends(require_token)])
@@ -202,6 +336,50 @@ def session_login(payload: OwnerLogin, response: Response):
 def session_logout(response: Response):
     response.delete_cookie(SESSION_COOKIE, path="/")
     return {"ok":True}
+
+
+@app.post("/api/v1/device-auth/start")
+def device_auth_start(payload: DeviceAuthorizationStart, request: Request):
+    if not _owner_secret():
+        raise HTTPException(503, "Device authorization is not configured")
+    _limit_device_auth_start(request)
+    return start_authorization(
+        device_id=payload.device_id, device_name=payload.device_name,
+        app_version=payload.app_version, server_secret=_owner_secret(),
+        ttl_seconds=DEVICE_CODE_TTL_SECONDS, poll_interval_seconds=DEVICE_POLL_INTERVAL_SECONDS,
+    )
+
+
+@app.post("/api/v1/device-auth/poll")
+def device_auth_poll(payload: DeviceAuthorizationPoll):
+    if not _owner_secret():
+        raise HTTPException(503, "Device authorization is not configured")
+    result = poll_authorization(
+        payload.session_id, payload.poll_secret, _owner_secret(), DEVICE_TOKEN_MAX_AGE_SECONDS,
+    )
+    if result["status"] == "invalid":
+        raise HTTPException(404, "Authorization session not found")
+    return result
+
+
+@app.post("/api/device-auth/approve", dependencies=[Depends(require_token)])
+def device_auth_approve(payload: DeviceAuthorizationApprove):
+    approved = approve_authorization(payload.user_code, _owner_secret())
+    if not approved:
+        raise HTTPException(404, "Код не найден или истёк")
+    return {"ok": True, **approved}
+
+
+@app.get("/api/devices", dependencies=[Depends(require_token)])
+def devices_list():
+    return list_devices()
+
+
+@app.delete("/api/devices/{device_id}", dependencies=[Depends(require_token)])
+def device_revoke(device_id: str):
+    if not revoke_device(device_id):
+        raise HTTPException(404, "Device not found")
+    return {"ok": True}
 
 
 @app.get("/api/dashboard")
@@ -482,56 +660,79 @@ async def manual_check(resource_id:int):
 async def trace_resource(resource_id:int): return await traceroute_to_resource(resource_id)
 
 
-@app.get("/api/v1/client-probe/resources", dependencies=[Depends(require_token)])
-def client_probe_resources():
+@app.get("/api/v1/client-probe/resources")
+def client_probe_resources(device: DeviceIdentity = Depends(require_device)):
     with db() as conn:
         rows = conn.execute("""SELECT id,name,target,group_name,expected_status_min,expected_status_max
           FROM resources WHERE enabled=1 ORDER BY group_name,name""").fetchall()
     return [dict(row) for row in rows]
 
 
-@app.post("/api/v1/client-probe/result", dependencies=[Depends(require_token)])
-def client_probe_result(payload: ClientProbeResult, probe: ClientProbeRegistration):
-    register_probe(probe.probe_key, probe.name, "USER", probe.app_version, "dns,tcp,tls,http")
+@app.post("/api/v1/client-probe/result")
+def client_probe_result(payload: ClientProbeResult, probe: ClientProbeRegistration,
+                        device: DeviceIdentity = Depends(require_device)):
+    probe_key = probe.probe_key if device.device_id == "LOCAL_DEVELOPMENT" else device.device_id
+    probe_name = probe.name if device.device_id == "LOCAL_DEVELOPMENT" else device.name
+    register_probe(probe_key, probe_name, "USER", probe.app_version, "dns,tcp,tls,http")
     with db() as conn:
         exists = conn.execute("SELECT 1 FROM resources WHERE id=?", (payload.resource_id,)).fetchone()
     if not exists:
         raise HTTPException(404, "Resource not found")
     data = payload.model_dump()
     data.update({"tls_days_left":None,"final_url":None,"location":None})
-    write_check(payload.resource_id, data, probe_key=probe.probe_key, probe_scope="USER")
+    write_check(payload.resource_id, data, probe_key=probe_key, probe_scope="USER")
     return {"ok":True}
 
 
 async def request_external_diagnostic(resource_id: int, priority: DiagnosticPriority):
-    with db() as conn:
-        resource = conn.execute("SELECT id,target FROM resources WHERE id=?", (resource_id,)).fetchone()
-    if not resource:
-        raise HTTPException(404, "Resource not found")
-    now = int(time.time())
-    try:
-        result = await _diagnostics.request(resource_id, resource["target"], priority)
-        status, external_id, error = result.status, result.external_id, None
-    except Exception as exc:
-        status, external_id, error = "rejected", None, str(exc)[:500]
-    with db() as conn:
-        job_id = conn.execute("""INSERT INTO diagnostic_jobs(
-          resource_id,provider,external_id,priority,status,created_at,updated_at,error
-        ) VALUES(?,?,?,?,?,?,?,?)""", (resource_id,"globalping",external_id,int(priority),status,now,now,error)).lastrowid
-    return {"job_id":job_id,"provider":"globalping","external_id":external_id,"status":status,"error":error}
+    async with _diagnostic_request_lock:
+        with db() as conn:
+            resource = conn.execute("SELECT id,target FROM resources WHERE id=?", (resource_id,)).fetchone()
+            if not resource:
+                raise HTTPException(404, "Resource not found")
+            now = int(time.time())
+            recent = conn.execute("""SELECT id,external_id,status,error FROM diagnostic_jobs
+              WHERE resource_id=? AND provider='globalping' AND (
+                status IN ('queued','in-progress','submitting') OR created_at>?
+              ) ORDER BY created_at DESC,id DESC LIMIT 1""", (
+                resource_id, now - _diagnostics.cooldown_seconds,
+            )).fetchone()
+        if recent:
+            return {"job_id":recent["id"],"provider":"globalping","external_id":recent["external_id"],
+                    "status":recent["status"],"error":recent["error"],"deduplicated":True}
+        try:
+            result = await _diagnostics.request(resource_id, resource["target"], priority)
+            status, external_id, error = result.status, result.external_id, None
+        except Exception as exc:
+            status, external_id, error = "rejected", None, str(exc)[:500]
+        with db() as conn:
+            job_id = conn.execute("""INSERT INTO diagnostic_jobs(
+              resource_id,provider,external_id,priority,status,created_at,updated_at,error
+            ) VALUES(?,?,?,?,?,?,?,?)""", (resource_id,"globalping",external_id,int(priority),status,now,now,error)).lastrowid
+            if external_id:
+                conn.execute("UPDATE diagnostic_jobs SET next_poll_at=? WHERE id=?", (now + max(3, DIAGNOSTIC_POLL_SECONDS), job_id))
+        return {"job_id":job_id,"provider":"globalping","external_id":external_id,"status":status,"error":error}
 
 
 @app.get("/api/diagnostics/status")
 def diagnostic_status():
     return {"provider":"globalping","enabled":GLOBALPING_ENABLED,"quota":_quota.status(),
-            "reserve_percent":DIAGNOSTIC_RESERVE_PERCENT,"cooldown_seconds":DIAGNOSTIC_COOLDOWN_SECONDS}
+            "reserve_percent":DIAGNOSTIC_RESERVE_PERCENT,"cooldown_seconds":DIAGNOSTIC_COOLDOWN_SECONDS,
+            "poll_seconds":DIAGNOSTIC_POLL_SECONDS,"ooni_enabled":OONI_ENABLED,"ioda_enabled":IODA_ENABLED}
 
 
 @app.post("/api/resources/{resource_id}/diagnose", dependencies=[Depends(require_token)])
 async def diagnose_resource(resource_id:int):
     if not GLOBALPING_ENABLED:
         raise HTTPException(503, "External diagnostics provider is disabled")
-    return await request_external_diagnostic(resource_id, DiagnosticPriority.MANUAL)
+    diagnostic = await request_external_diagnostic(resource_id, DiagnosticPriority.MANUAL)
+    diagnostic["intelligence"] = await refresh_external_intelligence(resource_id, force=True)
+    return diagnostic
+
+
+@app.post("/api/resources/{resource_id}/intelligence", dependencies=[Depends(require_token)])
+async def refresh_resource_intelligence(resource_id: int):
+    return await refresh_external_intelligence(resource_id, force=True)
 
 
 @app.get("/api/resources/{resource_id}/diagnostics")

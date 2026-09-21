@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 
 from .providers import MeasurementProvider, ProviderSubmission
+from .database import db
 
 
 class DiagnosticPriority(IntEnum):
@@ -54,6 +55,47 @@ class QuotaManager:
             self._uses.append((now, cost, priority))
         reason = "allowed" if allowed else ("reserve_protected" if state["used"] + cost <= state["limit"] else "quota_exhausted")
         return QuotaDecision(allowed, reason, state["used"], state["limit"], state["reserve"])
+
+
+class PersistentQuotaManager(QuotaManager):
+    """SQLite-backed quota accounting that survives process and container restarts."""
+
+    def __init__(self, provider: str, hourly_limit: int = 250, reserve_percent: int = 30) -> None:
+        super().__init__(hourly_limit, reserve_percent)
+        self.provider = provider
+
+    def status(self, now: float | None = None) -> dict[str, int]:
+        now_i = int(time.time() if now is None else now)
+        with db() as conn:
+            conn.execute("DELETE FROM provider_quota_uses WHERE used_at<=?", (now_i - 3600,))
+            used = int(conn.execute(
+                "SELECT COALESCE(SUM(cost),0) FROM provider_quota_uses WHERE provider=? AND used_at>?",
+                (self.provider, now_i - 3600),
+            ).fetchone()[0])
+        reserve = round(self.hourly_limit * self.reserve_percent / 100)
+        return {"used": used, "limit": self.hourly_limit, "reserve": reserve,
+                "remaining": max(0, self.hourly_limit - used)}
+
+    def consume(self, priority: DiagnosticPriority, cost: int, now: float | None = None) -> QuotaDecision:
+        now_i = int(time.time() if now is None else now)
+        cost = max(1, cost)
+        with db() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute("DELETE FROM provider_quota_uses WHERE used_at<=?", (now_i - 3600,))
+            used = int(conn.execute(
+                "SELECT COALESCE(SUM(cost),0) FROM provider_quota_uses WHERE provider=? AND used_at>?",
+                (self.provider, now_i - 3600),
+            ).fetchone()[0])
+            reserve = round(self.hourly_limit * self.reserve_percent / 100)
+            ceiling = self.hourly_limit if priority <= DiagnosticPriority.NEW_DOWN else self.hourly_limit - reserve
+            allowed = used + cost <= ceiling
+            if allowed:
+                conn.execute(
+                    "INSERT INTO provider_quota_uses(provider,used_at,cost,priority) VALUES(?,?,?,?)",
+                    (self.provider, now_i, cost, int(priority)),
+                )
+        reason = "allowed" if allowed else ("reserve_protected" if used + cost <= self.hourly_limit else "quota_exhausted")
+        return QuotaDecision(allowed, reason, used, self.hourly_limit, reserve)
 
 
 class DiagnosticCoordinator:

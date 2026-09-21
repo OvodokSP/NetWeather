@@ -29,6 +29,7 @@ fun AppScreen(vm: MainViewModel = hiltViewModel()) {
     val loading by vm.loading.collectAsState()
     val error by vm.error.collectAsState()
     val resources by vm.resources.collectAsState()
+    val pairing by vm.pairing.collectAsState()
     val history by vm.historyDay.collectAsState()
     var tab by remember { mutableIntStateOf(0) }
     var showAdd by remember { mutableStateOf(false) }
@@ -46,7 +47,7 @@ fun AppScreen(vm: MainViewModel = hiltViewModel()) {
             when(tab) {
                 0 -> MainTab(global, summary, resources, loading, vm)
                 1 -> HistoryTab(history)
-                2 -> SettingsTab(vm)
+                2 -> SettingsTab(vm, pairing)
             }
         }
     }
@@ -107,12 +108,31 @@ fun AppScreen(vm: MainViewModel = hiltViewModel()) {
 }
 @Composable fun HistoryChart(history: List<NetworkSummary>) { ElevatedCard(Modifier.fillMaxWidth().height(220.dp)) { Canvas(Modifier.fillMaxSize().padding(16.dp)) { if (history.size < 2) return@Canvas; val maxX = history.size - 1; history.zipWithNext().forEachIndexed { i, pair -> val x1 = size.width * i / maxX; val x2 = size.width * (i+1) / maxX; val y1 = size.height - size.height * pair.first.availabilityIndex / 100f; val y2 = size.height - size.height * pair.second.availabilityIndex / 100f; drawLine(Color(0xFF1565C0), androidx.compose.ui.geometry.Offset(x1,y1), androidx.compose.ui.geometry.Offset(x2,y2), 5f) } } } }
 
-@Composable fun SettingsTab(vm: MainViewModel) {
+@Composable fun SettingsTab(vm: MainViewModel, pairing: DevicePairingState) {
     val settings by vm.settings.collectAsState()
     val exportJson by vm.exportJson.collectAsState()
     var importText by remember { mutableStateOf("") }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("Настройки", style = MaterialTheme.typography.titleLarge) }
+        item {
+            ElevatedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Связь с сайтом", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                when (pairing.status) {
+                    "authorized" -> Text("Устройство подключено. Локальные результаты отправляются в ваш контур NetWeather.", color = Color(0xFF2E7D32))
+                    "pending" -> {
+                        Text("Введите этот одноразовый код на netweather.online в разделе «Устройства»:")
+                        SelectionContainer { Text(pairing.userCode ?: "—", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold) }
+                        Text("Код автоматически обновляется при новой попытке и действует ограниченное время.", style = MaterialTheme.typography.bodySmall)
+                    }
+                    "expired" -> Text("Срок действия кода истёк. Получите новый код.")
+                    else -> Text("Подключите приложение, чтобы сайт показывал состояние вашей мобильной или Wi‑Fi сети.")
+                }
+                Button(onClick = vm::startPairing, enabled = pairing.status != "pending") {
+                    Text(if (pairing.status == "authorized") "Переподключить устройство" else "Получить код подключения")
+                }
+            } }
+        }
+        item { Divider() }
         item { Text("Интервал проверки") }
         item { LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(listOf(30 to "30 секунд", 60 to "1 минута", 300 to "5 минут", 900 to "15 минут")) { (sec, label) -> FilterChip(selected = settings.checkIntervalSeconds == sec, onClick = { vm.setInterval(sec) }, label = { Text(label) }) } } }
         item { Text("Короткие интервалы используют цепочку OneTimeWorkRequest и могут сильнее расходовать батарею.") }

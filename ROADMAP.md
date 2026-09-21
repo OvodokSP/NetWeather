@@ -11,18 +11,20 @@
 - [x] diagnostic deduplication/cooldown foundation
 - [x] explicit Global State / Your Network Web UX
 - [x] Android pulls the shared resource catalog and global state
-- [ ] authenticated per-user upload of Android `USER` measurements
-- [ ] process-safe persisted quota accounting and result polling
-- [ ] event-triggered OONI/IODA/status-page cache
+- [x] authenticated per-device upload of Android `USER` measurements via expiring one-time code
+- [x] process-safe persisted quota accounting and Globalping result polling/classification
+- [x] event-triggered cached OONI/IODA evidence adapters
+- [ ] live-provider response smoke for Globalping, OONI and IODA from the deployed service
 - [ ] physical-device Android and responsive Web matrix
 
 ## 0.5 — Evidence and accounts
 
-- [ ] user accounts and device enrollment
+- [x] owner-approved device enrollment and revocation
 - [ ] `StatusProvider` abstraction
-- [ ] OONI/IODA cached evidence
-- [ ] multi-region Globalping result normalization
-- [ ] explainable evidence timeline and confidence
+- [x] OONI/IODA cached evidence foundation
+- [x] multi-region Globalping HTTP result normalization
+- [x] explainable evidence and confidence in the shared resource model
+- [ ] long-term evidence timeline and official-status providers
 - [ ] free/paid capability registry; basic resource addition remains public
 
 ## 1.0 — Stable service

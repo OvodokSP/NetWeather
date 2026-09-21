@@ -51,9 +51,9 @@ class SecurityContractTest(unittest.TestCase):
     def test_android_preview_is_installable_traceable_and_clearly_labeled(self):
         required = (
             "testDebugUnitTest assembleDebug",
-            "NetWeather-0.4.0-alpha-debug.apk",
+            "NetWeather-0.4.1-alpha-debug.apk",
             "sha256sum",
-            "android-v0.4.0-alpha-preview.1",
+            "android-v0.4.1-alpha-preview.1",
             "docs/ANDROID_PREVIEW.md",
             "--prerelease",
         )
@@ -61,7 +61,7 @@ class SecurityContractTest(unittest.TestCase):
             self.assertIn(token, self.release_workflow)
         self.assertNotIn("assembleRelease", self.release_workflow)
         self.assertIn(
-            "releases/tag/android-v0.4.0-alpha-preview.1",
+            "releases/tag/android-v0.4.1-alpha-preview.1",
             self.readme,
         )
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 import time
 from contextlib import contextmanager
@@ -82,6 +83,34 @@ def init_db() -> None:
           error TEXT, FOREIGN KEY(resource_id) REFERENCES resources(id) ON DELETE CASCADE
         );
         CREATE INDEX IF NOT EXISTS idx_diagnostic_jobs_resource ON diagnostic_jobs(resource_id,created_at DESC);
+        CREATE TABLE IF NOT EXISTS provider_quota_uses (
+          id INTEGER PRIMARY KEY AUTOINCREMENT, provider TEXT NOT NULL, used_at INTEGER NOT NULL,
+          cost INTEGER NOT NULL, priority INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_provider_quota_time ON provider_quota_uses(provider,used_at);
+        CREATE TABLE IF NOT EXISTS external_evidence (
+          id INTEGER PRIMARY KEY AUTOINCREMENT, resource_id INTEGER,
+          provider TEXT NOT NULL, scope_key TEXT NOT NULL, status TEXT NOT NULL,
+          classification TEXT, confidence TEXT, summary_json TEXT NOT NULL DEFAULT '{}',
+          raw_json TEXT NOT NULL DEFAULT '{}', fetched_at INTEGER NOT NULL, expires_at INTEGER NOT NULL,
+          FOREIGN KEY(resource_id) REFERENCES resources(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_external_evidence_lookup
+          ON external_evidence(provider,scope_key,expires_at DESC);
+        CREATE TABLE IF NOT EXISTS devices (
+          device_id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT,
+          app_version TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'PENDING',
+          created_at INTEGER NOT NULL, approved_at INTEGER, last_seen_at INTEGER NOT NULL DEFAULT 0,
+          revoked_at INTEGER, updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS device_authorizations (
+          session_id TEXT PRIMARY KEY, device_id TEXT NOT NULL, user_code_hash TEXT NOT NULL,
+          poll_secret_hash TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'PENDING',
+          created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, approved_at INTEGER,
+          delivered_at INTEGER, FOREIGN KEY(device_id) REFERENCES devices(device_id) ON DELETE CASCADE
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_device_auth_code
+          ON device_authorizations(user_code_hash) WHERE status='PENDING';
         """)
         for table, name, ddl in [
             ("resources","expected_status_min","INTEGER NOT NULL DEFAULT 200"),
@@ -100,6 +129,14 @@ def init_db() -> None:
             ("checks","probe_scope","TEXT NOT NULL DEFAULT 'GLOBAL'"),
             ("probes","agent_version","TEXT NOT NULL DEFAULT ''"),
             ("probes","capabilities","TEXT NOT NULL DEFAULT ''"),
+            ("diagnostic_jobs","classification","TEXT"),
+            ("diagnostic_jobs","confidence","TEXT"),
+            ("diagnostic_jobs","result_summary_json","TEXT NOT NULL DEFAULT '{}'"),
+            ("diagnostic_jobs","raw_json","TEXT NOT NULL DEFAULT '{}'"),
+            ("diagnostic_jobs","completed_at","INTEGER"),
+            ("diagnostic_jobs","poll_attempts","INTEGER NOT NULL DEFAULT 0"),
+            ("diagnostic_jobs","next_poll_at","INTEGER"),
+            ("devices","token_expires_at","INTEGER"),
         ]:
             _ensure_column(conn, table, name, ddl)
         conn.execute("""CREATE UNIQUE INDEX IF NOT EXISTS idx_resources_catalog_key
@@ -285,11 +322,29 @@ def resource_matrix() -> list[dict[str, Any]]:
                 p = probes.get(user_d.get("probe_key"))
                 user_fresh = bool(p and p.get("last_seen_at") and now - int(p["last_seen_at"]) <= CLIENT_PROBE_STALE_SECONDS)
             current_user = user_d if user_fresh else None
+            diagnostic = conn.execute("""SELECT classification,confidence,result_summary_json,completed_at
+              FROM diagnostic_jobs WHERE resource_id=? AND status='finished'
+              ORDER BY completed_at DESC,id DESC LIMIT 1""", (r["id"],)).fetchone()
+            evidence_rows = conn.execute("""SELECT provider,status,classification,confidence,summary_json,fetched_at,expires_at
+              FROM external_evidence WHERE (resource_id=? OR resource_id IS NULL) AND expires_at>?
+              ORDER BY fetched_at DESC,id DESC""", (r["id"], now)).fetchall()
+            evidence_by_provider = {}
+            for evidence in evidence_rows:
+                if evidence["provider"] not in evidence_by_provider:
+                    item = dict(evidence)
+                    item["summary"] = json.loads(item.pop("summary_json") or "{}")
+                    evidence_by_provider[evidence["provider"]] = item
+            diagnostic_summary = json.loads(diagnostic["result_summary_json"] or "{}") if diagnostic else {}
+            external_classification = diagnostic["classification"] if diagnostic else None
             assessment = assess_incident(
                 ext_d.get("status") if ext_d else None,
                 current_user.get("status") if current_user else None,
                 global_slow=bool(ext_d and ext_d.get("response_time_ms") is not None and ext_d["response_time_ms"] >= r["slow_threshold_ms"]),
                 user_slow=bool(current_user and current_user.get("response_time_ms") is not None and current_user["response_time_ms"] >= r["slow_threshold_ms"]),
+                external_failures=int(diagnostic_summary.get("failed") or 0),
+                external_classification=external_classification,
+                ooni_signal=evidence_by_provider.get("ooni", {}).get("classification") == "POSSIBLE_FILTERING",
+                ioda_signal=evidence_by_provider.get("ioda", {}).get("classification") == "REGIONAL_OUTAGE",
             )
             legacy = {
                 "status": ext_d.get("status") if ext_d else None,
@@ -314,6 +369,13 @@ def resource_matrix() -> list[dict[str, Any]]:
                 "diagnosis": assessment.classification.value,
                 "diagnosis_text": assessment.explanation,
                 "confidence": assessment.confidence,
+                "external_diagnostic": ({
+                    "classification": diagnostic["classification"],
+                    "confidence": diagnostic["confidence"],
+                    "summary": diagnostic_summary,
+                    "completed_at": diagnostic["completed_at"],
+                } if diagnostic else None),
+                "evidence": list(evidence_by_provider.values()),
             })
     return result
 

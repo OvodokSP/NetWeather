@@ -18,6 +18,8 @@ class MainViewModel @Inject constructor(private val repo: NetWeatherRepository) 
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
     private val _global = MutableStateFlow(GlobalState())
     val global: StateFlow<GlobalState> = _global.asStateFlow()
+    private val _pairing = MutableStateFlow(repo.devicePairing())
+    val pairing: StateFlow<DevicePairingState> = _pairing.asStateFlow()
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
     val resources: StateFlow<List<ResourceWithResult>> = combine(repo.observeResources(), repo.observeLatestResults()) { res, results ->
@@ -29,7 +31,10 @@ class MainViewModel @Inject constructor(private val repo: NetWeatherRepository) 
     val settings = _settings.asStateFlow()
     val historyDay = repo.observeHistory(24L * 60L * 60L * 1000L).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    init { viewModelScope.launch { refreshNow() } }
+    init {
+        viewModelScope.launch { refreshNow() }
+        if (_pairing.value.status == "pending") pollPairing()
+    }
 
     fun refreshNow() = viewModelScope.launch {
         _loading.value = true; _error.value = null
@@ -55,6 +60,31 @@ class MainViewModel @Inject constructor(private val repo: NetWeatherRepository) 
     fun exportResources() = viewModelScope.launch { _exportJson.value = repo.exportResourcesJson() }
     fun importResources(json: String) = viewModelScope.launch { try { repo.importResourcesJson(json); refreshNow() } catch (e: Exception) { _error.value = e.message ?: "Ошибка импорта" } }
     fun clearError() { _error.value = null }
+    fun startPairing() = viewModelScope.launch {
+        _error.value = null
+        try {
+            _pairing.value = repo.startDevicePairing()
+            pollPairing()
+        } catch (e: Exception) { _error.value = e.message ?: "Не удалось начать привязку" }
+    }
+    private fun pollPairing() = viewModelScope.launch {
+        while (_pairing.value.status == "pending" && _pairing.value.expiresAtSeconds * 1000 > System.currentTimeMillis()) {
+            kotlinx.coroutines.delay(5000)
+            try {
+                _pairing.value = repo.pollDevicePairing(_pairing.value)
+                if (_pairing.value.status == "authorized") {
+                    refreshNow()
+                    break
+                }
+            } catch (e: Exception) {
+                _error.value = e.message ?: "Не удалось проверить код"
+                break
+            }
+        }
+        if (_pairing.value.status == "pending" && _pairing.value.expiresAtSeconds * 1000 <= System.currentTimeMillis()) {
+            _pairing.value = _pairing.value.copy(status = "expired")
+        }
+    }
 }
 
 object AppContextHolder { lateinit var context: android.content.Context }

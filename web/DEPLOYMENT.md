@@ -43,7 +43,7 @@ Deployment contract:
 
 The checker verifies nginx syntax, the VLESS/Xray runtime and loopback backend, TLS identity for the VPN public IP, independent TLS identity for the NetWeather domain, the AWG container/interface/backend UDP listener, and (when configured) the UDP public-port redirect used by HomeRoute.
 
-## 0.4.0 production verification
+## 0.4.1 production verification
 
 This marker intentionally triggers the guarded production pipeline after:
 - interaction-contract CI passed;
@@ -52,6 +52,6 @@ This marker intentionally triggers the guarded production pipeline after:
 - deploy helper private-state temporary paths were installed on the VPS.
 - runtime identity and Docker health were verified against the exact commit image.
 
-Expected public health after deployment: `0.4.0-web`.
+Expected public health after deployment: `0.4.1-web`.
 
 The release has no router-side installation step. Optional external diagnostics are enabled only with `NETWEATHER_GLOBALPING_ENABLED=true`; without it `/api/diagnostics/status` must report `enabled: false` and the baseline service remains fully operational.

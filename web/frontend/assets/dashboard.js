@@ -8,7 +8,7 @@ var S={
   faultId:null,view:"overview",poll:null,streamMeta:null,authRequired:false,
   owner:true,mapScale:1,metaCache:{},catalog:null,catalogSelected:{},customCatalogMatch:null,customAutoCatalogKey:null,
   dashboardPrefs:null,searchIndex:-1,searchAddTarget:null,pendingSearchTarget:null,coreOnline:false,lastSuccessAt:null,
-  overviewResourceMode:"ALL"
+  overviewResourceMode:"ALL",devices:[]
 };
 
 var DASHBOARD_PREFS_KEY="netweather_dashboard_v1";
@@ -258,6 +258,7 @@ function stText(s){return({OK:"Доступен",HTTP_REJECTED:"Доступен
 function stClass(s){return s==="OK"||s==="HTTP_REJECTED"?"ok":s==="TIMEOUT"?"warn":s?"bad":"neutral"}
 function isReachable(s){return s==="OK"||s==="HTTP_REJECTED"}
 function diagText(d){return({OK:"Работает",SERVICE_DOWN:"Сервис недоступен",DEGRADED:"Замедление",LOCAL_NETWORK:"Проблема вашей сети",ISP_OUTAGE:"Сбой провайдера",DNS_FAILURE:"Ошибка DNS",ROUTING_FAILURE:"Ошибка маршрута",REGIONAL_OUTAGE:"Региональный сбой",POSSIBLE_FILTERING:"Возможное ограничение",UNKNOWN:"Недостаточно данных"})[d]||"Нет данных"}
+function evidenceText(d){return({NO_FILTERING_SIGNAL:"Сигналов фильтрации нет",NO_OUTAGE_SIGNAL:"Сигналов массового сбоя нет"})[d]||diagText(d)}
 function diagClass(d){return d==="OK"?"ok":["SERVICE_DOWN","DNS_FAILURE","REGIONAL_OUTAGE","POSSIBLE_FILTERING"].indexOf(d)>=0?"bad":["DEGRADED","LOCAL_NETWORK","ISP_OUTAGE","ROUTING_FAILURE"].indexOf(d)>=0?"warn":"neutral"}
 function groupTitle(v){var found=S.groups.find(function(g){return g.id===v});return found?found.title:({"RUSSIAN":"Российские","INTERNATIONAL":"Международные","MESSENGERS":"Мессенджеры и соцсети","INFRASTRUCTURE":"Инфраструктура","CUSTOM":"Пользовательские"})[v]||v}
 function resourceById(id){return(S.dashboard&&S.dashboard.resources||[]).find(function(r){return r.id===Number(id)})}
@@ -924,7 +925,8 @@ function renderDiagnostics(){
 }
 function showDiagnostic(r){
   S.diagId=r.id;var ext=r.global||{},local=r.your_network||{},x=r.your_network||r.global||{};
-  q("#diagSummary").innerHTML='<div class="diag-summary-card"><div><span>Вывод</span><b>'+diagText(r.diagnosis)+'</b></div><div><span>Глобально</span><b>'+stText(ext.status)+' · '+num(ext.response_time_ms," мс")+'</b></div><div><span>Ваша сеть</span><b>'+(local.status?stText(local.status)+' · '+num(local.response_time_ms," мс"):"Недоступно без приложения")+'</b></div><div><span>IP</span><b>'+esc(x.resolved_ip||"—")+'</b></div><div><span>HTTP</span><b>'+(x.http_status||"—")+'</b></div></div>';
+  var gp=r.external_diagnostic||{},evidence=r.evidence||[],evidenceSummary=evidence.map(function(e){return String(e.provider||"").toUpperCase()+": "+evidenceText(e.classification)}).join(" · ");
+  q("#diagSummary").innerHTML='<div class="diag-summary-card"><div><span>Вывод</span><b>'+diagText(r.diagnosis)+'</b></div><div><span>Глобально</span><b>'+stText(ext.status)+' · '+num(ext.response_time_ms," мс")+'</b></div><div><span>Ваша сеть</span><b>'+(local.status?stText(local.status)+' · '+num(local.response_time_ms," мс"):"Недоступно без приложения")+'</b></div><div><span>Globalping</span><b>'+(gp.classification?diagText(gp.classification)+" · "+esc(gp.confidence||""):"Нет результата")+'</b></div><div><span>OONI / IODA</span><b>'+esc(evidenceSummary||"Нет свежих сигналов")+'</b></div><div><span>IP</span><b>'+esc(x.resolved_ip||"—")+'</b></div><div><span>HTTP</span><b>'+(x.http_status||"—")+'</b></div></div>';
   setStage("Dns",x.dns_ms,x.status!=="DNS_ERROR");setStage("Tcp",x.tcp_ms,x.tcp_ms!=null);setStage("Tls",x.tls_ms,r.target.indexOf("https://")!==0||x.tls_ms!=null);setStage("Http",x.http_ms,isReachable(x.status))
 }
 function setStage(n,v,good){var e=q("#stage"+n);e.querySelector("b").textContent=v==null?"—":Math.round(v)+" мс";e.className="diag-step "+(v==null?"":good?"good":"bad")}
@@ -956,7 +958,28 @@ function renderSettings(){
   var vals=[["Версия",S.system.version],["Uptime",duration(S.system.uptime_seconds)],["Ресурсы",S.system.resources],["Проверки",S.system.checks],["Инциденты",S.system.active_incidents],["Traceroute",S.system.traceroute_available?"готов":"нет"],["База",S.system.database],["Scheduler",S.system.scheduler_enabled?"включён":"выключен"]];
   q("#systemInfo").innerHTML=vals.map(function(v){return '<div class="system-kv"><span>'+esc(v[0])+'</span><b>'+esc(v[1])+'</b></div>'}).join("");
   q("#probeSettings").innerHTML=(S.dashboard.probes||[]).map(function(p){return '<div class="probe-setting"><span>'+esc(p.scope)+'</span><b>'+esc(p.name)+'</b><span>'+(p.online?"онлайн":"нет связи")+' · '+ago(p.last_seen_at)+'</span></div>'}).join("")||empty("Нет probes","");
+  renderDevices();
+  var code=q("#deviceApprovalCode"),submit=q('#deviceApprovalForm [type="submit"]');
+  if(code)code.disabled=S.authRequired&&!S.owner;if(submit)submit.disabled=S.authRequired&&!S.owner;
+  if(S.owner||!S.authRequired)loadDevices();
   renderNotifications()
+}
+
+function renderDevices(){
+  var el=q("#deviceSettings");if(!el)return;
+  if(S.authRequired&&!S.owner){el.innerHTML=empty("Войдите как владелец","Только владелец может подтверждать и отзывать устройства.");return}
+  el.innerHTML=S.devices.length?S.devices.map(function(d){return '<div class="probe-setting"><span>'+esc(d.status)+'</span><b>'+esc(d.name)+'</b><span>'+esc(d.app_version||"версия не указана")+' · '+(d.last_seen_at?ago(d.last_seen_at):"ещё не подключалось")+'</span>'+(d.status!=="REVOKED"?'<button class="btn secondary" type="button" data-revoke-device="'+esc(d.device_id)+'">Отозвать</button>':"")+'</div>'}).join(""):empty("Нет подключённых устройств","Получите код в Android-приложении.");
+  qa("[data-revoke-device]",el).forEach(function(button){button.onclick=function(){revokeDevice(button.dataset.revokeDevice,button)}})
+}
+async function loadDevices(){
+  try{S.devices=await api("/api/devices",{},true);renderDevices()}catch(_e){}
+}
+async function approveDevice(e){
+  e.preventDefault();var input=q("#deviceApprovalCode"),button=e.submitter||q('#deviceApprovalForm [type="submit"]');
+  try{await withBusy(button,"Подключаем…",async function(){var result=await api("/api/device-auth/approve",{method:"POST",body:JSON.stringify({user_code:input.value})},true);input.value="";await loadDevices();toast("Устройство «"+result.device_name+"» подтверждено")})}catch(err){toast(err.message);input.focus()}
+}
+async function revokeDevice(id,button){
+  try{await withBusy(button,"Отзываем…",async function(){await api("/api/devices/"+encodeURIComponent(id),{method:"DELETE"},true);await loadDevices();toast("Доступ устройства отозван")})}catch(err){toast(err.message)}
 }
 
 async function manualCheck(id,button){
@@ -1182,6 +1205,7 @@ function setup(){
   q("#customizeOverview").onclick=openDashboardPreferences;
   q("#dashboardPreferencesForm").onsubmit=submitDashboardPreferences;
   q("#ownerLoginForm").onsubmit=submitOwnerLogin;
+  q("#deviceApprovalForm").onsubmit=approveDevice;
   q("#ownerAuthAction").onclick=ownerAuthAction;
   q("#resetDashboardPreferences").onclick=resetDashboardPreferences;
   [q("#sidebarAddResource"),q("#openAddResource"),q("#overviewAddResource")].forEach(function(b){if(b)b.onclick=function(){openResourceCatalog()}});

@@ -19,4 +19,7 @@ interface NetWeatherRepository {
     suspend fun ensureDefaultResources()
     suspend fun exportResourcesJson(): String
     suspend fun importResourcesJson(json: String): Int
+    fun devicePairing(): DevicePairingState
+    suspend fun startDevicePairing(): DevicePairingState
+    suspend fun pollDevicePairing(state: DevicePairingState): DevicePairingState
 }
