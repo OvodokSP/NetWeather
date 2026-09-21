@@ -144,7 +144,7 @@ def classify_globalping_http(data: dict[str, Any]) -> dict[str, Any]:
     elif (reachable >= 2 and independent_failures >= 2 and len(failing_countries) == 1
           and len(countries) >= 2 and valid >= 4):
         classification, confidence = "REGIONAL_OUTAGE", "medium"
-    elif reachable > 0:
+    elif reachable > 0 and failed == 0:
         classification, confidence = "OK", "high" if reachable >= 3 else "medium"
     else:
         classification, confidence = "UNKNOWN", "low"
