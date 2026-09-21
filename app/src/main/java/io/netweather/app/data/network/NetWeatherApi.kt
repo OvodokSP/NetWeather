@@ -25,8 +25,8 @@ class NetWeatherApi(
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) error("NetWeather API: HTTP ${response.code}")
             val root = json.parseToJsonElement(response.body?.string().orEmpty()).jsonObject
-            val summary = root["summary"]?.jsonObject.orEmpty()
-            val resources = root["resources"]?.jsonArray.orEmpty().map { element ->
+            val summary = root["summary"]?.jsonObject ?: buildJsonObject { }
+            val resources = (root["resources"]?.jsonArray ?: buildJsonArray { }).map { element ->
                 val item = element.jsonObject
                 val group = runCatching { ResourceGroup.valueOf(item.string("group_name")) }.getOrDefault(ResourceGroup.CUSTOM)
                 RemoteResource(
