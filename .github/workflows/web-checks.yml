@@ -32,12 +32,10 @@ jobs:
         run: |
           set -euo pipefail
           bash -n web/deploy/smoke-test.sh
-          bash -n web/deploy/keenetic/netweather-probe.sh
-          bash -n web/deploy/keenetic/install-netweather-probe.sh
-          bash -n web/deploy/keenetic/S99netweather-probe
           bash -n web/deploy/security/netweather-deploy-helper
           bash -n web/deploy/security/netweather-ssh-gate
           bash -n web/deploy/security/netweather-egress-guard
+          bash -n web/deploy/security/netweather-vpn-invariants
           bash -n web/deploy/security/install-host-isolation.sh
 
       - run: PYTHONPATH=web/backend python -m unittest discover -s web/backend/tests -v

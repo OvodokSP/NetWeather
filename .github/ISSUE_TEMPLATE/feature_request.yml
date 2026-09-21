@@ -25,10 +25,9 @@ body:
         - Overview / UI
         - Resources / Groups
         - Global Probe
-        - Domestic Probe
-        - Browser Probe
-        - Native Probe
-        - Fault Domain
+        - External Diagnostics
+        - Android Probe
+        - Incident Classification
         - Alerts / Reports
         - Security / Deployment
         - Other

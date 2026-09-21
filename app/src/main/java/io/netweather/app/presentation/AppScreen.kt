@@ -3,6 +3,7 @@ package io.netweather.app.presentation
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -24,6 +25,7 @@ import java.util.*
 @Composable
 fun AppScreen(vm: MainViewModel = hiltViewModel()) {
     val summary by vm.summary.collectAsState()
+    val global by vm.global.collectAsState()
     val loading by vm.loading.collectAsState()
     val error by vm.error.collectAsState()
     val resources by vm.resources.collectAsState()
@@ -42,7 +44,7 @@ fun AppScreen(vm: MainViewModel = hiltViewModel()) {
                 listOf("Главная", "История", "Настройки").forEachIndexed { i, t -> Tab(selected = tab == i, onClick = { tab = i }, text = { Text(t) }) }
             }
             when(tab) {
-                0 -> MainTab(summary, resources, loading, vm)
+                0 -> MainTab(global, summary, resources, loading, vm)
                 1 -> HistoryTab(history)
                 2 -> SettingsTab(vm)
             }
@@ -51,21 +53,32 @@ fun AppScreen(vm: MainViewModel = hiltViewModel()) {
     if (showAdd) AddResourceDialog(onDismiss = { showAdd = false }, onAdd = { name, url, group -> vm.addResource(name, url, group); showAdd = false })
 }
 
-@Composable fun MainTab(summary: NetworkSummary, resources: List<ResourceWithResult>, loading: Boolean, vm: MainViewModel) {
+@Composable fun MainTab(global: GlobalState, summary: NetworkSummary, resources: List<ResourceWithResult>, loading: Boolean, vm: MainViewModel) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { GlobalStateCard(global) }
         item { SummaryCard(summary, loading, vm::refreshNow) }
-        items(resources) { row -> ResourceRow(row, onToggle = { vm.toggle(row.resource.id, it) }, onDelete = { vm.delete(row.resource) }) }
+        items(resources) { row -> ResourceRow(row) }
     }
 }
 
+@Composable fun GlobalStateCard(global: GlobalState) {
+    ElevatedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(18.dp)) {
+        Text("Глобальное состояние", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(global.availability?.let { "$it%" } ?: "—", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+        Text(if (global.active) "Данные NetWeather VPS · ${global.mode}" else "Глобальные данные временно недоступны")
+        global.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+    } }
+}
+
 @Composable fun SummaryCard(summary: NetworkSummary, loading: Boolean, onRefresh: () -> Unit) {
-    val color = when(summary.mode) { NetworkMode.NORMAL -> Color(0xFF2E7D32); NetworkMode.PARTIAL_DEGRADATION -> Color(0xFFF9A825); NetworkMode.RESTRICTED_ACCESS -> Color(0xFFEF6C00); NetworkMode.NO_INTERNET -> Color(0xFFC62828) }
+    val hasData = summary.lastUpdated > 0
+    val color = if (!hasData) MaterialTheme.colorScheme.onSurfaceVariant else when(summary.mode) { NetworkMode.NORMAL -> Color(0xFF2E7D32); NetworkMode.PARTIAL_DEGRADATION -> Color(0xFFF9A825); NetworkMode.RESTRICTED_ACCESS -> Color(0xFFEF6C00); NetworkMode.NO_INTERNET -> Color(0xFFC62828) }
     ElevatedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("${summary.availabilityIndex}%", style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold, color = color)
-        Text("Доступность сети")
+        Text(if (hasData) "${summary.availabilityIndex}%" else "—", style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold, color = color)
+        Text("Ваша сеть", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(8.dp))
-        Text("${summary.mode.emoji} ${summary.mode.title}", fontWeight = FontWeight.SemiBold)
-        if (summary.mode == NetworkMode.RESTRICTED_ACCESS) Text("Вероятны ограничения доступа к части зарубежных ресурсов.", color = color)
+        Text(if (hasData) "${summary.mode.emoji} ${summary.mode.title}" else "Локальные данные пока отсутствуют", fontWeight = FontWeight.SemiBold)
+        Text("Локальная проверка выполняется только приложением и не требует root, VPN или дополнительного оборудования.", style = MaterialTheme.typography.bodySmall)
         Text("Доступно: ${summary.available} | Проблем: ${summary.problematic} | Всего: ${summary.total}")
         Text("Проверено: ${formatTime(summary.lastUpdated)}", style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.height(8.dp))
@@ -73,7 +86,7 @@ fun AppScreen(vm: MainViewModel = hiltViewModel()) {
     } }
 }
 
-@Composable fun ResourceRow(row: ResourceWithResult, onToggle: (Boolean)->Unit, onDelete: ()->Unit) {
+@Composable fun ResourceRow(row: ResourceWithResult) {
     val r = row.resource; val res = row.result
     ElevatedCard(Modifier.fillMaxWidth()) { Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
@@ -82,8 +95,6 @@ fun AppScreen(vm: MainViewModel = hiltViewModel()) {
             Text("${res?.status?.title ?: "Нет данных"} ${res?.responseTimeMs?.let { "— ${it} мс" } ?: ""}", style = MaterialTheme.typography.bodySmall)
             Text("Последний успех: ${formatTime(res?.lastSuccessfulCheck ?: 0)}", style = MaterialTheme.typography.bodySmall)
         }
-        Switch(checked = r.enabled, onCheckedChange = onToggle)
-        TextButton(onClick = onDelete) { Text("Удалить") }
     } }
 }
 
@@ -103,7 +114,7 @@ fun AppScreen(vm: MainViewModel = hiltViewModel()) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("Настройки", style = MaterialTheme.typography.titleLarge) }
         item { Text("Интервал проверки") }
-        item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf(30 to "30 секунд", 60 to "1 минута", 300 to "5 минут", 900 to "15 минут").forEach { (sec, label) -> FilterChip(selected = settings.checkIntervalSeconds == sec, onClick = { vm.setInterval(sec) }, label = { Text(label) }) } } }
+        item { LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(listOf(30 to "30 секунд", 60 to "1 минута", 300 to "5 минут", 900 to "15 минут")) { (sec, label) -> FilterChip(selected = settings.checkIntervalSeconds == sec, onClick = { vm.setInterval(sec) }, label = { Text(label) }) } } }
         item { Text("Короткие интервалы используют цепочку OneTimeWorkRequest и могут сильнее расходовать батарею.") }
         item { Divider() }
         item { Text("Экспорт и импорт ресурсов", style = MaterialTheme.typography.titleMedium) }

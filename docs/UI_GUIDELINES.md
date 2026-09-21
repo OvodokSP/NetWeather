@@ -57,8 +57,8 @@ management actions or capability-gated checks; the add flow must not redirect a 
 If functionality is unavailable, hide it instead of showing a dead panel.
 
 Examples:
-- no domestic probe → no “Российский контур” KPI;
-- no user/browser probe → no “Моя сеть” KPI;
+- no Android probe → show “Ваша сеть: недоступно без приложения” without implying a failure;
+- no external provider → hide provider action or show an explicit disabled state;
 - no geodata → no outage map;
 - no traceroute capability → no traceroute action.
 

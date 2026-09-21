@@ -16,6 +16,8 @@ class MainViewModel @Inject constructor(private val repo: NetWeatherRepository) 
     val summary: StateFlow<NetworkSummary> = _summary.asStateFlow()
     private val _loading = MutableStateFlow(false)
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
+    private val _global = MutableStateFlow(GlobalState())
+    val global: StateFlow<GlobalState> = _global.asStateFlow()
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
     val resources: StateFlow<List<ResourceWithResult>> = combine(repo.observeResources(), repo.observeLatestResults()) { res, results ->
@@ -31,10 +33,21 @@ class MainViewModel @Inject constructor(private val repo: NetWeatherRepository) 
 
     fun refreshNow() = viewModelScope.launch {
         _loading.value = true; _error.value = null
-        try { _summary.value = repo.runChecks() } catch (e: Exception) { _error.value = e.message ?: "Ошибка проверки" } finally { _loading.value = false }
+        try {
+            _global.value = runCatching { repo.refreshGlobal() }.getOrElse { GlobalState(error = it.message) }
+            _summary.value = repo.runChecks()
+        } catch (e: Exception) { _error.value = e.message ?: "Ошибка проверки" } finally { _loading.value = false }
     }
     fun toggle(id: Long, enabled: Boolean) = viewModelScope.launch { repo.setEnabled(id, enabled); refreshNow() }
-    fun addResource(name: String, url: String, group: ResourceGroup) = viewModelScope.launch { repo.addResource(MonitoredResource(name = name, url = url, group = group)); refreshNow() }
+    fun addResource(name: String, url: String, group: ResourceGroup) = viewModelScope.launch {
+        _error.value = null
+        try {
+            repo.addResource(MonitoredResource(name = name, url = url, group = group))
+            refreshNow()
+        } catch (e: Exception) {
+            _error.value = e.message ?: "Не удалось добавить ресурс"
+        }
+    }
     fun delete(resource: MonitoredResource) = viewModelScope.launch { repo.deleteResource(resource); refreshNow() }
     fun setInterval(seconds: Int) { repo.setCheckIntervalSeconds(seconds); _settings.value = _settings.value.copy(checkIntervalSeconds = seconds); MonitoringScheduler.reschedule(AppContextHolder.context, seconds) }
     private val _exportJson = MutableStateFlow("")

@@ -1,4 +1,4 @@
-# NetWeather Android 0.1.0 alpha preview 1
+# NetWeather Android 0.4.0 alpha preview
 
 Это проверочная сборка Native Probe, а не стабильный production-релиз.
 
@@ -13,9 +13,9 @@
 ## Установка
 
 - Android 10 или новее (`minSdk 29`);
-- файл `NetWeather-0.1.0-alpha-debug.apk` подписан стандартным debug-ключом CI;
+- файл `NetWeather-0.4.0-alpha-debug.apk` подписан стандартным debug-ключом CI;
 - перед установкой можно проверить SHA-256 по соседнему файлу
-  `NetWeather-0.1.0-alpha-debug.apk.sha256`.
+  `NetWeather-0.4.0-alpha-debug.apk.sha256`.
 
 ## Ограничения preview
 
@@ -23,6 +23,8 @@
 - автоматическое обновление и production-подпись ещё не настроены;
 - сборка проверена unit-тестами и CI-сборкой, но не подтверждена как стабильный релиз для
   повседневного использования на всех моделях устройств;
-- объединённый `GLOBAL ↔ DOMESTIC ↔ USER` fault-domain ещё развивается.
+- приложение читает общий каталог и глобальную сводку из NetWeather API;
+- защищённая отправка пользовательских измерений в общий backend ещё не завершена;
+- production signing key и Play/App Gallery distribution пока не настроены.
 
 Исходный код, история изменений и актуальный статус находятся в репозитории NetWeather.

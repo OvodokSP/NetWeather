@@ -16,8 +16,7 @@ NetWeather models observations by probe scope and compares them.
 
 Primary scopes:
 - GLOBAL;
-- DOMESTIC;
-- USER/BROWSER/DEVICE.
+- USER/ANDROID DEVICE.
 
 A diagnosis must retain the measurements/evidence that produced it.
 
@@ -26,4 +25,4 @@ A diagnosis must retain the measurements/evidence that produced it.
 - resource state is not derived from one request;
 - UI may show different results per contour;
 - fault-domain work builds on normalized probe data;
-- Browser Probe and Router Probe are extensions of the same model, not separate products.
+- Android is an optional software probe; no user-owned router or server is required.

@@ -19,7 +19,6 @@ Security boundary:
 Last deployment-channel verification trigger: 2026-09-19.
 
 
-
 ## Mandatory VPN invariants
 
 NetWeather shares the VPS with independent VPN services. A NetWeather deployment is not successful unless those services remain healthy.
@@ -44,7 +43,7 @@ Deployment contract:
 
 The checker verifies nginx syntax, the VLESS/Xray runtime and loopback backend, TLS identity for the VPN public IP, independent TLS identity for the NetWeather domain, the AWG container/interface/backend UDP listener, and (when configured) the UDP public-port redirect used by HomeRoute.
 
-## 0.3.10 production verification
+## 0.4.0 production verification
 
 This marker intentionally triggers the guarded production pipeline after:
 - interaction-contract CI passed;
@@ -53,45 +52,6 @@ This marker intentionally triggers the guarded production pipeline after:
 - deploy helper private-state temporary paths were installed on the VPS.
 - runtime identity and Docker health were verified against the exact commit image.
 
-Expected public health after deployment: `0.3.10-web`.
+Expected public health after deployment: `0.4.0-web`.
 
-## Keenetic DOMESTIC probe
-
-The router probe is installed independently from the VPS container. For this deployment its verified direct ISP path is:
-
-```text
-interface: eth2.4
-address:   5.3.168.105/22
-gateway:   5.3.171.254
-```
-
-It must not use `opkgtun0`, HRNeo, AmneziaWG or policy-routing table 301. The agent refuses to start without an explicit direct interface and applies it to every HTTP check, API request and traceroute.
-
-Installation files:
-
-```text
-deploy/keenetic/install-netweather-probe.sh
-deploy/keenetic/netweather-probe.sh
-deploy/keenetic/S99netweather-probe
-```
-
-The installer requires an exact 40-character Git commit, downloads the agent and service from that immutable revision, verifies their embedded SHA-256 checksums, performs a one-cycle smoke test and starts the Entware service. It prompts for `NETWEATHER_AGENT_TOKEN`; do not put that token in shell history or issue output.
-
-Runtime state:
-
-```text
-/opt/etc/netweather-probe.env       root-only configuration (0600)
-/opt/var/run/netweather-probe.pid   supervised process
-/opt/var/run/netweather-probe/last-success
-/opt/var/log/netweather-probe.log
-```
-
-Verification on Keenetic:
-
-```sh
-/opt/etc/init.d/S99netweather-probe status
-tail -n 50 /opt/var/log/netweather-probe.log
-ip route get 5.3.171.254
-```
-
-`status` becomes degraded when no successful cycle has completed for more than 180 seconds. The final product verification is complete only after the public `/api/probes` response reports `RU_VORONEZH_HOME` online and a DOMESTIC traceroute task returns through `eth2.4`.
+The release has no router-side installation step. Optional external diagnostics are enabled only with `NETWEATHER_GLOBALPING_ENABLED=true`; without it `/api/diagnostics/status` must report `enabled: false` and the baseline service remains fully operational.

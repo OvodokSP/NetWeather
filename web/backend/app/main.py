@@ -13,8 +13,10 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .config import (
-    AGENT_TOKEN, ALERT_WEBHOOK_URL, ALLOW_PRIVATE_TARGETS, API_TOKEN, APP_VERSION, AUTH_REQUIRED, DEFAULT_INTERVAL,
-    FRONTEND_DIR, KNOWN_GROUPS, PUBLIC_ADD_LIMIT, PUBLIC_ADD_WINDOW_SECONDS, ResourceCreate, ResourcePatch, AgentResult, CatalogAddRequest, GroupCreate, GroupPatch,
+    ALERT_WEBHOOK_URL, ALLOW_PRIVATE_TARGETS, API_TOKEN, APP_VERSION, AUTH_REQUIRED, DEFAULT_INTERVAL,
+    DIAGNOSTIC_COOLDOWN_SECONDS, DIAGNOSTIC_RESERVE_PERCENT, FRONTEND_DIR, GLOBALPING_ENABLED,
+    GLOBALPING_HOURLY_LIMIT, GLOBALPING_TOKEN, KNOWN_GROUPS, PUBLIC_ADD_LIMIT, PUBLIC_ADD_WINDOW_SECONDS,
+    ResourceCreate, ResourcePatch, ClientProbeResult, ClientProbeRegistration, CatalogAddRequest, GroupCreate, GroupPatch,
     OwnerLogin, SCHEDULER_ENABLED, SESSION_MAX_AGE, STARTED_AT, UI_PASSWORD,
     normalize_group, normalize_target,
 )
@@ -26,10 +28,14 @@ from .incidents import write_check
 from .monitor import discover_target_metadata, perform_check, traceroute_to_resource
 from .resource_catalog import CATALOG_BY_KEY, catalog_match, catalog_payload
 from .availability import is_reachable
+from .diagnostics import DiagnosticCoordinator, DiagnosticPriority, QuotaManager
+from .providers import GlobalpingProvider
 
 
 SESSION_COOKIE = "netweather_owner"
 _public_add_attempts: dict[str, list[float]] = {}
+_quota = QuotaManager(GLOBALPING_HOURLY_LIMIT, DIAGNOSTIC_RESERVE_PERCENT)
+_diagnostics = DiagnosticCoordinator(GlobalpingProvider(GLOBALPING_TOKEN), _quota, DIAGNOSTIC_COOLDOWN_SECONDS)
 
 
 def _owner_secret() -> str:
@@ -76,13 +82,6 @@ def _limit_public_add(request: Request, authorization: str | None) -> bool:
     return False
 
 
-def require_agent(x_netweather_agent: str | None = Header(default=None)) -> None:
-    if not AGENT_TOKEN:
-        raise HTTPException(503, "NETWEATHER_AGENT_TOKEN is not configured")
-    if x_netweather_agent != AGENT_TOKEN:
-        raise HTTPException(401, "Invalid probe token")
-
-
 async def check_resource(resource_id: int):
     with db() as conn:
         resource = conn.execute("SELECT * FROM resources WHERE id=?", (resource_id,)).fetchone()
@@ -96,13 +95,20 @@ async def check_resource(resource_id: int):
 async def run_scheduled(row) -> None:
     try:
         payload = await perform_check(row)
-        write_check(row["id"], payload)
+        notices = write_check(row["id"], payload)
     except Exception as exc:
-        write_check(row["id"], {
+        notices = write_check(row["id"], {
             "status":"UNKNOWN_ERROR","response_time_ms":0,"dns_ms":None,"tcp_ms":None,"tls_ms":None,
             "http_ms":None,"http_status":None,"resolved_ip":None,"tls_days_left":None,"final_url":row["target"],
             "location":None,"message":str(exc),
         })
+    if not GLOBALPING_ENABLED:
+        return
+    opened = next((notice for notice in notices if notice["event"] == "incident_opened"), None)
+    if not opened:
+        return
+    priority = DiagnosticPriority.NEW_DOWN if opened["kind"] == "DOWN" else DiagnosticPriority.DEGRADED
+    await request_external_diagnostic(row["id"], priority)
 
 
 async def scheduler() -> None:
@@ -153,7 +159,8 @@ def system_info():
       "checks":checks,"active_incidents":incidents,"database":"ok","traceroute_available":traceroute_available,
       "webhook_configured":bool(ALERT_WEBHOOK_URL),"private_targets_allowed":ALLOW_PRIVATE_TARGETS,
       "default_interval_seconds":DEFAULT_INTERVAL,"scheduler_enabled":SCHEDULER_ENABLED,
-      "auth_required":AUTH_REQUIRED}
+      "auth_required":AUTH_REQUIRED,"globalping_enabled":GLOBALPING_ENABLED,
+      "diagnostic_quota":_quota.status()}
 
 
 @app.get("/api/auth/verify", dependencies=[Depends(require_token)])
@@ -462,30 +469,12 @@ def delete_resource(resource_id:int):
     return {"ok":True}
 
 
-def schedule_domestic_checks(resource_ids:list[int]) -> int:
-    online = [p for p in probe_statuses() if p["scope"] == "DOMESTIC" and p["online"]]
-    if not online or not resource_ids:
-        return 0
-    now = int(time.time())
-    count = 0
-    with db() as conn:
-        for probe in online:
-            for resource_id in resource_ids:
-                exists = conn.execute("""SELECT 1 FROM probe_tasks
-                  WHERE probe_key=? AND resource_id=? AND task_type='CHECK' AND status='PENDING' LIMIT 1""",
-                  (probe["probe_key"], resource_id)).fetchone()
-                if exists:
-                    continue
-                conn.execute("""INSERT INTO probe_tasks(probe_key,resource_id,task_type,status,created_at)
-                  VALUES(?,?, 'CHECK', 'PENDING', ?)""", (probe["probe_key"], resource_id, now))
-                count += 1
-    return count
-
-
 @app.post("/api/resources/{resource_id}/check", dependencies=[Depends(require_token)])
 async def manual_check(resource_id:int):
     payload = await check_resource(resource_id)
-    payload["scheduled_domestic"] = schedule_domestic_checks([resource_id])
+    payload["external_diagnostic"] = None
+    if GLOBALPING_ENABLED and not is_reachable(payload["status"]):
+        payload["external_diagnostic"] = await request_external_diagnostic(resource_id, DiagnosticPriority.MANUAL)
     return payload
 
 
@@ -493,78 +482,71 @@ async def manual_check(resource_id:int):
 async def trace_resource(resource_id:int): return await traceroute_to_resource(resource_id)
 
 
-@app.get("/api/agent/config.tsv", dependencies=[Depends(require_agent)])
-def agent_config(probe_key: str = Query(min_length=1,max_length=80), probe_name: str = Query(default="Российский probe",max_length=120), agent_version: str = Query(default="",max_length=32)):
-    register_probe(probe_key, probe_name, "DOMESTIC", agent_version)
-    rows = []
+@app.get("/api/v1/client-probe/resources", dependencies=[Depends(require_token)])
+def client_probe_resources():
     with db() as conn:
-        resources = conn.execute("""SELECT id,name,target,expected_status_min,expected_status_max,enabled
-          FROM resources WHERE enabled=1 ORDER BY id""").fetchall()
-    for r in resources:
-        rows.append("\t".join([
-            str(r["id"]), r["name"].replace("\t"," "), r["target"],
-            str(r["expected_status_min"]), str(r["expected_status_max"])
-        ]))
-    return Response(content="\n".join(rows)+("\n" if rows else ""), media_type="text/tab-separated-values; charset=utf-8")
+        rows = conn.execute("""SELECT id,name,target,group_name,expected_status_min,expected_status_max
+          FROM resources WHERE enabled=1 ORDER BY group_name,name""").fetchall()
+    return [dict(row) for row in rows]
 
 
-@app.post("/api/agent/result", dependencies=[Depends(require_agent)])
-def agent_result(payload: AgentResult, probe_key: str = Query(min_length=1,max_length=80), probe_name: str = Query(default="Российский probe",max_length=120), agent_version: str = Query(default="",max_length=32)):
-    register_probe(probe_key, probe_name, "DOMESTIC", agent_version)
+@app.post("/api/v1/client-probe/result", dependencies=[Depends(require_token)])
+def client_probe_result(payload: ClientProbeResult, probe: ClientProbeRegistration):
+    register_probe(probe.probe_key, probe.name, "USER", probe.app_version, "dns,tcp,tls,http")
     with db() as conn:
         exists = conn.execute("SELECT 1 FROM resources WHERE id=?", (payload.resource_id,)).fetchone()
     if not exists:
         raise HTTPException(404, "Resource not found")
     data = payload.model_dump()
     data.update({"tls_days_left":None,"final_url":None,"location":None})
-    write_check(payload.resource_id, data, probe_key=probe_key, probe_scope="DOMESTIC")
+    write_check(payload.resource_id, data, probe_key=probe.probe_key, probe_scope="USER")
     return {"ok":True}
 
 
-@app.get("/api/agent/tasks.tsv", dependencies=[Depends(require_agent)])
-def agent_tasks(probe_key: str = Query(min_length=1,max_length=80), probe_name: str = Query(default="Российский probe",max_length=120), agent_version: str = Query(default="",max_length=32)):
-    register_probe(probe_key, probe_name, "DOMESTIC", agent_version)
+async def request_external_diagnostic(resource_id: int, priority: DiagnosticPriority):
     with db() as conn:
-        rows = conn.execute("""SELECT t.id,t.resource_id,t.task_type,r.target,r.expected_status_min,r.expected_status_max FROM probe_tasks t
-          JOIN resources r ON r.id=t.resource_id
-          WHERE t.probe_key=? AND t.status='PENDING'
-          ORDER BY t.created_at LIMIT 10""", (probe_key,)).fetchall()
-    return Response(
-        content="".join(f"{r['id']}\t{r['resource_id']}\t{r['task_type']}\t{r['target']}\t{r['expected_status_min']}\t{r['expected_status_max']}\n" for r in rows),
-        media_type="text/tab-separated-values; charset=utf-8",
-    )
-
-
-@app.post("/api/agent/tasks/{task_id}/complete", dependencies=[Depends(require_agent)])
-async def agent_task_complete(task_id:int, request:Request, probe_key:str=Query(min_length=1,max_length=80)):
-    text_body = (await request.body()).decode("utf-8", errors="replace")[:20000]
+        resource = conn.execute("SELECT id,target FROM resources WHERE id=?", (resource_id,)).fetchone()
+    if not resource:
+        raise HTTPException(404, "Resource not found")
     now = int(time.time())
+    try:
+        result = await _diagnostics.request(resource_id, resource["target"], priority)
+        status, external_id, error = result.status, result.external_id, None
+    except Exception as exc:
+        status, external_id, error = "rejected", None, str(exc)[:500]
     with db() as conn:
-        cur = conn.execute("""UPDATE probe_tasks SET status='DONE',completed_at=?,result_text=?
-          WHERE id=? AND probe_key=?""", (now,text_body,task_id,probe_key))
-    if cur.rowcount == 0:
-        raise HTTPException(404, "Task not found")
-    return {"ok":True}
+        job_id = conn.execute("""INSERT INTO diagnostic_jobs(
+          resource_id,provider,external_id,priority,status,created_at,updated_at,error
+        ) VALUES(?,?,?,?,?,?,?,?)""", (resource_id,"globalping",external_id,int(priority),status,now,now,error)).lastrowid
+    return {"job_id":job_id,"provider":"globalping","external_id":external_id,"status":status,"error":error}
 
 
-@app.post("/api/resources/{resource_id}/trace-domestic", dependencies=[Depends(require_token)])
-def trace_domestic(resource_id:int, probe_key:str=Query(default="RU_HOME",min_length=1,max_length=80)):
+@app.get("/api/diagnostics/status")
+def diagnostic_status():
+    return {"provider":"globalping","enabled":GLOBALPING_ENABLED,"quota":_quota.status(),
+            "reserve_percent":DIAGNOSTIC_RESERVE_PERCENT,"cooldown_seconds":DIAGNOSTIC_COOLDOWN_SECONDS}
+
+
+@app.post("/api/resources/{resource_id}/diagnose", dependencies=[Depends(require_token)])
+async def diagnose_resource(resource_id:int):
+    if not GLOBALPING_ENABLED:
+        raise HTTPException(503, "External diagnostics provider is disabled")
+    return await request_external_diagnostic(resource_id, DiagnosticPriority.MANUAL)
+
+
+@app.get("/api/resources/{resource_id}/diagnostics")
+def resource_diagnostics(resource_id:int):
     with db() as conn:
-        if not conn.execute("SELECT 1 FROM resources WHERE id=?", (resource_id,)).fetchone():
-            raise HTTPException(404, "Resource not found")
-        now = int(time.time())
-        cur = conn.execute("""INSERT INTO probe_tasks(probe_key,resource_id,task_type,status,created_at)
-          VALUES(?,?, 'TRACE', 'PENDING', ?)""", (probe_key,resource_id,now))
-    return {"task_id":cur.lastrowid,"status":"PENDING"}
+        rows = conn.execute("SELECT * FROM diagnostic_jobs WHERE resource_id=? ORDER BY created_at DESC LIMIT 20", (resource_id,)).fetchall()
+    return [dict(row) for row in rows]
 
 
 @app.get("/api/trace-tasks/{task_id}")
 def trace_task(task_id:int):
     with db() as conn:
-        row = conn.execute("""SELECT t.*,r.name resource_name,r.target FROM probe_tasks t
-          JOIN resources r ON r.id=t.resource_id WHERE t.id=?""", (task_id,)).fetchone()
+        row = conn.execute("SELECT * FROM diagnostic_jobs WHERE id=?", (task_id,)).fetchone()
     if not row:
-        raise HTTPException(404, "Trace task not found")
+        raise HTTPException(404, "Diagnostic task not found")
     return dict(row)
 
 
@@ -573,8 +555,7 @@ async def check_all():
     with db() as conn: rows=conn.execute("SELECT * FROM resources WHERE enabled=1").fetchall()
     results=await asyncio.gather(*(perform_check(row) for row in rows))
     for row,result in zip(rows,results): write_check(row["id"],result)
-    scheduled_domestic = schedule_domestic_checks([int(row["id"]) for row in rows])
-    return {"checked":len(rows),"ok":sum(1 for r in results if is_reachable(r["status"])),"failed":sum(1 for r in results if not is_reachable(r["status"])),"scheduled_domestic":scheduled_domestic}
+    return {"checked":len(rows),"ok":sum(1 for r in results if is_reachable(r["status"])),"failed":sum(1 for r in results if not is_reachable(r["status"]))}
 
 
 @app.get("/api/incidents")
@@ -598,10 +579,10 @@ def acknowledge_all_incidents():
 
 
 @app.get("/api/realtime")
-def realtime(minutes:int=Query(default=60,ge=5,le=10080), scope:str=Query(default="EXTERNAL")):
+def realtime(minutes:int=Query(default=60,ge=5,le=10080), scope:str=Query(default="GLOBAL")):
     scope=scope.upper()
-    if scope not in {"EXTERNAL","DOMESTIC"}:
-        raise HTTPException(400,"scope must be EXTERNAL or DOMESTIC")
+    if scope not in {"GLOBAL","USER"}:
+        raise HTTPException(400,"scope must be GLOBAL or USER")
     now=int(time.time())
     since=now-minutes*60
     bucket=max(30,(minutes*60)//240)
@@ -719,11 +700,11 @@ def recent_events(limit:int=Query(default=30,ge=1,le=100)):
 
 
 @app.get("/api/history")
-def history(hours:int=24, scope:str=Query(default="EXTERNAL")):
+def history(hours:int=24, scope:str=Query(default="GLOBAL")):
     hours=max(1,min(hours,720)); since=int(time.time())-hours*3600
     scope=scope.upper()
-    if scope not in {"EXTERNAL","DOMESTIC"}:
-        raise HTTPException(400,"scope must be EXTERNAL or DOMESTIC")
+    if scope not in {"GLOBAL","USER"}:
+        raise HTTPException(400,"scope must be GLOBAL or USER")
     with db() as conn:
         rows=conn.execute("SELECT resource_id,checked_at,status,response_time_ms FROM checks WHERE checked_at>=? AND probe_scope=? ORDER BY checked_at ASC",(since,scope)).fetchall()
     buckets={}; size=max(60,(hours*3600)//240)

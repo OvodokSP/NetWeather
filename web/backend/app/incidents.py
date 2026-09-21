@@ -66,58 +66,19 @@ def _notice(event: str, iid: int, resource: str, kind: str, severity: str, messa
     }
 
 
-def _evaluate_restriction(conn, resource, now: int, notices: list[dict[str, Any]]) -> None:
-    threshold = max(1, int(resource["failure_threshold"] or 2))
-    ext = conn.execute(
-        """SELECT * FROM checks WHERE resource_id=? AND probe_scope='EXTERNAL'
-           ORDER BY checked_at DESC,id DESC LIMIT 1""",
-        (resource["id"],),
-    ).fetchone()
-    dom = conn.execute(
-        """SELECT * FROM checks WHERE resource_id=? AND probe_scope='DOMESTIC'
-           ORDER BY checked_at DESC,id DESC LIMIT 1""",
-        (resource["id"],),
-    ).fetchone()
-    if not ext or not dom:
-        return
-
-    recent_dom = conn.execute(
-        """SELECT status FROM checks WHERE resource_id=? AND probe_scope='DOMESTIC' AND probe_key=?
-           ORDER BY checked_at DESC,id DESC LIMIT ?""",
-        (resource["id"], dom["probe_key"], threshold),
-    ).fetchall()
-    domestic_confirmed_fail = len(recent_dom) >= threshold and all(not is_reachable(r["status"]) for r in recent_dom)
-    restriction = is_reachable(ext["status"]) and domestic_confirmed_fail
-
-    if restriction:
-        msg = (
-            f"{resource['name']}: внешний probe отвечает OK, "
-            f"российский probe {dom['probe_key']} получает {dom['status']} — {dom['message']}"
-        )
-        iid = _open(conn, resource["id"], "RESTRICTION", "critical", msg, now)
-        if iid:
-            notices.append(_notice("incident_opened", iid, resource["name"], "RESTRICTION", "critical", msg, now))
-    else:
-        for iid in _close(conn, resource["id"], "RESTRICTION", now):
-            notices.append(_notice(
-                "incident_closed", iid, resource["name"], "RESTRICTION", "info",
-                "Различие между внешним и российским контуром исчезло", now,
-            ))
-
-
 def write_check(
     resource_id: int,
     payload: dict[str, Any],
     probe_key: str = SERVER_PROBE_KEY,
-    probe_scope: str = "EXTERNAL",
-) -> None:
+    probe_scope: str = "GLOBAL",
+) -> list[dict[str, Any]]:
     now = int(time.time())
     notices: list[dict[str, Any]] = []
     probe_scope = probe_scope.upper()
     with db() as conn:
         resource = conn.execute("SELECT * FROM resources WHERE id=?", (resource_id,)).fetchone()
         if not resource:
-            return
+            return []
         conn.execute(
             "UPDATE probes SET last_seen_at=?,updated_at=? WHERE probe_key=?",
             (now, now, probe_key),
@@ -135,7 +96,7 @@ def write_check(
             ),
         )
 
-        if probe_scope == "EXTERNAL":
+        if probe_scope == "GLOBAL":
             if is_reachable(payload["status"]):
                 conn.execute(
                     "UPDATE resources SET last_checked_at=?,last_success_at=?,updated_at=? WHERE id=?",
@@ -149,13 +110,13 @@ def write_check(
 
         conn.execute("DELETE FROM checks WHERE checked_at<?", (now - 2592000,))
         if not resource["alerts_enabled"]:
-            return
+            return []
 
         threshold = max(1, int(resource["failure_threshold"] or 2))
 
-        if probe_scope == "EXTERNAL":
+        if probe_scope == "GLOBAL":
             recent = conn.execute(
-                """SELECT status FROM checks WHERE resource_id=? AND probe_scope='EXTERNAL'
+                """SELECT status FROM checks WHERE resource_id=? AND probe_scope='GLOBAL'
                    ORDER BY checked_at DESC,id DESC LIMIT ?""",
                 (resource_id, threshold),
             ).fetchall()
@@ -169,13 +130,13 @@ def write_check(
                 for iid in _close(conn, resource_id, "DOWN", now):
                     notices.append(_notice(
                         "incident_closed", iid, resource["name"], "DOWN", "info",
-                        "Внешняя доступность восстановлена", now,
+                        "Глобальная доступность восстановлена", now,
                     ))
 
             slow = is_reachable(payload["status"]) and payload["response_time_ms"] >= int(resource["slow_threshold_ms"] or 1500)
             if slow:
                 msg = (
-                    f"{resource['name']}: внешний отклик {payload['response_time_ms']} мс "
+                    f"{resource['name']}: глобальный отклик {payload['response_time_ms']} мс "
                     f"выше порога {resource['slow_threshold_ms']} мс"
                 )
                 iid = _open(conn, resource_id, "SLOW", "warning", msg, now)
@@ -185,7 +146,7 @@ def write_check(
                 for iid in _close(conn, resource_id, "SLOW", now):
                     notices.append(_notice(
                         "incident_closed", iid, resource["name"], "SLOW", "info",
-                        "Внешняя задержка вернулась в норму", now,
+                        "Глобальная задержка вернулась в норму", now,
                     ))
 
             days = payload.get("tls_days_left")
@@ -203,7 +164,6 @@ def write_check(
                         "Срок TLS снова вне порога тревоги", now,
                     ))
 
-        _evaluate_restriction(conn, resource, now, notices)
-
     for notice in notices:
         _notify(notice)
+    return notices

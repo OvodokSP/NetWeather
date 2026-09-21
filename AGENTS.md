@@ -8,8 +8,7 @@ NetWeather is a multi-probe network observability system.
 
 Do not collapse:
 - GLOBAL;
-- DOMESTIC;
-- USER / BROWSER / DEVICE
+- YOUR NETWORK / ANDROID DEVICE
 
 into one generic “availability” source.
 
@@ -67,7 +66,7 @@ Security tests must remain green.
 - GitHub Actions builds through Gradle.
 - Widgets, UI and WorkManager use the same persisted network state.
 - Do not use `PeriodicWorkRequest` for intervals below 15 minutes.
-- Keep Android as a Native Probe in the common NetWeather architecture.
+- Keep Android as the optional local probe in the common NetWeather architecture.
 
 ## 7. Tests
 

@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-APP_VERSION = "0.3.10-web"
+APP_VERSION = "0.4.0-web"
 STARTED_AT = int(time.time())
 DB_PATH = Path(os.getenv("NETWEATHER_DB", "/data/netweather.db"))
 API_TOKEN = os.getenv("NETWEATHER_API_TOKEN", "")
@@ -27,10 +27,14 @@ FRONTEND_DIR = Path(os.getenv("FRONTEND_DIR", "/app/frontend"))
 SEED_DEFAULTS = os.getenv("NETWEATHER_SEED_DEFAULTS", "true").lower() == "true"
 SCHEDULER_ENABLED = os.getenv("NETWEATHER_SCHEDULER_ENABLED", "true").lower() == "true"
 ALERT_WEBHOOK_URL = os.getenv("ALERT_WEBHOOK_URL", "").strip()
-AGENT_TOKEN = os.getenv("NETWEATHER_AGENT_TOKEN", "").strip()
-AGENT_STALE_SECONDS = int(os.getenv("NETWEATHER_AGENT_STALE_SECONDS", "180"))
+CLIENT_PROBE_STALE_SECONDS = int(os.getenv("NETWEATHER_CLIENT_PROBE_STALE_SECONDS", "180"))
 SERVER_PROBE_KEY = os.getenv("NETWEATHER_SERVER_PROBE_KEY", "VPS_EU").strip() or "VPS_EU"
-SERVER_PROBE_NAME = os.getenv("NETWEATHER_SERVER_PROBE_NAME", "Внешний VPS").strip() or "Внешний VPS"
+SERVER_PROBE_NAME = os.getenv("NETWEATHER_SERVER_PROBE_NAME", "NetWeather VPS").strip() or "NetWeather VPS"
+GLOBALPING_ENABLED = os.getenv("NETWEATHER_GLOBALPING_ENABLED", "false").lower() in {"1","true","yes","on"}
+GLOBALPING_TOKEN = os.getenv("NETWEATHER_GLOBALPING_TOKEN", "").strip()
+GLOBALPING_HOURLY_LIMIT = int(os.getenv("NETWEATHER_GLOBALPING_HOURLY_LIMIT", "250"))
+DIAGNOSTIC_RESERVE_PERCENT = int(os.getenv("NETWEATHER_DIAGNOSTIC_RESERVE_PERCENT", "30"))
+DIAGNOSTIC_COOLDOWN_SECONDS = int(os.getenv("NETWEATHER_DIAGNOSTIC_COOLDOWN_SECONDS", "900"))
 
 KNOWN_GROUPS = {
     "RUSSIAN": "Российские",
@@ -85,7 +89,7 @@ class GroupPatch(BaseModel):
     sort_order: int | None = Field(default=None, ge=0, le=10000)
 
 
-class AgentResult(BaseModel):
+class ClientProbeResult(BaseModel):
     resource_id: int = Field(ge=1)
     status: str = Field(min_length=1, max_length=40)
     response_time_ms: int = Field(ge=0, le=300000)
@@ -96,6 +100,12 @@ class AgentResult(BaseModel):
     http_status: int | None = Field(default=None, ge=100, le=599)
     resolved_ip: str | None = Field(default=None, max_length=128)
     message: str = Field(default="", max_length=1000)
+
+
+class ClientProbeRegistration(BaseModel):
+    probe_key: str = Field(min_length=8, max_length=120)
+    name: str = Field(default="Android", min_length=1, max_length=120)
+    app_version: str = Field(default="", max_length=40)
 
 
 class ResourcePatch(BaseModel):

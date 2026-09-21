@@ -2,13 +2,16 @@
 
 ## Current checkpoint
 
-**Web:** `0.3.10-web`  
-**Development branch:** `feature/web-vps-monitoring`  
+**Web:** `0.4.0-web` candidate
+**Development branch:** `feature/web-vps-monitoring`
 **Production domain:** `netweather.online`
 
 ## Confirmed foundation
 
-- Global VPS monitoring is working.
+- Global VPS monitoring is working and is the hardware-free baseline.
+- Keenetic/Entware/router runtime and agent API have been removed; old telemetry is retained as excluded `LEGACY` data.
+- Deterministic assessment, provider abstraction and a quota reserve are implemented.
+- Globalping remains disabled until production configuration is explicitly verified.
 - Resource groups are implemented.
 - Ranked resource catalog is implemented.
 - Manual/catalog duplicate protection is implemented.
@@ -22,7 +25,7 @@
 - Production UI is publicly readable; anonymous users can add a basic HTTP/HTTPS resource, while privileged mutations require an owner session.
 - Catalog anti-bot HTTP rejections are represented as reachable rather than false outages.
 - Android latest results and interval settings use persisted reactive state.
-- Installable Android `0.1.0-alpha-debug` preview and SHA-256 are published through a dedicated prerelease workflow.
+- Installable Android `0.4.0-alpha-debug` preview and SHA-256 are produced by a dedicated prerelease workflow. Publication is only confirmed after that workflow succeeds on the updated branch.
 
 ## Deployment channel
 
@@ -64,13 +67,12 @@ Next UI work:
 - continued device-level responsive verification on representative physical devices;
 - contextual help/tooltips;
 - remaining empty/error-state polish;
-- browser-probe panels when capability exists.
+- physical-device verification of Global State / Your Network on representative phones.
 
 ## Next functional work
 
-1. Connect and verify the prepared Keenetic Domestic Probe service on the physical router.
-2. Browser Probe.
-3. Unified probe comparison.
-4. Explainable fault-domain after at least two independent probes exist.
-5. Alerts/reporting refinement.
-6. Accounts/capabilities/licensing only after the base tool is complete.
+1. Authenticated Android device enrollment and upload of `USER` measurements.
+2. Persisted Globalping usage and result polling (new DOWN/SLOW incidents already submit event-driven jobs when the provider is enabled).
+3. Cached OONI/IODA/official status evidence.
+4. Alerts/reporting refinement.
+5. Accounts/capabilities/licensing only after the base tool is complete.

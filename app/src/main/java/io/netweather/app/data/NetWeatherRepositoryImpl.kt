@@ -3,6 +3,7 @@ package io.netweather.app.data
 import android.content.Context
 import io.netweather.app.data.local.*
 import io.netweather.app.data.network.NetworkDiagnostics
+import io.netweather.app.data.network.NetWeatherApi
 import io.netweather.app.domain.logic.NetworkAnalyzer
 import io.netweather.app.domain.model.*
 import io.netweather.app.domain.repository.NetWeatherRepository
@@ -20,13 +21,18 @@ class NetWeatherRepositoryImpl(
     private val context: Context,
     private val db: AppDatabase,
     private val diagnostics: NetworkDiagnostics,
+    private val api: NetWeatherApi,
     private val analyzer: NetworkAnalyzer,
     private val stateStore: StateStore,
     private val notifier: AppNotifier
 ) : NetWeatherRepository {
     override fun observeResources(): Flow<List<MonitoredResource>> = db.resourceDao().observeAll().map { it.map(ResourceEntity::toDomain) }
     override suspend fun getResources(): List<MonitoredResource> = db.resourceDao().getAll().map { it.toDomain() }
-    override suspend fun addResource(resource: MonitoredResource): Long = db.resourceDao().upsert(resource.toEntity())
+    override suspend fun addResource(resource: MonitoredResource): Long {
+        val id = api.addResource(resource)
+        refreshGlobal()
+        return id
+    }
     override suspend fun deleteResource(resource: MonitoredResource) = db.resourceDao().delete(resource.toEntity())
     override suspend fun setEnabled(id: Long, enabled: Boolean) = db.resourceDao().setEnabled(id, enabled)
     override suspend fun latestResults(): List<CheckResult> = db.checkResultDao().latest().map { it.toDomain() }
@@ -35,8 +41,23 @@ class NetWeatherRepositoryImpl(
     override fun checkIntervalSeconds(): Int = stateStore.loadIntervalSeconds()
     override fun setCheckIntervalSeconds(seconds: Int) = stateStore.saveIntervalSeconds(seconds)
 
+    override suspend fun refreshGlobal(): GlobalState {
+        val remote = api.dashboard()
+        remote.resources.forEach { item ->
+            db.resourceDao().upsert(MonitoredResource(
+                id = item.id,
+                name = item.name,
+                url = item.target,
+                group = item.group,
+                intervalSeconds = item.intervalSeconds,
+                enabled = item.enabled,
+            ).toEntity())
+        }
+        return remote.global
+    }
+
     override suspend fun runChecks(): NetworkSummary {
-        ensureDefaultResources()
+        runCatching { refreshGlobal() }.onFailure { ensureDefaultResources() }
         val resources = db.resourceDao().getEnabled().map { it.toDomain() }
         val previous = latestResults().associateBy { it.resourceId }
         val results = coroutineScope { resources.map { r -> async { diagnostics.check(r) } }.map { it.await() } }

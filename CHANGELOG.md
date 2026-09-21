@@ -16,9 +16,11 @@
 - добавлена воспроизводимая публикация installable Android alpha-preview APK и SHA-256 в GitHub Releases.
 
 ### Probe architecture
-- Keenetic Domestic Probe;
-- Browser Probe;
-- unified fault-domain.
+- hardware-free VPS baseline;
+- optional Android local probe;
+- Globalping provider abstraction with priority and quota controls;
+- deterministic, evidence-based incident classification;
+- legacy router telemetry retained only as excluded historical data.
 
 ## 0.3.10-web — Interaction contract & GitHub structure
 

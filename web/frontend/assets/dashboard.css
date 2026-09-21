@@ -1040,7 +1040,7 @@ body.core-offline .overview-view .kpi-card::after{
 .viewer-mode .owner-only,
 .viewer-mode #diagCheck,
 .viewer-mode #diagTrace,
-.viewer-mode #diagTraceDomestic,
+.viewer-mode #diagExternal,
 .viewer-mode .row-check,
 .viewer-mode .event-ack,
 .viewer-mode .group-manage-actions{display:none!important}

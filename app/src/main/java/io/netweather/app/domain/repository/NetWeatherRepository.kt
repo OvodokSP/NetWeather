@@ -10,6 +10,7 @@ interface NetWeatherRepository {
     suspend fun deleteResource(resource: MonitoredResource)
     suspend fun setEnabled(id: Long, enabled: Boolean)
     suspend fun runChecks(): NetworkSummary
+    suspend fun refreshGlobal(): GlobalState
     suspend fun latestResults(): List<CheckResult>
     fun observeLatestResults(): Flow<List<CheckResult>>
     fun observeHistory(periodMillis: Long): Flow<List<NetworkSummary>>

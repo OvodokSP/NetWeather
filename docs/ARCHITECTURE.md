@@ -2,115 +2,38 @@
 
 ## Product model
 
-NetWeather is a multi-probe network observability product. The backend does not treat one probe as “truth”; it compares independent vantage points and turns their measurements into an explainable conclusion.
+NetWeather is hardware-free network observability. It works with only the hosted service:
 
-## Probe scopes
+- `GLOBAL` — mandatory NetWeather VPS baseline;
+- external measurement providers — event-driven independent confirmation;
+- `USER` — optional Android software probe using the current device connection.
 
-### GLOBAL
-External VPS outside the user network.
+No router, Keenetic, Entware, Raspberry Pi, home server, VPN or root access is required.
 
-Typical checks:
-- DNS
-- TCP
-- TLS
-- HTTP
-- response time
-- traceroute
+## One source of truth
 
-### DOMESTIC
-A probe inside the target regional/network contour, currently designed around Keenetic/router deployment.
+FastAPI and SQLite own resource identity, groups, global checks, incidents, history and diagnostic jobs. Web reads this API. Android synchronizes the same resource IDs and adds local device measurements when a user authorizes that capability.
 
-Purpose:
-- distinguish global outage from regional/operator path problems;
-- provide traceroute from a domestic vantage point.
+Historical `EXTERNAL` rows migrate to `GLOBAL`. Historical router `DOMESTIC` rows are retained as `LEGACY` for data preservation but never participate in current conclusions.
 
-### USER / BROWSER / DEVICE
-A probe that represents the user’s actual connection.
+## Measurement and diagnostics
 
-Browser Probe provides installation-free reachability and baseline measurements. Native probes extend this with deeper network access.
+`MeasurementProvider` isolates external services. `GlobalpingProvider` is the first implementation. `QuotaManager` protects 30% of the hourly budget by default for manual checks and new outages.
 
-## Data flow
+Priority order: `P0 MANUAL`, `P1 NEW_DOWN`, `P2 DEGRADED`, `P3 RECHECK`, `P4 BACKGROUND`.
 
-```text
-resource
-   │
-   ├── GLOBAL probe
-   ├── DOMESTIC probe
-   └── USER probe
-          │
-          ▼
- normalized measurements
-          │
-          ▼
- comparison / fault-domain engine
-          │
-          ▼
- dashboard + incidents + history
-```
+Healthy resources use only the inexpensive VPS baseline. Deep diagnostics are event-driven, deduplicated and cooldown-limited.
 
-## Fault-domain principle
+## Deterministic assessment
 
-A raw error such as `TLS_ERROR` is not an answer by itself.
+`IncidentAssessment` produces one of `OK`, `SERVICE_DOWN`, `DEGRADED`, `LOCAL_NETWORK`, `ISP_OUTAGE`, `DNS_FAILURE`, `ROUTING_FAILURE`, `REGIONAL_OUTAGE`, `POSSIBLE_FILTERING`, `UNKNOWN`.
 
-NetWeather should explain the failure using evidence:
+Unavailable evidence is never replaced with a guess. Without Android the UI says that **Your Network is unavailable** while Global State remains useful.
 
-```text
-GLOBAL OK + DOMESTIC FAIL
-→ likely regional/operator path issue
+## External intelligence
 
-GLOBAL FAIL + DOMESTIC FAIL
-→ likely resource/global-path outage
-
-GLOBAL OK + USER FAIL + USER→NetWeather OK
-→ likely user ISP / local route restriction
-```
-
-The engine must keep evidence and confidence separate from the human-readable conclusion.
-
-## Web architecture
-
-```text
-FastAPI
-├── resources/groups
-├── monitoring scheduler
-├── probes
-├── incidents/events
-├── history/realtime
-├── traceroute
-└── frontend SPA
-
-SQLite
-├── resources
-├── groups
-├── checks
-├── probes
-├── incidents
-└── preferences/state
-```
-
-## Resource identity
-
-Catalog resources have a persistent `catalog_key`.
-
-Rules:
-- one catalog service → one canonical identity;
-- catalog items do not duplicate across groups;
-- manual input that matches a catalog service resolves to the catalog identity;
-- custom targets remain custom.
-
-## UI capabilities
-
-UI must not render dead functionality.
-
-A panel is visible only when:
-1. the capability is available;
-2. the user has not hidden it;
-3. there is meaningful data for it where applicable.
-
-This same contract will later support licensing without rebuilding the interface.
+OONI, IODA and official service status feeds are planned as cached, event-driven `StatusProvider` inputs. They must never be polled per healthy resource or presented as active until configured and verified.
 
 ## Production isolation
 
-See [../SECURITY.md](../SECURITY.md).
-
-NetWeather is deliberately isolated from the rest of the VPS. Production code cannot choose Docker mounts, privileges or networking policy; those are enforced by root-owned host helpers.
+The non-root, read-only container, dedicated data volume, forced-command deploy key and nftables egress policy remain unchanged. See [../SECURITY.md](../SECURITY.md).
