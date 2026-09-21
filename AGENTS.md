@@ -59,6 +59,7 @@ Security tests must remain green.
 - Use `[no-deploy]` on maintenance commits under `web/**` that must not reach production.
 - Do not touch nginx, AWG, Xray or unrelated VPS services from NetWeather deployment code.
 - Rollback must preserve the NetWeather data volume.
+- Every production deploy must pass the host-owned VPN invariants before any NetWeather runtime replacement and again after deployment. A post-deploy VPN regression must fail the deploy and roll NetWeather back.
 
 ## 6. Android
 
