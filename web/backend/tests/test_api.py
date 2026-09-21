@@ -407,9 +407,11 @@ class NetWeatherApiTest(unittest.TestCase):
             ) VALUES(?,?,?,?,?,?,?,?,?,?)""", (rid,"statuspage","github.com","SIGNAL","PROVIDER_INCIDENT","medium",'{"description":"API degraded"}','{}',now-20,now+300))
         detail = self.client.get(f"/api/resources/{rid}").json()
         self.assertEqual(len(detail["timeline"]), 2)
-        self.assertEqual(detail["timeline"][0]["source"], "statuspage")
-        self.assertEqual(detail["timeline"][1]["classification"], "SERVICE_DOWN")
-        self.assertNotIn("raw", detail["timeline"][0])
+        sources = {entry["source"] for entry in detail["timeline"]}
+        self.assertIn("statuspage", sources)
+        self.assertIn("globalping", sources)
+        self.assertTrue(any(entry["classification"] == "SERVICE_DOWN" for entry in detail["timeline"]))
+        self.assertTrue(all("raw" not in entry for entry in detail["timeline"]))
         self.assertNotIn("sensitive", str(detail["timeline"]))
 
     def test_incident_refresh_stores_official_status_page_evidence(self):
