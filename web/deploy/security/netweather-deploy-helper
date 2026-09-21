@@ -19,6 +19,7 @@ ARCHIVE="${STATE}/image-${SHA}.tar.gz"
 HEALTH_JSON="${STATE}/health-${SHA}.json"
 LOAD_LOG="${STATE}/docker-load-${SHA}.txt"
 HEALTH="http://127.0.0.1:18081/api/health"
+VPN_GUARD="/usr/local/sbin/netweather-vpn-invariants"
 MAX_BYTES=$((320 * 1024 * 1024))
 
 install -d -o root -g root -m 0700 "${STATE}"
@@ -64,6 +65,10 @@ docker volume inspect "${VOLUME}" >/dev/null 2>&1 || docker volume create "${VOL
 VOLUME_PATH="$(docker volume inspect -f '{{.Mountpoint}}' "${VOLUME}")"
 chown -R 10001:10001 "${VOLUME_PATH}"
 chmod 0750 "${VOLUME_PATH}"
+
+echo "=== VPN PRE-DEPLOY INVARIANTS ==="
+[[ -x "${VPN_GUARD}" ]] || { echo "missing ${VPN_GUARD}" >&2; exit 78; }
+"${VPN_GUARD}"
 
 OLD_IMAGE=""
 for old_name in "${CONTAINER}" web-netweather-1; do
@@ -122,6 +127,8 @@ rollback() {
       echo "rollback image is legacy/root-oriented; refusing unsafe restart" >&2
     fi
   fi
+  echo "=== VPN INVARIANTS AFTER NETWEATHER ROLLBACK ===" >&2
+  "${VPN_GUARD}" >&2 || echo "VPN invariants still failing after NetWeather rollback" >&2
   exit "${rc}"
 }
 trap rollback ERR
@@ -171,6 +178,9 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 [[ "${healthy}" == 1 ]]
+
+echo "=== VPN POST-DEPLOY INVARIANTS ==="
+"${VPN_GUARD}"
 
 trap - ERR
 rm -f "${HEALTH_JSON}"
