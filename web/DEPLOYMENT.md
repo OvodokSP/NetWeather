@@ -52,6 +52,8 @@ This marker intentionally triggers the guarded production pipeline after:
 - deploy helper private-state temporary paths were installed on the VPS.
 - runtime identity and Docker health were verified against the exact commit image.
 
+The off-host hardened-image smoke also checks the free/paid capability contract and reads a public resource detail with its evidence timeline before the image can be delivered to the VPS.
+
 Expected public health after deployment: `0.4.1-web`.
 
 The release has no router-side installation step. Optional external diagnostics are enabled only with `NETWEATHER_GLOBALPING_ENABLED=true`; without it `/api/diagnostics/status` must report `enabled: false` and the baseline service remains fully operational.
