@@ -35,6 +35,8 @@ echo "=== INSTALL ROOT-OWNED SECURITY BOUNDARY ==="
 install -o root -g root -m 0755 "${SECURITY_SRC}/netweather-deploy-helper" /usr/local/sbin/netweather-deploy-helper
 install -o root -g root -m 0755 "${SECURITY_SRC}/netweather-ssh-gate" /usr/local/sbin/netweather-ssh-gate
 install -o root -g root -m 0755 "${SECURITY_SRC}/netweather-egress-guard" /usr/local/sbin/netweather-egress-guard
+install -o root -g root -m 0755 "${SECURITY_SRC}/netweather-vpn-invariants" /usr/local/sbin/netweather-vpn-invariants
+install -o root -g root -m 0600 "${SECURITY_SRC}/vpn-invariants.env.example" /etc/netweather/vpn-invariants.env.example
 install -o root -g root -m 0644 "${SECURITY_SRC}/netweather-egress-guard.service" /etc/systemd/system/netweather-egress-guard.service
 
 cat >/etc/sudoers.d/netweather-deploy <<'SUDOERS'
@@ -83,6 +85,15 @@ echo "=== APPLY KERNEL-LEVEL NETWORK ISOLATION ==="
 systemctl daemon-reload
 systemctl enable --now netweather-egress-guard.service
 nft list table inet netweather_guard >/dev/null
+
+echo "=== REQUIRE HOST-OWNED VPN INVARIANTS ==="
+if [[ ! -s /etc/netweather/vpn-invariants.env ]]; then
+  echo "Create /etc/netweather/vpn-invariants.env from /etc/netweather/vpn-invariants.env.example before enabling production deploys." >&2
+else
+  chmod 0600 /etc/netweather/vpn-invariants.env
+  chown root:root /etc/netweather/vpn-invariants.env
+  /usr/local/sbin/netweather-vpn-invariants
+fi
 
 echo "=== RESTART CURRENT NETWEATHER UNDER LOCKED RUNTIME ==="
 CURRENT_IMAGE=""
