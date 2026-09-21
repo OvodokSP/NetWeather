@@ -16,6 +16,7 @@ class SecurityContractTest(unittest.TestCase):
         cls.helper = (cls.root / "deploy" / "security" / "netweather-deploy-helper").read_text(encoding="utf-8")
         cls.gate = (cls.root / "deploy" / "security" / "netweather-ssh-gate").read_text(encoding="utf-8")
         cls.guard = (cls.root / "deploy" / "security" / "netweather-egress-guard").read_text(encoding="utf-8")
+        cls.vpn_guard = (cls.root / "deploy" / "security" / "netweather-vpn-invariants").read_text(encoding="utf-8")
         cls.keenetic_probe = (cls.root / "deploy" / "keenetic" / "netweather-probe.sh").read_text(encoding="utf-8")
         cls.keenetic_installer = (cls.root / "deploy" / "keenetic" / "install-netweather-probe.sh").read_text(encoding="utf-8")
         cls.keenetic_service = (cls.root / "deploy" / "keenetic" / "S99netweather-probe").read_text(encoding="utf-8")
@@ -106,6 +107,23 @@ class SecurityContractTest(unittest.TestCase):
         self.assertIn("chain forward", self.guard)
         for subnet in ("10.0.0.0/8", "100.64.0.0/10", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16"):
             self.assertIn(subnet, self.guard)
+
+    def test_deploy_is_blocked_and_rolled_back_on_vpn_regression(self):
+        for token in (
+            'VPN_GUARD="/usr/local/sbin/netweather-vpn-invariants"',
+            "=== VPN PRE-DEPLOY INVARIANTS ===",
+            "=== VPN POST-DEPLOY INVARIANTS ===",
+            "=== VPN INVARIANTS AFTER NETWEATHER ROLLBACK ===",
+        ):
+            self.assertIn(token, self.helper)
+        for token in (
+            "verify_tls_ip",
+            "VPN_XRAY_CONTAINER",
+            "VPN_AWG_CONTAINER",
+            "VPN_AWG_REQUIRE_REDIRECT",
+            "VPN_INVARIANTS=PASS",
+        ):
+            self.assertIn(token, self.vpn_guard)
 
     def test_no_wildcard_cors_and_spa_path_is_contained(self):
         self.assertNotIn('allow_origins=["*"]', self.main)
