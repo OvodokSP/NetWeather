@@ -29,7 +29,10 @@ Roadmap отражает текущую продуктовую концепци�
 - [x] полировка resource/groups flows
 - [x] успешный end-to-end production auto-deploy
 - [x] публичное чтение + защищённая owner-session для изменений
-- [ ] финальный device-level responsive QA на узких экранах после deploy search overlay
+- [x] problem-first Overview с читаемыми KPI, карточками и ограниченной таблицей
+- [x] исправление обрезания раскрытых групп каталога
+- [x] публикация installable Android alpha-preview APK с SHA-256
+- [ ] расширенная матрица device-level QA на физических устройствах
 
 ## 0.4 — Probe convergence
 

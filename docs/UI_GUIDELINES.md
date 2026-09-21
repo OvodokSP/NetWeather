@@ -42,6 +42,10 @@ Every resource flow must preserve group context:
 
 Resources from the curated catalog must not be duplicated across groups.
 
+Expanded catalog groups keep their natural content height. They must never share or compress a
+fixed-height grid track; the catalog viewport owns the single vertical scrollbar, so every resource
+in an expanded group remains reachable.
+
 Basic resource addition is a public action. Owner authentication must only be requested for
 management actions or capability-gated checks; the add flow must not redirect a viewer to login.
 

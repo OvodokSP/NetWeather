@@ -11,6 +11,8 @@ class SecurityContractTest(unittest.TestCase):
         cls.main = (cls.root / "backend" / "app" / "main.py").read_text(encoding="utf-8")
         repo_root = cls.root.parent
         cls.workflow = (repo_root / ".github" / "workflows" / "deploy-web.yml").read_text(encoding="utf-8")
+        cls.release_workflow = (repo_root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+        cls.readme = (repo_root / "README.md").read_text(encoding="utf-8")
         cls.helper = (cls.root / "deploy" / "security" / "netweather-deploy-helper").read_text(encoding="utf-8")
         cls.gate = (cls.root / "deploy" / "security" / "netweather-ssh-gate").read_text(encoding="utf-8")
         cls.guard = (cls.root / "deploy" / "security" / "netweather-egress-guard").read_text(encoding="utf-8")
@@ -47,6 +49,23 @@ class SecurityContractTest(unittest.TestCase):
         self.assertNotIn("scp ", self.workflow)
         self.assertNotIn("docker compose up", self.workflow)
         self.assertNotIn("bash -s", self.workflow)
+
+    def test_android_preview_is_installable_traceable_and_clearly_labeled(self):
+        required = (
+            "testDebugUnitTest assembleDebug",
+            "NetWeather-0.1.0-alpha-debug.apk",
+            "sha256sum",
+            "android-v0.1.0-alpha-preview.1",
+            "docs/ANDROID_PREVIEW.md",
+            "--prerelease",
+        )
+        for token in required:
+            self.assertIn(token, self.release_workflow)
+        self.assertNotIn("assembleRelease", self.release_workflow)
+        self.assertIn(
+            "releases/tag/android-v0.1.0-alpha-preview.1",
+            self.readme,
+        )
 
     def test_runtime_has_no_host_bind_mounts_or_privilege(self):
         required = (

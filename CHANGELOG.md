@@ -5,8 +5,14 @@
 ## Unreleased
 
 ### UI / UX
-- единый interaction contract для dialog/buttons/keyboard;
-- дальнейшая полировка Overview и групп ресурсов.
+- Overview перестроен в операционную иерархию: здоровье → временная картина → выбранные ресурсы → problem-first таблица;
+- добавлены KPI доступных ресурсов, типичного отклика и свежести данных;
+- таблица Overview ограничена восемью строками, сортирует проблемы первыми и имеет фильтр «Требуют внимания»;
+- группы каталога больше не сжимают и не обрезают ресурсы при одновременном раскрытии;
+- frontend assets получают общий cache-busting key после UI-изменений.
+
+### Distribution
+- добавлена воспроизводимая публикация installable Android alpha-preview APK и SHA-256 в GitHub Releases.
 
 ### Probe architecture
 - Keenetic Domestic Probe;

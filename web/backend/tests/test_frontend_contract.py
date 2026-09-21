@@ -95,6 +95,11 @@ class FrontendContractTest(unittest.TestCase):
         ):
             self.assertIn(token, self.js)
         self.assertIn(".resource-catalog-groups{", self.css)
+        self.assertRegex(
+            self.css,
+            r"\.resource-catalog-groups\{[^}]*display:flex;[^}]*flex-direction:column",
+        )
+        self.assertRegex(self.css, r"\.catalog-group\{[^}]*flex:0 0 auto")
         self.assertIn(".catalog-resource-row{", self.css)
         self.assertIn(".custom-resource-block{", self.css)
         self.assertIn("Добавить выбранные", self.html)

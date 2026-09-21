@@ -487,7 +487,9 @@ body{font-size:var(--nw-fs-base);font-weight:400;-webkit-font-smoothing:antialia
   min-height:0;
   overflow:auto;
   padding:12px 14px 14px;
-  display:grid;
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
   gap:9px;
   scrollbar-width:thin;
   scrollbar-color:#4b6076 transparent;
@@ -496,6 +498,7 @@ body{font-size:var(--nw-fs-base);font-weight:400;-webkit-font-smoothing:antialia
 .resource-catalog-groups::-webkit-scrollbar-thumb{background:#4b6076;border-radius:999px}
 .catalog-loading{min-height:180px;display:grid;place-items:center;color:var(--muted);font-size:11px}
 .catalog-group{
+  flex:0 0 auto;
   border:1px solid var(--line);
   border-radius:11px;
   background:var(--panel2);

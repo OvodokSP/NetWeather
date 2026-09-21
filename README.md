@@ -4,10 +4,14 @@
 
 [![Web checks](https://github.com/OvodokSP/NetWeather/actions/workflows/web-checks.yml/badge.svg?branch=feature%2Fweb-vps-monitoring)](https://github.com/OvodokSP/NetWeather/actions/workflows/web-checks.yml)
 [![Android build](https://github.com/OvodokSP/NetWeather/actions/workflows/build.yml/badge.svg?branch=feature%2Fweb-vps-monitoring)](https://github.com/OvodokSP/NetWeather/actions/workflows/build.yml)
+[![Auto-deploy](https://github.com/OvodokSP/NetWeather/actions/workflows/deploy-web.yml/badge.svg?branch=feature%2Fweb-vps-monitoring)](https://github.com/OvodokSP/NetWeather/actions/workflows/deploy-web.yml)
+[![Android preview](https://github.com/OvodokSP/NetWeather/actions/workflows/release.yml/badge.svg?branch=feature%2Fweb-vps-monitoring)](https://github.com/OvodokSP/NetWeather/actions/workflows/release.yml)
 
-**Рабочий сайт:** https://netweather.online  
-**Текущий web-контур:** `0.3.10-web`  
-**Статус:** активная разработка; интерфейс и диагностика стабилизируются до введения аккаунтов/тарифов.
+| Контур | Состояние |
+|---|---|
+| Web | [netweather.online](https://netweather.online), `0.3.10-web` |
+| Android | [alpha-preview APK и SHA-256](https://github.com/OvodokSP/NetWeather/releases/tag/android-v0.1.0-alpha-preview.1) |
+| Probes | Global Probe работает; Domestic/Browser Probe и единый fault-domain находятся в разработке |
 
 ## Что такое NetWeather
 
@@ -36,9 +40,11 @@ NetWeather объединяет несколько точек наблюдени
 - read/unread для инцидентов;
 - диагностика и server-side traceroute;
 - настраиваемый Overview и закреплённые ресурсы;
+- problem-first Overview: здоровье, свежесть данных, доступные ресурсы, типичный отклик, график, события и быстрый фильтр проблем;
+- естественная прокрутка Overview без обрезания таблицы и с читаемыми карточками на desktop/mobile;
 - capability-aware UI: недоступные панели не занимают место;
 - минимальный размер текста в web UI — **10 px**;
-- hardened production container и закрытый deployment channel.
+- hardened production container и закрытый deployment channel;
 - каталоговые сервисы с anti-bot HTTP-ответом не создают ложные инциденты, если DNS/TCP/TLS и HTTP-обмен состоялись.
 
 ### Android
@@ -51,6 +57,8 @@ Android-клиент остаётся частью общей архитекту
 - уведомления;
 - виджеты;
 - интеграция с общей моделью NetWeather Probe.
+
+Установочная alpha-preview сборка публикуется в [GitHub Releases](https://github.com/OvodokSP/NetWeather/releases/tag/android-v0.1.0-alpha-preview.1). Это подписанный debug APK для проверки, а не production-signed релиз; точные ограничения описаны в [docs/ANDROID_PREVIEW.md](docs/ANDROID_PREVIEW.md).
 
 ## Архитектура репозитория
 
@@ -110,7 +118,7 @@ Android:
 
 - единый визуальный язык на всех экранах;
 - шрифт не меньше 10 px;
-- полезная плотность вместо пустого пространства;
+- полезная плотность без сжатия, обрезания и конкурирующих областей прокрутки;
 - группы — часть основной модели, а не вспомогательный фильтр;
 - недоступный функционал скрывается, а не показывается мёртвым;
 - действия имеют loading/success/error состояния;

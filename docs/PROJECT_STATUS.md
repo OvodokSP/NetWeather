@@ -22,6 +22,7 @@
 - Production UI is publicly readable; anonymous users can add a basic HTTP/HTTPS resource, while privileged mutations require an owner session.
 - Catalog anti-bot HTTP rejections are represented as reachable rather than false outages.
 - Android latest results and interval settings use persisted reactive state.
+- Installable Android `0.1.0-alpha-debug` preview and SHA-256 are published through a dedicated prerelease workflow.
 
 ## Deployment channel
 
@@ -54,9 +55,13 @@ Completed in 0.3.10:
 - non-shifting opaque search overlay with keyboard navigation;
 - privacy-safe local resource icons without third-party browser requests;
 - fault-domain panel hidden until an independent comparison probe exists.
+- operational Overview with freshness, resource-count and median-latency KPIs;
+- problem-first bounded resource table and explicit issue filter;
+- readable natural page scrolling instead of viewport compression;
+- catalog groups retain natural height and use one shared catalog scrollbar.
 
 Next UI work:
-- final device-level responsive verification on narrow layouts after the current search-overlay deployment;
+- continued device-level responsive verification on representative physical devices;
 - contextual help/tooltips;
 - remaining empty/error-state polish;
 - browser-probe panels when capability exists.
