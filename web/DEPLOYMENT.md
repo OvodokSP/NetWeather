@@ -55,3 +55,19 @@ This marker intentionally triggers the guarded production pipeline after:
 Expected public health after deployment: `0.4.1-web`.
 
 The release has no router-side installation step. Optional external diagnostics are enabled only with `NETWEATHER_GLOBALPING_ENABLED=true`; without it `/api/diagnostics/status` must report `enabled: false` and the baseline service remains fully operational.
+
+## SQLite backup and restore
+
+`python -m app.backup` uses SQLite's online backup API, checks the produced database with `PRAGMA integrity_check`, writes backups with mode `0600`, and atomically replaces the destination. The `restore` action requires `--offline-confirmed`, validates the source first, refuses a target with `-wal`/`-shm` sidecars, and saves a `.pre-restore-<timestamp>.sqlite` rollback copy beside an existing target.
+
+Example for a disposable/local database:
+
+```bash
+PYTHONPATH=web/backend python -m app.backup backup \
+  --source /path/to/netweather.db --destination /safe/backup/netweather.sqlite
+PYTHONPATH=web/backend python -m app.backup restore \
+  --source /safe/backup/netweather.sqlite --destination /path/to/netweather.db \
+  --offline-confirmed
+```
+
+Do not run restore against a live production database. Production backup/restore still needs a supervised rehearsal through the approved maintenance channel; the deploy workflow does not execute database restoration and must preserve the `/data` volume during image replacement or rollback.

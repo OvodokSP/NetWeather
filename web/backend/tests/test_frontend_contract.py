@@ -218,6 +218,13 @@ class FrontendContractTest(unittest.TestCase):
             self.assertIn(token, self.js)
 
         self.assertIn('z-index:120', self.css)
+
+    def test_resource_details_show_scrollable_long_term_evidence(self):
+        self.assertIn('"timeline"', (self.root / "backend" / "app" / "main.py").read_text(encoding="utf-8"))
+        self.assertIn("timeline=d.timeline||[]", self.js)
+        self.assertIn("История событий и внешних данных · до 12 месяцев", self.js)
+        self.assertIn(".evidence-timeline{", self.css)
+        self.assertIn(".evidence-timeline-row{", self.css)
         self.assertIn('isolation:isolate', self.css)
         self.assertNotIn('.search-open .workspace{', self.css)
         self.assertIn('if(S.searchOpen)renderSearch(q("#globalSearch").value)', self.js)

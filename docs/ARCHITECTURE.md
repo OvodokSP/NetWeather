@@ -36,7 +36,11 @@ Android starts an authorization session and shows a unique eight-character code.
 
 ## External intelligence
 
-OONI aggregation and IODA country alerts are cached, event-driven evidence inputs. They run only after an incident or an owner-requested diagnosis. Provider failures are fail-closed: an error is returned as unavailable evidence and never converted into an outage conclusion. Official service status feeds remain planned.
+OONI aggregation and IODA country alerts are cached, event-driven evidence inputs. A `StatusProvider` abstraction also reads public Statuspage summary feeds for the allowlisted GitHub and Cloudflare services. These feeds run only on an incident or owner-requested diagnosis, are cached in SQLite, and remain contextual evidence; they never override probe results or assert that a target is down. The adapter reads only the public `summary.json` endpoints, not authenticated management APIs. The public endpoint format is verified against [GitHub Status](https://www.githubstatus.com/api/v2/summary.json) and [Cloudflare Status](https://www.cloudflarestatus.com/api/v2/summary.json); the Statuspage API documentation describes the separately authenticated management API at [developer.statuspage.io](https://developer.statuspage.io/).
+
+Provider, diagnostic, incident, and global/local state transitions are returned in each resource detail's evidence timeline. The API retains and returns up to the most recent 12 months for this view; detailed check samples continue to use their own shorter retention policy. Raw provider payloads and credentials are excluded from the timeline.
+
+`GET /api/capabilities` publishes the free, owner-only, and not-yet-enabled paid capability contract. Basic resource addition and global monitoring are free. Paid deep-check entitlements and billing are currently disabled; this endpoint does not claim that a payment or account system exists.
 
 ## Production isolation
 

@@ -13,6 +13,9 @@
 - Deterministic assessment, provider abstraction and a quota reserve are implemented.
 - Globalping submission, persistent quota accounting, result polling and conservative multi-probe classification are implemented.
 - OONI and IODA evidence adapters are event-driven and cached; external failures do not alter the baseline conclusion.
+- `StatusProvider` reads allowlisted GitHub and Cloudflare public status summaries only on incidents/manual diagnostics; it adds context without overriding probe results.
+- Resource details expose a redacted evidence timeline from checks, incidents, and providers for up to 12 months.
+- `GET /api/capabilities` declares free basic resource addition, owner-only controls, and paid checks disabled until billing/entitlements exist.
 - Android device enrollment uses an expiring unique code approved by the owner on the Web site; device tokens are independently revocable.
 - Resource groups are implemented.
 - Ranked resource catalog is implemented.
@@ -66,15 +69,13 @@ Completed in 0.3.10:
 - catalog groups retain natural height and use one shared catalog scrollbar.
 
 Next UI work:
-- continued device-level responsive verification on representative physical devices;
-- contextual help/tooltips;
-- remaining empty/error-state polish;
-- physical-device verification of Global State / Your Network on representative phones.
+- physical-device verification of Global State / Your Network on representative phones;
+- contextual help/tooltips and remaining empty/error-state polish.
 
 ## Next functional work
 
-1. Verify live Globalping, OONI and IODA responses after production deployment and retain fixtures for contract regression.
+1. Verify live Globalping, OONI and IODA responses from production and retain real response fixtures for contract regression.
 2. Complete representative physical-device pairing and responsive-layout QA.
-3. Add official status providers and long-term evidence timeline.
-4. Alerts/reporting refinement.
-5. Accounts/capabilities/licensing only after the base tool is complete.
+3. Perform an application data backup/restore rehearsal without touching other VPS services.
+4. Configure a production signing key before creating a signed Android release; preview remains debug-signed.
+5. Billing and paid entitlements remain disabled until the licensing model is selected.

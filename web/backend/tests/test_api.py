@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 from app.providers import ProviderSubmission
 from app.diagnostics import DiagnosticPriority
+from app.intelligence import IntelligenceEvidence
 
 
 class NetWeatherApiTest(unittest.TestCase):
@@ -381,6 +382,46 @@ class NetWeatherApiTest(unittest.TestCase):
         rid = self.client.get("/api/dashboard").json()["resources"][0]["id"]
         request = self.client.post(f"/api/resources/{rid}/diagnose")
         self.assertEqual(request.status_code, 503)
+
+    def test_capability_registry_keeps_basic_use_free_and_paid_checks_disabled(self):
+        self.main.AUTH_REQUIRED = True
+        anonymous = self.client.get("/api/capabilities").json()
+        self.assertFalse(anonymous["billing_enabled"])
+        self.assertTrue(anonymous["plans"]["free"]["available"])
+        self.assertIn("resource.add_basic", anonymous["plans"]["free"]["capabilities"])
+        self.assertFalse(anonymous["plans"]["paid"]["available"])
+        self.assertFalse(anonymous["owner_controls"]["authenticated"])
+        owner = self.client.get("/api/capabilities", headers=self.auth).json()
+        self.assertTrue(owner["owner_controls"]["authenticated"])
+        self.assertFalse(owner["service"]["globalping_healthy_background_checks"])
+
+    def test_resource_detail_includes_long_term_evidence_timeline_without_raw_payloads(self):
+        rid = self.client.get("/api/dashboard").json()["resources"][0]["id"]
+        now = int(time.time())
+        with self.main.db() as conn:
+            conn.execute("""INSERT INTO diagnostic_jobs(
+              resource_id,provider,priority,status,created_at,updated_at,classification,confidence,result_summary_json,raw_json,completed_at
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?)""", (rid,"globalping",1,"finished",now-30,now,"SERVICE_DOWN","high",'{"failed":3}','{"sensitive":"hidden"}',now))
+            conn.execute("""INSERT INTO external_evidence(
+              resource_id,provider,scope_key,status,classification,confidence,summary_json,raw_json,fetched_at,expires_at
+            ) VALUES(?,?,?,?,?,?,?,?,?,?)""", (rid,"statuspage","github.com","SIGNAL","PROVIDER_INCIDENT","medium",'{"description":"API degraded"}','{}',now-20,now+300))
+        detail = self.client.get(f"/api/resources/{rid}").json()
+        self.assertEqual(len(detail["timeline"]), 2)
+        self.assertEqual(detail["timeline"][0]["source"], "statuspage")
+        self.assertEqual(detail["timeline"][1]["classification"], "SERVICE_DOWN")
+        self.assertNotIn("raw", detail["timeline"][0])
+        self.assertNotIn("sensitive", str(detail["timeline"]))
+
+    def test_incident_refresh_stores_official_status_page_evidence(self):
+        rid = next(r["id"] for r in self.client.get("/api/resources").json() if r["target"] == "https://github.com")
+        evidence = IntelligenceEvidence("statuspage", "SIGNAL", "PROVIDER_INCIDENT", "medium",
+                                        {"service":"GitHub","description":"API degraded"}, {})
+        with patch.object(self.main._statuspage, "fetch", new=AsyncMock(return_value=evidence)) as fetch:
+            result = asyncio.run(self.main.refresh_external_intelligence(rid, force=True))
+        fetch.assert_awaited_once_with("https://github.com")
+        self.assertEqual(result["statuspage"]["classification"], "PROVIDER_INCIDENT")
+        detail = self.client.get(f"/api/resources/{rid}").json()
+        self.assertTrue(any(x["source"] == "statuspage" for x in detail["timeline"]))
 
     def test_external_diagnostic_requests_are_deduplicated(self):
         rid = self.client.get("/api/dashboard").json()["resources"][0]["id"]

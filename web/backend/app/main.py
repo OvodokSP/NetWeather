@@ -42,7 +42,8 @@ from .device_auth import (
     DeviceIdentity, approve_authorization, authenticate_device, list_devices,
     poll_authorization, revoke_device, start_authorization,
 )
-from .intelligence import IodaProvider, OoniProvider
+from .intelligence import IodaProvider, OoniProvider, StatuspageProvider
+from .capabilities import capability_registry
 
 
 SESSION_COOKIE = "netweather_owner"
@@ -54,6 +55,7 @@ _globalping = GlobalpingProvider(GLOBALPING_TOKEN, GLOBALPING_BASE_URL)
 _diagnostics = DiagnosticCoordinator(_globalping, _quota, DIAGNOSTIC_COOLDOWN_SECONDS)
 _ooni = OoniProvider(OONI_BASE_URL, OONI_PROBE_COUNTRY)
 _ioda = IodaProvider(IODA_BASE_URL, IODA_COUNTRY)
+_statuspage = StatuspageProvider()
 
 
 def _owner_secret() -> str:
@@ -200,6 +202,22 @@ async def refresh_external_intelligence(resource_id: int, force: bool = False) -
                                   "classification": evidence.classification, "confidence": evidence.confidence}
             except Exception as exc:
                 result["ioda"] = {"status": "ERROR", "classification": "UNKNOWN", "error": str(exc)[:300]}
+    try:
+        with db() as conn:
+            cached = conn.execute("""SELECT status,classification,confidence,summary_json,fetched_at,expires_at
+              FROM external_evidence WHERE provider='statuspage' AND scope_key=?
+              ORDER BY fetched_at DESC,id DESC LIMIT 1""", (domain,)).fetchone()
+        if cached and int(cached["expires_at"]) > now and not force:
+            result["statuspage"] = {**dict(cached), "summary": json.loads(cached["summary_json"] or "{}"), "cached": True}
+        else:
+            status_evidence = await _statuspage.fetch(resource["target"])
+            if status_evidence:
+                _store_evidence(resource_id, "statuspage", domain, status_evidence, now)
+                result["statuspage"] = {**status_evidence.summary, "status": status_evidence.status,
+                                         "classification": status_evidence.classification,
+                                         "confidence": status_evidence.confidence}
+    except Exception as exc:
+        result["statuspage"] = {"status": "ERROR", "classification": "UNKNOWN", "error": str(exc)[:300]}
     return result
 
 
@@ -295,6 +313,12 @@ def system_info():
       "default_interval_seconds":DEFAULT_INTERVAL,"scheduler_enabled":SCHEDULER_ENABLED,
       "auth_required":AUTH_REQUIRED,"globalping_enabled":GLOBALPING_ENABLED,
       "ooni_enabled":OONI_ENABLED,"ioda_enabled":IODA_ENABLED,"diagnostic_quota":_quota.status()}
+
+
+@app.get("/api/capabilities")
+def capabilities(request: Request, authorization: str | None = Header(default=None)):
+    return capability_registry(owner=not AUTH_REQUIRED or _is_owner(request, authorization),
+                               globalping_enabled=GLOBALPING_ENABLED)
 
 
 @app.get("/api/auth/verify", dependencies=[Depends(require_token)])
@@ -536,7 +560,45 @@ def resource_details(resource_id:int):
     if not rows: raise HTTPException(404,"Resource not found")
     with db() as conn:
         checks=conn.execute("SELECT * FROM checks WHERE resource_id=? ORDER BY checked_at DESC,id DESC LIMIT 30",(resource_id,)).fetchall()
-    return {"resource":rows[0],"checks":[dict(r) for r in checks],"incidents":[i for i in get_incidents(False,200) if i["resource_id"]==resource_id][:20]}
+        cutoff = int(time.time()) - 365 * 86400
+        timeline = []
+        for row in conn.execute("""SELECT id,provider,status,classification,confidence,result_summary_json,created_at,completed_at
+          FROM diagnostic_jobs WHERE resource_id=? AND COALESCE(completed_at,created_at)>=?
+          ORDER BY COALESCE(completed_at,created_at) DESC,id DESC LIMIT 120""", (resource_id, cutoff)):
+            timeline.append({"id":f"diagnostic:{row['id']}","type":"diagnostic","time":row["completed_at"] or row["created_at"],
+              "source":row["provider"],"status":row["status"],"classification":row["classification"],
+              "confidence":row["confidence"],"summary":json.loads(row["result_summary_json"] or "{}")})
+        for row in conn.execute("""SELECT id,provider,status,classification,confidence,summary_json,fetched_at
+          FROM external_evidence WHERE (resource_id=? OR resource_id IS NULL) AND fetched_at>=?
+          ORDER BY fetched_at DESC,id DESC LIMIT 120""", (resource_id, cutoff)):
+            timeline.append({"id":f"evidence:{row['id']}","type":"evidence","time":row["fetched_at"],
+              "source":row["provider"],"status":row["status"],"classification":row["classification"],
+              "confidence":row["confidence"],"summary":json.loads(row["summary_json"] or "{}")})
+        for row in conn.execute("""SELECT id,kind,severity,opened_at,closed_at,message FROM incidents
+          WHERE resource_id=? AND (opened_at>=? OR closed_at>=?) ORDER BY opened_at DESC,id DESC LIMIT 120""",
+          (resource_id, cutoff, cutoff)):
+            timeline.append({"id":f"incident:{row['id']}:opened","type":"incident_opened","time":row["opened_at"],
+              "source":"incident","status":"OPENED","classification":row["kind"],"confidence":None,
+              "summary":{"severity":row["severity"],"message":row["message"]}})
+            if row["closed_at"] and row["closed_at"] >= cutoff:
+                timeline.append({"id":f"incident:{row['id']}:closed","type":"incident_closed","time":row["closed_at"],
+                  "source":"incident","status":"CLOSED","classification":row["kind"],"confidence":None,
+                  "summary":{"severity":row["severity"],"message":row["message"]}})
+        status_rows = conn.execute("""SELECT checked_at,status,probe_scope,message FROM checks
+          WHERE resource_id=? AND checked_at>=? ORDER BY checked_at,id LIMIT 1000""", (resource_id, cutoff)).fetchall()
+        previous = {}
+        for row in status_rows:
+            scope = row["probe_scope"]
+            old = previous.get(scope)
+            if old and old["status"] != row["status"] and is_reachable(old["status"]) != is_reachable(row["status"]):
+                timeline.append({"id":f"check:{resource_id}:{row['checked_at']}:{scope}","type":"status_change",
+                  "time":row["checked_at"],"source":scope,"status":row["status"],"classification":row["status"],
+                  "confidence":None,"summary":{"previous_status":old["status"],"message":row["message"]}})
+            previous[scope] = row
+    timeline.sort(key=lambda item:(int(item["time"] or 0),item["id"]),reverse=True)
+    return {"resource":rows[0],"checks":[dict(r) for r in checks],
+            "incidents":[i for i in get_incidents(False,200) if i["resource_id"]==resource_id][:20],
+            "timeline":timeline[:100]}
 
 
 @app.post("/api/resources")

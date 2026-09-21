@@ -11,14 +11,14 @@
 |---|---|
 | Web | [netweather.online](https://netweather.online), `0.4.1-web` после успешного auto-deploy |
 | Android | `0.4.1-alpha`; новый APK публикуется только после зелёного Android CI |
-| Источники | VPS baseline, событийные Globalping/OONI/IODA и необязательный авторизованный Android local probe |
+| Источники | VPS baseline, событийные Globalping/OONI/IODA/официальные Statuspage-ленты и необязательный авторизованный Android local probe |
 
 ## Что такое NetWeather
 
 NetWeather объединяет hosted-мониторинг и необязательные software probes в одну картину сети.
 
 - **Global State** — VPS: DNS → TCP → TLS → HTTP, история и серверная диагностика.
-- **External evidence** — Globalping и будущие cached OONI/IODA/status feeds, только при событии.
+- **External evidence** — Globalping, cached OONI/IODA и официальные статусы GitHub/Cloudflare при инциденте или ручной диагностике.
 - **Your Network** — необязательная локальная диагностика Android без root, VPN, ADB и отдельного hardware.
 - **Incident Assessment** — детерминированный вывод с уровнем уверенности и честным `UNKNOWN` при нехватке данных.
 
@@ -37,11 +37,13 @@ NetWeather объединяет hosted-мониторинг и необязат�
 - DNS/TCP/TLS/HTTP этапы;
 - события и инциденты;
 - read/unread для инцидентов;
+- лента доказательств по ресурсу: проверки, инциденты, Globalping и внешние сигналы (до 12 месяцев);
 - диагностика и server-side traceroute;
 - настраиваемый Overview и закреплённые ресурсы;
 - problem-first Overview: здоровье, свежесть данных, доступные ресурсы, типичный отклик, график, события и быстрый фильтр проблем;
 - естественная прокрутка Overview без обрезания таблицы и с читаемыми карточками на desktop/mobile;
 - capability-aware UI: недоступные панели не занимают место;
+- `GET /api/capabilities` публикует бесплатные функции, owner-only controls и отключённые до billing платные проверки;
 - минимальный размер текста в web UI — **10 px**;
 - hardened production container и закрытый deployment channel;
 - каталоговые сервисы с anti-bot HTTP-ответом не создают ложные инциденты, если DNS/TCP/TLS и HTTP-обмен состоялись.
@@ -128,7 +130,7 @@ Android:
 
 ## Roadmap
 
-Ближайший продуктовый контур: live-contract verification внешних источников, official-status providers, долгосрочная evidence timeline и representative-device QA. Аппаратные router probes в roadmap не входят.
+Остаются: live-provider smoke из production, QA на реальных Android-устройствах, backup/restore rehearsal и production-подпись Android (для неё ещё не настроен signing key). Публичные Statuspage-ленты GitHub/Cloudflare, evidence timeline и capability registry уже добавлены. Аппаратные router probes в roadmap не входят.
 
 См. [ROADMAP.md](ROADMAP.md).
 

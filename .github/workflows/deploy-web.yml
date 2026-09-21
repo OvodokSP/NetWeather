@@ -122,6 +122,23 @@ jobs:
           curl -fsS --max-time 3 http://127.0.0.1:18081/ >/dev/null
           curl -fsS --max-time 3 http://127.0.0.1:18081/api/system >/dev/null
           curl -fsS --max-time 3 http://127.0.0.1:18081/api/groups >/dev/null
+          python - <<'PY'
+          import json
+          from urllib.request import urlopen
+
+          base = "http://127.0.0.1:18081"
+          with urlopen(base + "/api/capabilities", timeout=3) as response:
+              capabilities = json.load(response)
+          assert capabilities["billing_enabled"] is False
+          assert "resource.add_basic" in capabilities["plans"]["free"]["capabilities"]
+          assert capabilities["plans"]["paid"]["available"] is False
+          with urlopen(base + "/api/resources", timeout=3) as response:
+              resources = json.load(response)
+          if resources:
+              with urlopen(base + f"/api/resources/{resources[0]['id']}", timeout=3) as response:
+                  detail = json.load(response)
+              assert isinstance(detail["timeline"], list)
+          PY
           test "$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
             http://127.0.0.1:18081/api/groups -d '{"title":"blocked"}')" = "401"
           curl -fsS --max-time 3 -H 'Authorization: Bearer deploy-ci-only' \

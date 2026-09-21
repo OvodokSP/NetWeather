@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
@@ -15,6 +17,69 @@ class IntelligenceEvidence:
     confidence: str
     summary: dict[str, Any]
     raw: dict[str, Any]
+
+
+class StatusProvider(ABC):
+    """Read-only interface for public, official service status pages."""
+
+    name = "statuspage"
+
+    @abstractmethod
+    async def fetch(self, target: str) -> IntelligenceEvidence | None:
+        raise NotImplementedError
+
+
+class StatuspageProvider(StatusProvider):
+    """Statuspage.io public summary feeds for explicitly supported services.
+
+    The fixed allowlist avoids turning an incident refresh into a user-controlled
+    outbound request. Additions to this map must point to the service's official page.
+    """
+
+    PAGES = {
+        "github.com": ("GitHub", "https://www.githubstatus.com"),
+        "cloudflare.com": ("Cloudflare", "https://www.cloudflarestatus.com"),
+        "1.1.1.1": ("Cloudflare", "https://www.cloudflarestatus.com"),
+    }
+
+    async def fetch(self, target: str) -> IntelligenceEvidence | None:
+        host = (urlparse(target).hostname or "").lower().rstrip(".").removeprefix("www.")
+        page = self.PAGES.get(host)
+        if not page:
+            return None
+        name, base_url = page
+        async with httpx.AsyncClient(timeout=10, headers={"User-Agent": "NetWeather/0.4"}) as client:
+            response = await client.get(f"{base_url}/api/v2/summary.json")
+            response.raise_for_status()
+            data = response.json()
+        status = data.get("status") if isinstance(data, dict) else None
+        indicator = str((status or {}).get("indicator") or "unknown").lower()
+        description = str((status or {}).get("description") or "")[:240]
+        components = data.get("components") if isinstance(data, dict) else []
+        degraded = [
+            str(item.get("name") or "")[:120]
+            for item in components if isinstance(item, dict)
+            and str(item.get("status") or "").lower() not in {"operational", ""}
+        ]
+        if indicator == "none" and not degraded:
+            classification, evidence_status = "OPERATIONAL", "CLEAR"
+        elif indicator in {"minor", "major", "critical", "maintenance"} or degraded:
+            classification, evidence_status = "PROVIDER_INCIDENT", "SIGNAL"
+        else:
+            classification, evidence_status = "UNKNOWN", "NO_DATA"
+        incidents = data.get("incidents") if isinstance(data, dict) else []
+        maintenances = data.get("scheduled_maintenances") if isinstance(data, dict) else []
+        summary = {
+            "service": name,
+            "status_page": base_url,
+            "indicator": indicator,
+            "description": description,
+            "degraded_components": degraded[:20],
+            "active_incidents": len(incidents) if isinstance(incidents, list) else 0,
+            "scheduled_maintenances": len(maintenances) if isinstance(maintenances, list) else 0,
+            "updated_at": str((data.get("page") or {}).get("updated_at") or "")[:40],
+        }
+        return IntelligenceEvidence(self.name, evidence_status, classification, "medium", summary, {})
 
 
 class OoniProvider:
