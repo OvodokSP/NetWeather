@@ -50,6 +50,7 @@ jobs:
           bash -n web/deploy/security/netweather-deploy-helper
           bash -n web/deploy/security/netweather-ssh-gate
           bash -n web/deploy/security/netweather-egress-guard
+          bash -n web/deploy/security/netweather-vpn-invariants
           bash -n web/deploy/security/install-host-isolation.sh
 
       - name: Run web tests
