@@ -527,7 +527,7 @@ body{font-size:var(--nw-fs-base);font-weight:400;-webkit-font-smoothing:antialia
   position:relative;
   min-height:52px;
   display:grid;
-  grid-template-columns:18px 0 28px minmax(0,1fr) auto;
+  grid-template-columns:18px 28px minmax(0,1fr) auto;
   align-items:center;
   gap:8px;
   padding:7px 9px;
@@ -548,9 +548,9 @@ body{font-size:var(--nw-fs-base);font-weight:400;-webkit-font-smoothing:antialia
 .catalog-resource-row input:checked+.catalog-checkmark:after{content:"✓";font-size:11px;font-weight:800;color:#fff;line-height:1}
 .catalog-resource-row .resource-glyph{width:27px;height:27px;border-radius:7px}
 .catalog-resource-main{min-width:0}
-.catalog-resource-main b{display:flex;align-items:center;gap:6px;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.catalog-resource-main b{display:flex;align-items:center;gap:6px;min-width:0;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .catalog-resource-main b em{font-style:normal;color:var(--muted2);font-size:10px;font-weight:600}
-.catalog-resource-main small{display:block;margin-top:3px;color:var(--muted);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.catalog-resource-main small{display:block;margin-top:3px;color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .catalog-added-badge,.catalog-add-hint{font-size:10px;white-space:nowrap}
 .catalog-added-badge{color:var(--green)}
 .catalog-add-hint{color:var(--blue);opacity:.8}

@@ -46,6 +46,9 @@ Expanded catalog groups keep their natural content height. They must never share
 fixed-height grid track; the catalog viewport owns the single vertical scrollbar, so every resource
 in an expanded group remains reachable.
 
+Catalog rows reserve explicit columns for the checkbox and resource icon. The remaining width
+belongs to the resource name and domain; labels must never collapse into letter-wide fragments.
+
 Basic resource addition is a public action. Owner authentication must only be requested for
 management actions or capability-gated checks; the add flow must not redirect a viewer to login.
 

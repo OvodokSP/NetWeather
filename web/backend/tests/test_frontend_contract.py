@@ -101,6 +101,11 @@ class FrontendContractTest(unittest.TestCase):
         )
         self.assertRegex(self.css, r"\.catalog-group\{[^}]*flex:0 0 auto")
         self.assertIn(".catalog-resource-row{", self.css)
+        self.assertRegex(
+            self.css,
+            r"\.catalog-resource-row\{[^}]*grid-template-columns:18px 28px minmax\(0,1fr\) auto",
+        )
+        self.assertNotIn("grid-template-columns:18px 0 28px", self.css)
         self.assertIn(".custom-resource-block{", self.css)
         self.assertIn("Добавить выбранные", self.html)
 
