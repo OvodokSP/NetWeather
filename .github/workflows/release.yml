@@ -7,6 +7,10 @@ on:
     branches: [ feature/web-vps-monitoring ]
     paths:
       - ".github/workflows/release.yml"
+      - "app/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
 
 permissions:
   contents: write
