@@ -48,6 +48,12 @@ Production image:
 
 Deploy user не состоит в группе `docker`.
 
+## VPN regression boundary
+
+NetWeather production deployment must preserve unrelated VPN services on the shared VPS. The root-owned `/usr/local/sbin/netweather-vpn-invariants` checker reads only host-owned expectations from `/etc/netweather/vpn-invariants.env` and runs before and after every NetWeather runtime replacement.
+
+A failed pre-check aborts without changing the NetWeather container. A failed post-check triggers NetWeather rollback to the previous hardened image and fails the deploy. The checker covers nginx syntax, VLESS/Xray runtime + TLS identity, NetWeather-domain TLS isolation, and the configured AWG runtime/UDP redirect.
+
 ## SSRF
 
 Production принудительно использует:
