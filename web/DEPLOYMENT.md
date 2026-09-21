@@ -19,6 +19,31 @@ Security boundary:
 Last deployment-channel verification trigger: 2026-09-19.
 
 
+
+## Mandatory VPN invariants
+
+NetWeather shares the VPS with independent VPN services. A NetWeather deployment is not successful unless those services remain healthy.
+
+Production uses the root-owned checker:
+
+```text
+/usr/local/sbin/netweather-vpn-invariants
+/etc/netweather/vpn-invariants.env
+```
+
+The host-owned config defines the expected public IP/domain, Xray container/backend port and AWG container/interface/UDP redirect. The deploy payload cannot choose these values.
+
+Deployment contract:
+
+1. run VPN invariants before removing the old NetWeather container;
+2. if pre-check fails, abort without changing NetWeather;
+3. deploy and verify the new NetWeather image;
+4. run the same VPN invariants again;
+5. if post-check fails, automatically roll NetWeather back to the previous hardened image and fail the deploy;
+6. verify the VPN invariants again after rollback and surface any remaining host-level failure.
+
+The checker verifies nginx syntax, the VLESS/Xray runtime and loopback backend, TLS identity for the VPN public IP, independent TLS identity for the NetWeather domain, the AWG container/interface/backend UDP listener, and (when configured) the UDP public-port redirect used by HomeRoute.
+
 ## 0.3.10 production verification
 
 This marker intentionally triggers the guarded production pipeline after:
