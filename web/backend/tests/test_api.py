@@ -22,6 +22,7 @@ class NetWeatherApiTest(unittest.TestCase):
         os.environ["NETWEATHER_SEED_DEFAULTS"] = "true"
         os.environ["NETWEATHER_SCHEDULER_ENABLED"] = "false"
         os.environ["NETWEATHER_ALLOW_OPEN_ACCESS"] = "true"
+        os.environ["NETWEATHER_GLOBALPING_ENABLED"] = "false"
         os.environ["FRONTEND_DIR"] = str(Path(__file__).resolve().parents[2] / "frontend")
         import app.config as config
         import app.database as database

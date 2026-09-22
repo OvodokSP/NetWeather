@@ -30,7 +30,10 @@ ALERT_WEBHOOK_URL = os.getenv("ALERT_WEBHOOK_URL", "").strip()
 CLIENT_PROBE_STALE_SECONDS = int(os.getenv("NETWEATHER_CLIENT_PROBE_STALE_SECONDS", "180"))
 SERVER_PROBE_KEY = os.getenv("NETWEATHER_SERVER_PROBE_KEY", "VPS_EU").strip() or "VPS_EU"
 SERVER_PROBE_NAME = os.getenv("NETWEATHER_SERVER_PROBE_NAME", "NetWeather VPS").strip() or "NetWeather VPS"
-GLOBALPING_ENABLED = os.getenv("NETWEATHER_GLOBALPING_ENABLED", "false").lower() in {"1","true","yes","on"}
+# Globalping's public API is available without a token; keep the provider on by
+# default so a production deployment cannot silently degrade to a stub. A token
+# may still be supplied to receive the higher authenticated quota.
+GLOBALPING_ENABLED = os.getenv("NETWEATHER_GLOBALPING_ENABLED", "true").lower() in {"1","true","yes","on"}
 GLOBALPING_TOKEN = os.getenv("NETWEATHER_GLOBALPING_TOKEN", "").strip()
 GLOBALPING_BASE_URL = os.getenv("NETWEATHER_GLOBALPING_BASE_URL", "https://api.globalping.io/v1").rstrip("/")
 GLOBALPING_HOURLY_LIMIT = int(os.getenv("NETWEATHER_GLOBALPING_HOURLY_LIMIT", "250"))
