@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+[[ "${EUID}" -eq 0 ]] || { echo "root required" >&2; exit 77; }
+
+CONFIG="${NETWEATHER_VPN_INVARIANTS_CONFIG:-/etc/netweather/vpn-invariants.env}"
+[[ -r "${CONFIG}" ]] || { echo "missing VPN invariants config: ${CONFIG}" >&2; exit 78; }
+
+# Host-owned values only. Repository/deploy payload cannot override the production contract.
+# shellcheck disable=SC1090
+source "${CONFIG}"
+
+require_var() {
+  local name="$1"
+  [[ -n "${!name:-}" ]] || { echo "missing required VPN invariant: ${name}" >&2; exit 78; }
+}
+
+is_enabled() {
+  [[ "${1:-0}" == "1" ]]
+}
+
+container_running() {
+  local name="$1"
+  [[ "$(docker inspect -f '{{.State.Running}}' "$name" 2>/dev/null || true)" == "true" ]]
+}
+
+tcp_listener_present() {
+  local port="$1"
+  ss -lnt | awk -v p=":$port" '$4 ~ p"$" {found=1} END {exit found ? 0 : 1}'
+}
+
+udp_listener_present() {
+  local port="$1"
+  ss -lun | awk -v p=":$port" '$5 ~ p"$" || $4 ~ p"$" {found=1} END {exit found ? 0 : 1}'
+}
+
+verify_tls_ip() {
+  local ip="$1"
+  local out
+  out="$(openssl s_client     -connect 127.0.0.1:443     -servername "$ip"     -verify_ip "$ip"     -verify_return_error </dev/null 2>&1)"
+  grep -Fq 'Verify return code: 0 (ok)' <<<"$out"
+}
+
+verify_tls_hostname() {
+  local host="$1"
+  local out
+  out="$(openssl s_client     -connect 127.0.0.1:443     -servername "$host"     -verify_hostname "$host"     -verify_return_error </dev/null 2>&1)"
+  grep -Fq 'Verify return code: 0 (ok)' <<<"$out"
+}
+
+for cmd in docker nginx openssl ss iptables awk grep; do
+  command -v "$cmd" >/dev/null || { echo "missing required command: $cmd" >&2; exit 69; }
+done
+
+echo "=== VPN INVARIANTS: NGINX ==="
+nginx -t >/dev/null
+
+if is_enabled "${VPN_VLESS_ENABLED:-0}"; then
+  require_var VPN_PUBLIC_IP
+  require_var VPN_XRAY_CONTAINER
+  require_var VPN_XRAY_LOOPBACK_PORT
+
+  echo "=== VPN INVARIANTS: VLESS/XRAY ==="
+  container_running "$VPN_XRAY_CONTAINER"
+  tcp_listener_present "$VPN_XRAY_LOOPBACK_PORT"
+  verify_tls_ip "$VPN_PUBLIC_IP"
+  echo "VLESS_XRAY=PASS"
+fi
+
+if [[ -n "${NETWEATHER_DOMAIN:-}" ]]; then
+  echo "=== VPN INVARIANTS: NETWEATHER TLS ISOLATION ==="
+  verify_tls_hostname "$NETWEATHER_DOMAIN"
+  echo "NETWEATHER_TLS=PASS"
+fi
+
+if is_enabled "${VPN_AWG_ENABLED:-0}"; then
+  require_var VPN_AWG_CONTAINER
+  require_var VPN_AWG_INTERFACE
+  require_var VPN_AWG_BACKEND_UDP_PORT
+
+  echo "=== VPN INVARIANTS: AWG ==="
+  container_running "$VPN_AWG_CONTAINER"
+  docker exec "$VPN_AWG_CONTAINER" ip link show dev "$VPN_AWG_INTERFACE" >/dev/null
+  udp_listener_present "$VPN_AWG_BACKEND_UDP_PORT"
+
+  if is_enabled "${VPN_AWG_REQUIRE_REDIRECT:-0}"; then
+    require_var VPN_AWG_PUBLIC_UDP_PORT
+    iptables -t nat -C PREROUTING       -p udp       --dport "$VPN_AWG_PUBLIC_UDP_PORT"       -j REDIRECT       --to-ports "$VPN_AWG_BACKEND_UDP_PORT"
+  fi
+  echo "AWG=PASS"
+fi
+
+echo "VPN_INVARIANTS=PASS"

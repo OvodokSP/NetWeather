@@ -1,0 +1,101 @@
+name: NetWeather Web checks
+on:
+  push:
+    paths:
+      - 'web/**'
+      - '.github/workflows/web-checks.yml'
+  pull_request:
+    paths:
+      - 'web/**'
+      - '.github/workflows/web-checks.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - run: pip install -r web/backend/requirements.txt
+      - run: python -m py_compile web/backend/app/*.py
+      - run: node --check web/frontend/assets/dashboard.js
+      - run: test -s web/frontend/assets/dashboard.css
+
+      - name: Validate shell scripts
+        run: |
+          set -euo pipefail
+          bash -n web/deploy/smoke-test.sh
+          bash -n web/deploy/security/netweather-deploy-helper
+          bash -n web/deploy/security/netweather-ssh-gate
+          bash -n web/deploy/security/netweather-egress-guard
+          bash -n web/deploy/security/netweather-vpn-invariants
+          bash -n web/deploy/security/install-host-isolation.sh
+
+      - run: PYTHONPATH=web/backend python -m unittest discover -s web/backend/tests -v
+
+      - name: Build hardened image
+        run: |
+          set -euo pipefail
+          docker build             --build-arg NETWEATHER_VCS_REF="$GITHUB_SHA"             -t "netweather-web:security-test"             web
+          test "$(docker image inspect -f '{{.Config.User}}' netweather-web:security-test)" = "10001:10001"
+
+      - name: Run hardened container smoke
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cleanup() {
+            docker rm -f netweather-security-test >/dev/null 2>&1 || true
+            docker volume rm -f netweather_security_test_data >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker volume create netweather_security_test_data >/dev/null
+          docker run -d             --name netweather-security-test             --read-only             --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m             --cap-drop ALL             --security-opt no-new-privileges=true             --pids-limit 256             --memory 512m             --memory-swap 512m             --cpus 0.75             --user 10001:10001             --publish 127.0.0.1:18081:8000             --mount type=volume,source=netweather_security_test_data,target=/data             --env NETWEATHER_API_TOKEN=test-ci-only             --env NETWEATHER_ALLOW_OPEN_ACCESS=false             --env ALLOW_PRIVATE_TARGETS=false             netweather-web:security-test >/dev/null
+
+          ready=0
+          for _ in $(seq 1 30); do
+            if curl -fsS --max-time 3 http://127.0.0.1:18081/api/health >/tmp/netweather-ci-health.json; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" = "1"
+          cat /tmp/netweather-ci-health.json
+
+          test "$(docker inspect -f '{{.HostConfig.ReadonlyRootfs}}' netweather-security-test)" = "true"
+          test "$(docker inspect -f '{{.HostConfig.Privileged}}' netweather-security-test)" = "false"
+          docker inspect -f '{{json .HostConfig.CapDrop}}' netweather-security-test | grep -q '"ALL"'
+          docker inspect -f '{{json .HostConfig.SecurityOpt}}' netweather-security-test | grep -q 'no-new-privileges'
+          test -z "$(docker inspect -f '{{range .Mounts}}{{if eq .Type "bind"}}{{.Source}}{{end}}{{end}}' netweather-security-test)"
+
+          curl -fsS --max-time 3 http://127.0.0.1:18081/api/system >/dev/null
+          curl -fsS --max-time 3 http://127.0.0.1:18081/api/groups >/dev/null
+          python - <<'PY'
+          import json
+          from urllib.request import urlopen
+
+          base = "http://127.0.0.1:18081"
+          with urlopen(base + "/api/capabilities", timeout=3) as response:
+              capabilities = json.load(response)
+          assert capabilities["billing_enabled"] is False
+          assert "resource.add_basic" in capabilities["plans"]["free"]["capabilities"]
+          assert capabilities["plans"]["paid"]["available"] is False
+          with urlopen(base + "/api/resources", timeout=3) as response:
+              resources = json.load(response)
+          if resources:
+              with urlopen(base + f"/api/resources/{resources[0]['id']}", timeout=3) as response:
+                  detail = json.load(response)
+              assert isinstance(detail["timeline"], list)
+          PY
+          test "$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
+            http://127.0.0.1:18081/api/groups -d '{"title":"blocked"}')" = "401"
+          curl -fsS --max-time 3 -H 'Authorization: Bearer test-ci-only' \
+            http://127.0.0.1:18081/api/auth/verify >/dev/null

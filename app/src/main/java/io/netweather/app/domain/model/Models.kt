@@ -2,7 +2,7 @@ package io.netweather.app.domain.model
 
 import kotlinx.serialization.Serializable
 
-enum class ResourceGroup(val title: String) { RUSSIAN("Российские"), INTERNATIONAL("Международные"), CUSTOM("Пользовательские") }
+enum class ResourceGroup(val title: String) { RUSSIAN("Российские"), INTERNATIONAL("Международные"), MESSENGERS("Мессенджеры и соцсети"), INFRASTRUCTURE("Инфраструктура"), CUSTOM("Пользовательские") }
 enum class CheckMethod(val title: String) { DNS("DNS"), TCP("TCP"), HTTPS_GET("HTTPS GET"), HTTPS_HEAD("HTTPS HEAD"), HTTP_GET("HTTP GET"), HTTP_HEAD("HTTP HEAD"), CUSTOM_URL("Custom URL") }
 enum class DiagnosticStatus(val title: String) {
     OK("Работает"), DNS_ERROR("Ошибка DNS"), TCP_ERROR("Ошибка TCP"), TLS_ERROR("Ошибка TLS"), HTTP_ERROR("Ошибка HTTP"), TIMEOUT("Таймаут"), CONTENT_ERROR("Ошибка содержимого"), UNKNOWN_ERROR("Неизвестная ошибка")
@@ -41,6 +41,23 @@ data class NetworkSummary(
 )
 
 data class ResourceWithResult(val resource: MonitoredResource, val result: CheckResult?)
+
+data class GlobalState(
+    val availability: Int? = null,
+    val mode: String = "NO_DATA",
+    val lastUpdatedSeconds: Long = 0,
+    val active: Boolean = false,
+    val error: String? = null,
+)
+
+data class DevicePairingState(
+    val status: String = "unpaired",
+    val userCode: String? = null,
+    val expiresAtSeconds: Long = 0,
+    val sessionId: String? = null,
+    val pollSecret: String? = null,
+    val deviceId: String = "",
+)
 
 data class Settings(
     val darkTheme: Boolean = false,

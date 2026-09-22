@@ -5,14 +5,15 @@ import io.netweather.app.domain.model.*
 class NetworkAnalyzer {
     fun calculateAvailabilityIndex(resources: List<MonitoredResource>, results: List<CheckResult>): Int {
         if (resources.isEmpty()) return 0
-        fun ratio(group: ResourceGroup?): Double {
-            val scoped = if (group == null) resources else resources.filter { it.group == group }
-            if (scoped.isEmpty()) return 1.0
+        fun ratio(group: ResourceGroup): Double {
+            val scoped = resources.filter { it.group == group }
             val map = results.associateBy { it.resourceId }
             return scoped.count { map[it.id]?.isOk == true }.toDouble() / scoped.size.toDouble()
         }
         val internet = if (results.any { it.isOk }) 1.0 else 0.0
-        val weighted = internet * 40.0 + ratio(ResourceGroup.RUSSIAN) * 20.0 + ratio(ResourceGroup.INTERNATIONAL) * 20.0 + ratio(ResourceGroup.CUSTOM) * 20.0
+        val activeGroups = ResourceGroup.values().filter { group -> resources.any { it.group == group } }
+        val groupWeight = 60.0 / activeGroups.size
+        val weighted = internet * 40.0 + activeGroups.sumOf { ratio(it) * groupWeight }
         return weighted.toInt().coerceIn(0, 100)
     }
 

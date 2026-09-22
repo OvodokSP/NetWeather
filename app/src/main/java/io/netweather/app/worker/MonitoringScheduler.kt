@@ -6,7 +6,7 @@ import java.util.concurrent.TimeUnit
 
 object MonitoringScheduler {
     private const val UNIQUE = "netweather_monitoring_work"
-    fun ensureScheduled(context: Context) = reschedule(context, 300)
+    fun ensureScheduled(context: Context, intervalSeconds: Int) = reschedule(context, intervalSeconds)
     fun reschedule(context: Context, intervalSeconds: Int) {
         WorkManager.getInstance(context).cancelUniqueWork(UNIQUE)
         if (intervalSeconds < 900) scheduleOneTime(context, intervalSeconds) else schedulePeriodic(context, intervalSeconds)

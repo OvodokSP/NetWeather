@@ -1,0 +1,38 @@
+name: Улучшение
+description: Предложить новую возможность или UX-изменение
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Какую проблему решаем
+      description: Сначала пользовательская проблема, затем решение.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Желаемое поведение
+      description: Что пользователь должен увидеть/сделать.
+    validations:
+      required: true
+  - type: dropdown
+    id: capability
+    attributes:
+      label: Область
+      options:
+        - Overview / UI
+        - Resources / Groups
+        - Global Probe
+        - External Diagnostics
+        - Android Probe
+        - Incident Classification
+        - Alerts / Reports
+        - Security / Deployment
+        - Other
+  - type: textarea
+    id: done
+    attributes:
+      label: Критерии готовности
+      description: Проверяемые условия.

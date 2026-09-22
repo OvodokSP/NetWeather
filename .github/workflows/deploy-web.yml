@@ -1,0 +1,225 @@
+name: Deploy NetWeather Web
+
+on:
+  push:
+    branches:
+      - feature/web-vps-monitoring
+    paths:
+      - "web/**"
+      - ".github/workflows/deploy-web.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: netweather-web-production
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install backend dependencies
+        run: pip install -r web/backend/requirements.txt
+
+      - name: Compile backend
+        run: python -m py_compile web/backend/app/*.py
+
+      - name: Validate frontend JavaScript
+        run: node --check web/frontend/assets/dashboard.js
+
+      - name: Validate deployment scripts
+        run: |
+          set -euo pipefail
+          bash -n web/deploy/smoke-test.sh
+          bash -n web/deploy/security/netweather-deploy-helper
+          bash -n web/deploy/security/netweather-ssh-gate
+          bash -n web/deploy/security/netweather-egress-guard
+          bash -n web/deploy/security/netweather-vpn-invariants
+          bash -n web/deploy/security/install-host-isolation.sh
+
+      - name: Run web tests
+        env:
+          PYTHONPATH: web/backend
+        run: python -m unittest discover -s web/backend/tests -v
+
+  build:
+    name: Build isolated image
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build production image off-host
+        run: |
+          set -euo pipefail
+          docker build             --build-arg NETWEATHER_VCS_REF="$GITHUB_SHA"             --tag "netweather-web:$GITHUB_SHA"             web
+
+      - name: Assert image is non-root
+        run: |
+          set -euo pipefail
+          test "$(docker image inspect -f '{{.Config.User}}' "netweather-web:$GITHUB_SHA")" = "10001:10001"
+          test "$(docker image inspect -f '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "netweather-web:$GITHUB_SHA")" = "$GITHUB_SHA"
+
+      - name: Run hardened smoke on deploy image
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          container="netweather-deploy-smoke"
+          cleanup() {
+            docker rm -f "$container" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker run -d \
+            --name "$container" \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m \
+            --tmpfs /data:rw,noexec,nosuid,nodev,size=64m,uid=10001,gid=10001,mode=0750 \
+            --cap-drop ALL \
+            --security-opt no-new-privileges=true \
+            --pids-limit 256 \
+            --memory 512m \
+            --memory-swap 512m \
+            --cpus 0.75 \
+            --user 10001:10001 \
+            --publish 127.0.0.1:18081:8000 \
+            --env NETWEATHER_API_TOKEN=deploy-ci-only \
+            --env NETWEATHER_ALLOW_OPEN_ACCESS=false \
+            --env NETWEATHER_GLOBALPING_ENABLED=true \
+            --env NETWEATHER_OONI_ENABLED=true \
+            --env NETWEATHER_IODA_ENABLED=true \
+            --env ALLOW_PRIVATE_TARGETS=false \
+            "netweather-web:$GITHUB_SHA" >/dev/null
+
+          ready=0
+          for _ in $(seq 1 30); do
+            if curl -fsS --max-time 3 http://127.0.0.1:18081/api/health >/tmp/netweather-deploy-health.json; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" = "1"
+          cat /tmp/netweather-deploy-health.json
+
+          test "$(docker inspect -f '{{.Config.User}}' "$container")" = "10001:10001"
+          test "$(docker inspect -f '{{.HostConfig.ReadonlyRootfs}}' "$container")" = "true"
+          test "$(docker inspect -f '{{.HostConfig.Privileged}}' "$container")" = "false"
+          docker inspect -f '{{json .HostConfig.CapDrop}}' "$container" | grep -q '"ALL"'
+          docker inspect -f '{{json .HostConfig.SecurityOpt}}' "$container" | grep -q 'no-new-privileges'
+          test -z "$(docker inspect -f '{{range .Mounts}}{{if eq .Type "bind"}}{{.Source}}{{end}}{{end}}' "$container")"
+
+          curl -fsS --max-time 3 http://127.0.0.1:18081/ >/dev/null
+          curl -fsS --max-time 3 http://127.0.0.1:18081/api/system >/dev/null
+          curl -fsS --max-time 3 http://127.0.0.1:18081/api/diagnostics/status | python -c 'import json,sys; assert json.load(sys.stdin)["enabled"] is True'
+          curl -fsS --max-time 3 http://127.0.0.1:18081/api/system | python -c 'import json,sys; d=json.load(sys.stdin); assert d["ooni_enabled"] is True and d["ioda_enabled"] is True'
+          curl -fsS --max-time 3 http://127.0.0.1:18081/api/groups >/dev/null
+          python - <<'PY'
+          import json
+          from urllib.request import urlopen
+
+          base = "http://127.0.0.1:18081"
+          with urlopen(base + "/api/capabilities", timeout=3) as response:
+              capabilities = json.load(response)
+          assert capabilities["billing_enabled"] is False
+          assert "resource.add_basic" in capabilities["plans"]["free"]["capabilities"]
+          assert capabilities["plans"]["paid"]["available"] is False
+          with urlopen(base + "/api/resources", timeout=3) as response:
+              resources = json.load(response)
+          if resources:
+              with urlopen(base + f"/api/resources/{resources[0]['id']}", timeout=3) as response:
+                  detail = json.load(response)
+              assert isinstance(detail["timeline"], list)
+          PY
+          test "$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
+            http://127.0.0.1:18081/api/groups -d '{"title":"blocked"}')" = "401"
+          curl -fsS --max-time 3 -H 'Authorization: Bearer deploy-ci-only' \
+            http://127.0.0.1:18081/api/auth/verify >/dev/null
+
+      - name: Export immutable image archive
+        run: |
+          set -euo pipefail
+          docker save "netweather-web:$GITHUB_SHA" | gzip -9 > /tmp/netweather-web-image.tar.gz
+          test "$(stat -c %s /tmp/netweather-web-image.tar.gz)" -lt $((320 * 1024 * 1024))
+          sha256sum /tmp/netweather-web-image.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: netweather-web-image
+          path: /tmp/netweather-web-image.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  deploy:
+    name: Deploy isolated image to VPS
+    needs: build
+    if: vars.NETWEATHER_DEPLOY_ENABLED == 'true' && !contains(github.event.head_commit.message, '[no-deploy]')
+    runs-on: ubuntu-latest
+    environment: netweather-web
+    env:
+      VPS_HOST: ${{ secrets.NETWEATHER_VPS_HOST }}
+      VPS_USER: ${{ secrets.NETWEATHER_VPS_USER }}
+      VPS_PORT: ${{ secrets.NETWEATHER_VPS_PORT }}
+      VPS_SSH_KEY: ${{ secrets.NETWEATHER_VPS_SSH_KEY }}
+      VPS_KNOWN_HOSTS: ${{ secrets.NETWEATHER_VPS_KNOWN_HOSTS }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: netweather-web-image
+          path: /tmp/netweather-artifact
+
+      - name: Validate deployment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VPS_HOST"
+          test -n "$VPS_USER"
+          test -n "$VPS_SSH_KEY"
+          test -n "$VPS_KNOWN_HOSTS"
+          if [[ -z "$VPS_PORT" ]]; then echo "VPS_PORT=22" >> "$GITHUB_ENV"; fi
+
+      - name: Prepare restricted SSH client
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/netweather_deploy
+          chmod 600 ~/.ssh/netweather_deploy
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Stream image into forced-command deploy gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE_ARCHIVE=/tmp/netweather-artifact/netweather-web-image.tar.gz
+          DEPLOY_LOG=/tmp/netweather-deploy-result.log
+          gzip -t "$IMAGE_ARCHIVE"
+          cat "$IMAGE_ARCHIVE" | \
+            ssh \
+              -p "${VPS_PORT:-22}" \
+              -i ~/.ssh/netweather_deploy \
+              -o BatchMode=yes \
+              -o IdentitiesOnly=yes \
+              -o StrictHostKeyChecking=yes \
+              "$VPS_USER@$VPS_HOST" \
+              "deploy $GITHUB_SHA" | tee "$DEPLOY_LOG"
+
+          grep -Fq '=== FINAL RUNTIME IDENTITY ===' "$DEPLOY_LOG"
+          grep -Eq "^REVISION=$GITHUB_SHA IMAGE_ID=sha256:[0-9a-f]{64}$" "$DEPLOY_LOG"
+          grep -Eq '^NAME=netweather-web STATUS=.*\(healthy\)' "$DEPLOY_LOG"
+          grep -Fq '=== DEPLOY PASS ===' "$DEPLOY_LOG"

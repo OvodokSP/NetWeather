@@ -20,7 +20,11 @@ class NetworkAnalyzerTest {
             CheckResult(3, DiagnosticStatus.DNS_ERROR, 0),
             CheckResult(4, DiagnosticStatus.DNS_ERROR, 0),
         )
-        assertEquals(60, analyzer.calculateAvailabilityIndex(resources, results))
+        assertEquals(70, analyzer.calculateAvailabilityIndex(resources, results))
+    }
+    @Test fun healthyDefaultGroupsReachOneHundred() {
+        val results = resources.map { CheckResult(it.id, DiagnosticStatus.OK, 10) }
+        assertEquals(100, analyzer.calculateAvailabilityIndex(resources, results))
     }
     @Test fun restrictedModeDetected() {
         val extended = resources + MonitoredResource(5, "RU3", "https://c.ru", ResourceGroup.RUSSIAN)

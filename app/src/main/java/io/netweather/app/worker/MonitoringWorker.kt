@@ -7,6 +7,7 @@ import androidx.room.Room
 import io.netweather.app.data.*
 import io.netweather.app.data.local.AppDatabase
 import io.netweather.app.data.network.NetworkDiagnostics
+import io.netweather.app.data.network.NetWeatherApi
 import io.netweather.app.domain.logic.NetworkAnalyzer
 import io.netweather.app.notification.AppNotifier
 import io.netweather.app.domain.repository.NetWeatherRepository
@@ -19,5 +20,5 @@ class MonitoringWorker(context: Context, params: WorkerParameters) : CoroutineWo
         if (interval < 900) MonitoringScheduler.scheduleOneTime(applicationContext, interval)
         Result.success()
     } catch (e: Exception) { Result.retry() }
-    companion object { fun createRepo(context: Context): NetWeatherRepository { val db = Room.databaseBuilder(context, AppDatabase::class.java, "netweather.db").fallbackToDestructiveMigration().build(); return NetWeatherRepositoryImpl(context, db, NetworkDiagnostics(), NetworkAnalyzer(), StateStore(context), AppNotifier(context)) } }
+    companion object { fun createRepo(context: Context): NetWeatherRepository { val db = Room.databaseBuilder(context, AppDatabase::class.java, "netweather.db").build(); val state = StateStore(context); return NetWeatherRepositoryImpl(context, db, NetworkDiagnostics(), NetWeatherApi(stateStore = state), NetworkAnalyzer(), state, AppNotifier(context)) } }
 }
