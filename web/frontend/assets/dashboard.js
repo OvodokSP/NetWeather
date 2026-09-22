@@ -973,10 +973,15 @@ function renderDiagnostics(){
   var r=resourceById(sel.value);if(r)showDiagnostic(r)
 }
 function showDiagnostic(r){
-  S.diagId=r.id;var ext=r.external||{},dom=r.domestic||{},x=r.domestic||r.external||{};
-  q("#diagSummary").innerHTML='<div class="diag-summary-card"><div><span>Вывод</span><b>'+diagText(r.diagnosis)+'</b></div><div><span>VPS</span><b>'+stText(ext.status)+' · '+num(ext.response_time_ms," мс")+'</b></div><div><span>РФ</span><b>'+stText(dom.status)+' · '+num(dom.response_time_ms," мс")+'</b></div><div><span>IP</span><b>'+esc(x.resolved_ip||"—")+'</b></div><div><span>HTTP</span><b>'+(x.http_status||"—")+'</b></div></div>';
-  setStage("Dns",x.dns_ms,x.status!=="DNS_ERROR");setStage("Tcp",x.tcp_ms,x.tcp_ms!=null);setStage("Tls",x.tls_ms,r.target.indexOf("https://")!==0||x.tls_ms!=null);setStage("Http",x.http_ms,isReachable(x.status))
+  S.diagId=r.id;var ext=r.external||{},dom=r.domestic||{},x=r.domestic||r.external||{},fallback=r.external||{};
+  var diagnosis=r.diagnosis||r.diagnosis_code||((isReachable(ext.status)||isReachable(dom.status))?"AVAILABLE":"UNKNOWN");
+  q("#diagSummary").innerHTML='<div class="diag-summary-card"><div><span>Вывод</span><b>'+diagText(diagnosis)+'</b></div><div><span>VPS</span><b>'+stText(ext.status)+' · '+num(ext.response_time_ms," мс")+'</b></div><div><span>РФ</span><b>'+stText(dom.status)+' · '+num(dom.response_time_ms," мс")+'</b></div><div><span>IP</span><b>'+esc((x.resolved_ip||fallback.resolved_ip)||"—")+'</b></div><div><span>HTTP</span><b>'+((x.http_status||fallback.http_status)||"—")+'</b></div></div>';
+  setStage("Dns",x.dns_ms!=null?x.dns_ms:fallback.dns_ms,x.status!=="DNS_ERROR");
+  setStage("Tcp",x.tcp_ms!=null?x.tcp_ms:fallback.tcp_ms,x.tcp_ms!=null||fallback.tcp_ms!=null);
+  setStage("Tls",x.tls_ms!=null?x.tls_ms:fallback.tls_ms,r.target.indexOf("https://")!==0||x.tls_ms!=null||fallback.tls_ms!=null);
+  setStage("Http",x.http_ms!=null?x.http_ms:(fallback.http_ms!=null?fallback.http_ms:fallback.response_time_ms),isReachable(x.status||fallback.status))
 }
+
 function setStage(n,v,good){var e=q("#stage"+n);e.querySelector("b").textContent=v==null?"—":Math.round(v)+" мс";e.className="diag-step "+(v==null?"":good?"good":"bad")}
 
 function renderHistory(){
