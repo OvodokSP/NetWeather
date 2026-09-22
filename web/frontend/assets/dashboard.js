@@ -637,7 +637,7 @@ function drawAvailabilityChart(canvas,series){
   var w=rect.width,h=rect.height,p={l:54,r:12,t:13,b:29};ctx.clearRect(0,0,w,h);
   if(!series.length){S.streamMeta=null;return}
   var allTs=[],allVals=[];
-  series.forEach(function(row){(row.points||[]).forEach(function(x){if(x.availability!=null){allTs.push(Number(x.timestamp));allVals.push(Number(x.availability))})});
+  series.forEach(function(row){(row.points||[]).forEach(function(x){if(x.availability!=null){allTs.push(Number(x.timestamp));allVals.push(Number(x.availability));}})});
   if(!allTs.length){S.streamMeta=null;return}
   var minValue=Math.min.apply(null,allVals),floor=Math.max(0,Math.floor((minValue-2)/5)*5);
   if(floor>=100)floor=95;
