@@ -264,9 +264,10 @@ function ago(ts){if(!ts)return "—";var d=Math.max(0,Math.floor(Date.now()/1000
 function duration(sec){sec=Number(sec||0);if(sec<60)return sec+" сек";if(sec<3600)return Math.floor(sec/60)+" мин";if(sec<86400)return Math.floor(sec/3600)+" ч";return Math.floor(sec/86400)+" дн"}
 function pct(v,digits){if(v==null||!Number.isFinite(Number(v)))return "—";return Number(v).toFixed(digits==null?(Number(v)%1?1:0):digits)+"%"}
 function num(v,suffix){return v==null||!Number.isFinite(Number(v))?"—":Math.round(Number(v))+(suffix||"")}
-function stText(s){return({OK:"Доступен",HTTP_REJECTED:"Доступен · probe отклонён",DNS_ERROR:"DNS ошибка",TCP_ERROR:"TCP ошибка",TLS_ERROR:"TLS ошибка",HTTP_ERROR:"HTTP ошибка",TIMEOUT:"Таймаут",BLOCKED_TARGET:"Заблокировано",UNKNOWN_ERROR:"Ошибка"})[s]||"Нет данных"}
-function stClass(s){return s==="OK"||s==="HTTP_REJECTED"?"ok":s==="TIMEOUT"?"warn":s?"bad":"neutral"}
+function stText(s){return({OK:"Доступен",HTTP_REJECTED:"Доступен · probe отклонён",DNS_ERROR:"DNS ошибка",TCP_ERROR:"TCP ошибка",TLS_ERROR:"TLS ошибка",HTTP_ERROR:"HTTP ошибка",TIMEOUT:"Таймаут",BLOCKED_TARGET:"Заблокировано",UNKNOWN:"Нет данных",UNKNOWN_ERROR:"Нет данных"})[s]||"Нет данных"}
+function stClass(s){return s==="OK"||s==="HTTP_REJECTED"?"ok":s==="TIMEOUT"?"warn":isConfirmedUnavailable(s)?"bad":"neutral"}
 function isReachable(s){return s==="OK"||s==="HTTP_REJECTED"}
+function isConfirmedUnavailable(s){return ["DNS_ERROR","TCP_ERROR","TLS_ERROR","HTTP_ERROR","TIMEOUT","BLOCKED_TARGET"].indexOf(s)>=0}
 function diagText(d){return({AVAILABLE:"Доступен",LIKELY_RESTRICTION:"Вероятное ограничение",LIKELY_OUTAGE:"Вероятное падение",EXTERNAL_PATH_ISSUE:"Проблема пути VPS",DOMESTIC_UNKNOWN:"Нет данных РФ",INSUFFICIENT_DATA:"Недостаточно данных"})[d]||"Нет данных"}
 function diagClass(d){return d==="AVAILABLE"?"ok":d==="LIKELY_RESTRICTION"||d==="LIKELY_OUTAGE"?"bad":d==="EXTERNAL_PATH_ISSUE"?"warn":"neutral"}
 function groupTitle(v){var found=S.groups.find(function(g){return g.id===v});return found?found.title:({"RUSSIAN":"Российские","INTERNATIONAL":"Международные","MESSENGERS":"Мессенджеры и соцсети","INFRASTRUCTURE":"Инфраструктура","CUSTOM":"Пользовательские"})[v]||v}
@@ -725,8 +726,8 @@ function renderEvents(){
 
 function resourceScopeGap(r){
   var ext=r&&r.external||{},dom=r&&r.domestic||{};
-  var globalOk=isReachable(ext.status),ruKnown=dom.status!=null&&String(dom.status).trim()!==''&&String(dom.status).toUpperCase()!=="UNKNOWN";
-  return globalOk&&ruKnown&&!isReachable(dom.status)?"Глобально доступен · в РФ недоступен":"";
+  var globalOk=isReachable(ext.status),ruUnavailable=isConfirmedUnavailable(dom.status);
+  return globalOk&&ruUnavailable?"Глобально доступен · в РФ недоступен":"";
 }
 function renderResourceCards(){
   var el=q("#resourceCards"),rows=S.realtime&&S.realtime.resources||[];
@@ -1073,24 +1074,30 @@ async function trace(id,domestic,button){
     openView("diagnostics");q("#diagResource").value=String(id);S.diagId=id
   })}catch(e){q("#traceOutput").innerHTML=empty("Traceroute не выполнен",e.message);toast(e.message)}
 }
+async function browserTraceProbe(target){
+  var url=targetUrl(target);if(!url)throw new Error("Некорректный адрес ресурса");
+  if(url.protocol!=="https:")throw new Error("Браузерная проверка доступна только для HTTPS-ресурсов");
+  var samples=[],errors=[];
+  for(var i=0;i<2;i++){
+    var started=performance.now();
+    try{
+      await window.fetch(url.href,{method:"GET",mode:"no-cors",cache:"no-store",redirect:"follow",credentials:"omit"});
+      samples.push(Math.round(performance.now()-started));
+    }catch(e){errors.push(String(e&&e.message||e||"network error"))}
+  }
+  if(!samples.length)throw new Error(errors[0]||"Браузер не получил ответ");
+  samples.sort(function(a,b){return a-b});
+  return {url:url.href,ok:true,samples:samples,median_ms:samples[Math.floor(samples.length/2)],online:navigator.onLine!==false};
+}
 async function traceDomestic(id,button){
-  var probes=S.dashboard.probes||[],p=probes.find(function(x){return x.scope==="DOMESTIC"&&x.online});
-  if(!p){toast("Российский probe не подключён");return}
-  try{await withBusy(button,"Traceroute РФ…",async function(){
-    q("#traceOutput").innerHTML=empty("Traceroute РФ","Задание отправлено probe…");
-    var job=await api("/api/resources/"+id+"/trace-domestic?probe_key="+encodeURIComponent(p.probe_key),{method:"POST"},true);
+  var resource=resourceById(id);if(!resource)return;
+  try{await withBusy(button,"Проверяем из браузера…",async function(){
     openView("diagnostics");
-    for(var i=0;i<30;i++){
-      await new Promise(function(resolve){setTimeout(resolve,1000)});
-      var state=await api("/api/trace-tasks/"+job.task_id);
-      if(state.status==="DONE"){
-        q("#traceMeta").textContent=p.name+" · российский контур";
-        q("#traceOutput").innerHTML='<pre class="trace-raw">'+esc(state.result_text||"Нет вывода")+'</pre>';
-        return
-      }
-    }
-    throw new Error("Probe не вернул traceroute за 30 секунд")
-  })}catch(e){q("#traceOutput").innerHTML=empty("Traceroute РФ не выполнен",e.message);toast(e.message)}
+    q("#traceMeta").textContent="Браузер пользователя · его сеть";
+    q("#traceOutput").innerHTML=empty("Проверка из браузера","Запрашиваем ресурс напрямую из текущего браузера…");
+    var result=await browserTraceProbe(resource.target);
+    q("#traceOutput").innerHTML='<div class="browser-trace-result"><b>Ресурс доступен из браузера</b><span>'+esc(resource.target)+'</span><span>Измерения: '+result.samples.join(" / ")+' мс · медиана '+result.median_ms+' мс</span><small>Это проверка из вашей сети. Браузеры не раскрывают hop-by-hop маршрут, поэтому IP-узлы трассировки здесь недоступны.</small></div>';
+  })}catch(e){q("#traceOutput").innerHTML=empty("Проверка из браузера не выполнена",e.message);toast(e.message)}
 }
 
 function catalogItemByKey(key){

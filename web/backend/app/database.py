@@ -411,6 +411,7 @@ def dual_summary() -> dict[str, Any]:
     user_lat = []
     russia_lat = []
     russia_seen = 0
+    russia_unknown = 0
     russia_ok = 0
     russia_last_updated = 0
     last_updated = 0
@@ -434,12 +435,16 @@ def dual_summary() -> dict[str, Any]:
             if r["your_network"].get("response_time_ms") is not None:
                 user_lat.append(int(r["your_network"]["response_time_ms"]))
         if r.get("russia"):
-            russia_seen += 1
             russia_last_updated = max(russia_last_updated, int(r["russia"].get("checked_at") or 0))
-            if is_reachable(r["russia"].get("status")):
-                russia_ok += 1
-            if r["russia"].get("response_time_ms") is not None:
-                russia_lat.append(int(r["russia"]["response_time_ms"]))
+            ru_status = r["russia"].get("status")
+            if ru_status in {"OK", "HTTP_REJECTED", "DNS_ERROR", "TCP_ERROR", "TLS_ERROR", "HTTP_ERROR", "TIMEOUT", "BLOCKED_TARGET"}:
+                russia_seen += 1
+                if is_reachable(ru_status):
+                    russia_ok += 1
+                if r["russia"].get("response_time_ms") is not None:
+                    russia_lat.append(int(r["russia"]["response_time_ms"]))
+            else:
+                russia_unknown += 1
         if not r["your_network"] and r["global"]:
             last_updated = max(last_updated, int(r["global"]["checked_at"] or 0))
     confirmed = max(1, len(rows) - counts["unknown"])
@@ -455,6 +460,7 @@ def dual_summary() -> dict[str, Any]:
         "russia_state": "connected" if russia_online and russia_seen else "unavailable",
         "russia_checked_at": russia_last_updated,
         "russia_availability_index": round(russia_ok / russia_seen * 100) if russia_seen else None,
+        "russia_unknown": russia_unknown,
         "avg_russia_latency_ms": round(sum(russia_lat)/len(russia_lat)) if russia_lat else None,
         **counts,
     }

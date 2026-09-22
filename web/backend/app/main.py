@@ -166,7 +166,15 @@ async def run_russia_check(row) -> None:
                 break
         summary = result.summary if result else {}
         classification = result.classification if result else None
-        status = "OK" if classification == "OK" else "HTTP_ERROR" if classification in {"DNS_FAILURE", "SERVICE_DOWN", "REGIONAL_OUTAGE"} else "UNKNOWN_ERROR"
+        # An incomplete or mixed Globalping result is not evidence that the
+        # resource is unavailable in Russia. Keep it explicitly unknown so
+        # the UI cannot turn a provider timeout into a regional outage.
+        status = (
+            "OK" if classification == "OK"
+            else "DNS_ERROR" if classification == "DNS_FAILURE"
+            else "HTTP_ERROR" if classification in {"SERVICE_DOWN", "REGIONAL_OUTAGE"}
+            else "UNKNOWN"
+        )
         write_check(int(row["id"]), {
             "status": status, "response_time_ms": int(summary.get("median_latency_ms") or 0),
             "dns_ms": None, "tcp_ms": None, "tls_ms": None, "http_ms": None, "http_status": None,
@@ -175,7 +183,7 @@ async def run_russia_check(row) -> None:
         }, probe_key=RUSSIA_PROBE_KEY, probe_scope="RUSSIA")
     except Exception as exc:
         write_check(int(row["id"]), {
-            "status": "UNKNOWN_ERROR", "response_time_ms": 0, "dns_ms": None, "tcp_ms": None,
+            "status": "UNKNOWN", "response_time_ms": 0, "dns_ms": None, "tcp_ms": None,
             "tls_ms": None, "http_ms": None, "http_status": None, "resolved_ip": None,
             "tls_days_left": None, "final_url": row["target"], "location": "RU",
             "message": f"РФ Globalping: {str(exc)[:300]}",
