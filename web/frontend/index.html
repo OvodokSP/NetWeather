@@ -143,7 +143,7 @@
             </article>
           </div>
 
-          <div class="overview-row overview-row-chart">
+          <div class="overview-row overview-row-chart overview-row-dual">
             <article class="panel streams-panel" data-dashboard-panel="realtime">
               <div class="panel-head compact">
                 <div><h2>Доступность ресурсов в реальном времени <span class="info-dot">i</span></h2></div>
@@ -165,21 +165,14 @@
               <div id="streamLegend" class="stream-legend"></div>
             </article>
 
-            <article class="panel events-panel" data-dashboard-panel="events">
-              <div class="panel-head compact">
-                <div><h2>Последние события</h2><span class="panel-subtitle" id="eventSummary">Изменения состояния ресурсов</span></div>
-                <button class="link-btn" data-view-jump="alerts">Все события →</button>
-              </div>
-              <div id="eventFeed" class="event-feed"></div>
-            </article>
-          </div>
-
-          <div class="overview-row overview-row-domestic">
             <article class="panel domestic-stream-panel" data-dashboard-panel="domestic_realtime">
               <div class="panel-head compact">
                 <div><h2>Доступность из российского контура <span class="info-dot">i</span></h2><span class="panel-subtitle" id="domesticGraphMeta">Проверка с общедоступного российского probe</span></div>
                 <div class="panel-actions"><span class="stream-scope-badge" id="domesticGraphStatus">нет данных</span></div>
               </div>
+          </div>
+
+
               <div class="chart-wrap domestic-chart-wrap">
                 <canvas id="domesticStreamChart"></canvas>
                 <div id="domesticStreamEmpty" class="chart-empty">Нет измерений российского контура</div>
@@ -187,7 +180,7 @@
             </article>
           </div>
 
-          <div class="overview-row overview-row-middle">
+          <div class="overview-row overview-row-pinned">
             <section class="resource-cards-section" data-dashboard-panel="pinned_resources">
               <div class="section-head">
                 <div><span class="eyebrow">В ФОКУСЕ</span><h2>Выбранные ресурсы</h2><p>Ключевые цели и их состояние за последние 24 часа.</p></div>
@@ -195,6 +188,16 @@
               </div>
               <div id="resourceCards" class="resource-cards"></div>
             </section>
+          </div>
+
+          <div class="overview-row overview-row-events-map">
+            <article class="panel events-panel" data-dashboard-panel="events">
+              <div class="panel-head compact">
+                <div><h2>Последние события</h2><span class="panel-subtitle" id="eventSummary">Изменения состояния ресурсов</span></div>
+                <button class="link-btn" data-view-jump="alerts">Все события →</button>
+              </div>
+              <div id="eventFeed" class="event-feed"></div>
+            </article>
 
             <article class="panel map-panel" id="faultMap" data-dashboard-panel="map">
               <div class="panel-head compact">
