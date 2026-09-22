@@ -7,10 +7,6 @@ on:
     branches: [ feature/web-vps-monitoring ]
     paths:
       - ".github/workflows/release.yml"
-      - "app/**"
-      - "build.gradle.kts"
-      - "settings.gradle.kts"
-      - "gradle.properties"
 
 permissions:
   contents: write
@@ -41,39 +37,39 @@ jobs:
           set -euo pipefail
           install -m 0644 \
             app/build/outputs/apk/debug/app-debug.apk \
-            NetWeather-0.4.1-alpha-debug.apk
-          sha256sum NetWeather-0.4.1-alpha-debug.apk > NetWeather-0.4.1-alpha-debug.apk.sha256
+            NetWeather-0.1.0-alpha-debug.apk
+          sha256sum NetWeather-0.1.0-alpha-debug.apk > NetWeather-0.1.0-alpha-debug.apk.sha256
 
       - uses: actions/upload-artifact@v4
         with:
-          name: NetWeather-0.4.1-alpha-debug
+          name: NetWeather-0.1.0-alpha-debug
           path: |
-            NetWeather-0.4.1-alpha-debug.apk
-            NetWeather-0.4.1-alpha-debug.apk.sha256
+            NetWeather-0.1.0-alpha-debug.apk
+            NetWeather-0.1.0-alpha-debug.apk.sha256
           if-no-files-found: error
 
       - name: Publish GitHub prerelease
         env:
           GH_TOKEN: ${{ github.token }}
-          PREVIEW_TAG: android-v0.4.1-alpha-preview.1
+          PREVIEW_TAG: android-v0.1.0-alpha-preview.1
         shell: bash
         run: |
           set -euo pipefail
           if gh release view "$PREVIEW_TAG" >/dev/null 2>&1; then
             gh release upload "$PREVIEW_TAG" \
-              NetWeather-0.4.1-alpha-debug.apk \
-              NetWeather-0.4.1-alpha-debug.apk.sha256 \
+              NetWeather-0.1.0-alpha-debug.apk \
+              NetWeather-0.1.0-alpha-debug.apk.sha256 \
               --clobber
             gh release edit "$PREVIEW_TAG" \
-              --title "NetWeather Android 0.4.1 alpha preview 1" \
+              --title "NetWeather Android 0.1.0 alpha preview 1" \
               --notes-file docs/ANDROID_PREVIEW.md \
               --prerelease
           else
             gh release create "$PREVIEW_TAG" \
-              NetWeather-0.4.1-alpha-debug.apk \
-              NetWeather-0.4.1-alpha-debug.apk.sha256 \
+              NetWeather-0.1.0-alpha-debug.apk \
+              NetWeather-0.1.0-alpha-debug.apk.sha256 \
               --target "$GITHUB_SHA" \
-              --title "NetWeather Android 0.4.1 alpha preview 1" \
+              --title "NetWeather Android 0.1.0 alpha preview 1" \
               --notes-file docs/ANDROID_PREVIEW.md \
               --prerelease
           fi
