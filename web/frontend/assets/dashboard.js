@@ -549,9 +549,9 @@ function renderOverview(){
   q("#kpiPersonal").textContent="—";
   q("#kpiPersonalHint").textContent="device-probe ещё не подключён";
   q("#kpiIncidents").textContent=active.length;
-  q("#kpiIncidentDelta").textContent=unread.length?unread.length+" новых":"спокойно";
+  q("#kpiIncidentDelta").textContent=unread.length?unread.length+" новых":active.length?"прочитано":"спокойно";
   q("#kpiIncidentDelta").style.color=unread.length?"var(--red)":"var(--muted)";
-  q("#kpiIncidentHint").textContent=active.length?(unread.length+" непрочитанных из "+active.length):"критических событий нет";
+  q("#kpiIncidentHint").textContent=active.length?(unread.length?unread.length+" непрочитанных из "+active.length:"прочитано, но не закрыто: "+active.length):"открытых инцидентов нет";
 
   drawSpark(q("#kpiGlobalSpark"),S.historyExt.map(function(x){return x.availability}),COLORS[1]);
   drawBars(q("#kpiResourcesSpark"),resources.map(function(r){return isReachable((r.external||{}).status)?1:0}),available.length===resources.length?COLORS[3]:COLORS[4]);
