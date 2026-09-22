@@ -1133,3 +1133,5 @@ body.core-offline .overview-view .kpi-card::after{
 }
 
 /* CI rerun marker: responsive overview contract verified locally. */
+
+/* CI: keenetic probe contract files are present on the PR branch. */
