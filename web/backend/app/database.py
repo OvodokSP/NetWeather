@@ -6,7 +6,7 @@ import time
 from contextlib import contextmanager
 from typing import Any
 
-from .config import CLIENT_PROBE_STALE_SECONDS, DB_PATH, DEFAULT_INTERVAL, DEFAULT_RESOURCES, SEED_DEFAULTS, SERVER_PROBE_KEY, SERVER_PROBE_NAME
+from .config import CLIENT_PROBE_STALE_SECONDS, DB_PATH, DEFAULT_INTERVAL, DEFAULT_RESOURCES, RUSSIA_PROBE_KEY, RUSSIA_PROBE_NAME, RUSSIA_PROBE_STALE_SECONDS, SEED_DEFAULTS, SERVER_PROBE_KEY, SERVER_PROBE_NAME, SERVER_PROBE_STALE_SECONDS
 from .resource_catalog import CATALOG_BY_KEY, catalog_match
 from .availability import is_reachable
 from .assessment import assess_incident
@@ -203,6 +203,10 @@ def init_db() -> None:
           VALUES(?,?,?,?,?,?)
           ON CONFLICT(probe_key) DO UPDATE SET name=excluded.name,scope=excluded.scope,last_seen_at=excluded.last_seen_at,updated_at=excluded.updated_at""",
           (SERVER_PROBE_KEY, SERVER_PROBE_NAME, "GLOBAL", now, now, now))
+        conn.execute("""INSERT INTO probes(probe_key,name,scope,last_seen_at,created_at,updated_at,capabilities)
+          VALUES(?,?,?,?,?,?,?)
+          ON CONFLICT(probe_key) DO UPDATE SET name=excluded.name,scope=excluded.scope,updated_at=excluded.updated_at,capabilities=excluded.capabilities""",
+          (RUSSIA_PROBE_KEY, RUSSIA_PROBE_NAME, "RUSSIA", 0, now, now, "http;country=RU"))
 
 
 def seed_defaults() -> None:
@@ -296,7 +300,7 @@ def probe_statuses() -> list[dict[str, Any]]:
         rows = conn.execute("SELECT * FROM probes ORDER BY scope, name").fetchall()
     return [{
         **dict(r),
-        "online": bool(r["last_seen_at"] and now - r["last_seen_at"] <= CLIENT_PROBE_STALE_SECONDS),
+        "online": bool(r["last_seen_at"] and now - r["last_seen_at"] <= (RUSSIA_PROBE_STALE_SECONDS if r["scope"] == "RUSSIA" else SERVER_PROBE_STALE_SECONDS if r["scope"] == "GLOBAL" else CLIENT_PROBE_STALE_SECONDS)),
         "age_seconds": max(0, now - int(r["last_seen_at"] or 0)) if r["last_seen_at"] else None,
     } for r in rows]
 
@@ -314,8 +318,10 @@ def resource_matrix() -> list[dict[str, Any]]:
         result = []
         for r in resources:
             ext = _latest_probe_check(conn, r["id"], "GLOBAL")
+            russia = _latest_probe_check(conn, r["id"], "RUSSIA")
             user = _latest_probe_check(conn, r["id"], "USER")
             ext_d = dict(ext) if ext else None
+            russia_d = dict(russia) if russia else None
             user_d = dict(user) if user else None
             user_fresh = False
             if user_d:
@@ -363,6 +369,8 @@ def resource_matrix() -> list[dict[str, Any]]:
                 **dict(r),
                 **legacy,
                 "global": ext_d,
+                "russia": russia_d,
+                "russia_available": bool(russia_d and is_reachable(russia_d.get("status"))),
                 "your_network": current_user,
                 "your_network_available": bool(current_user),
                 "your_network_stale": bool(user_d and not user_fresh),
@@ -384,10 +392,15 @@ def dual_summary() -> dict[str, Any]:
     rows = [r for r in resource_matrix() if r["enabled"]]
     probes = probe_statuses()
     user_online = any(p["scope"] == "USER" and p["online"] for p in probes)
+    russia_online = any(p["scope"] == "RUSSIA" and p["online"] for p in probes)
     counts = {
         "ok": 0, "degraded": 0, "down": 0, "local": 0, "unknown": 0,
     }
     user_lat = []
+    russia_lat = []
+    russia_seen = 0
+    russia_ok = 0
+    russia_last_updated = 0
     last_updated = 0
     groups: dict[str, dict[str, int]] = {}
     for r in rows:
@@ -408,7 +421,14 @@ def dual_summary() -> dict[str, Any]:
             last_updated = max(last_updated, int(r["your_network"]["checked_at"] or 0))
             if r["your_network"].get("response_time_ms") is not None:
                 user_lat.append(int(r["your_network"]["response_time_ms"]))
-        elif r["global"]:
+        if r.get("russia"):
+            russia_seen += 1
+            russia_last_updated = max(russia_last_updated, int(r["russia"].get("checked_at") or 0))
+            if is_reachable(r["russia"].get("status")):
+                russia_ok += 1
+            if r["russia"].get("response_time_ms") is not None:
+                russia_lat.append(int(r["russia"]["response_time_ms"]))
+        if not r["your_network"] and r["global"]:
             last_updated = max(last_updated, int(r["global"]["checked_at"] or 0))
     confirmed = max(1, len(rows) - counts["unknown"])
     score = round((counts["ok"] + counts["degraded"]) / confirmed * 100) if rows else None
@@ -419,6 +439,11 @@ def dual_summary() -> dict[str, Any]:
         "your_network_available": user_online,
         "your_network_state": "connected" if user_online else "unavailable",
         "avg_user_latency_ms": round(sum(user_lat)/len(user_lat)) if user_lat else None,
+        "russia_available": bool(russia_online and russia_seen),
+        "russia_state": "connected" if russia_online and russia_seen else "unavailable",
+        "russia_checked_at": russia_last_updated,
+        "russia_availability_index": round(russia_ok / russia_seen * 100) if russia_seen else None,
+        "avg_russia_latency_ms": round(sum(russia_lat)/len(russia_lat)) if russia_lat else None,
         **counts,
     }
 

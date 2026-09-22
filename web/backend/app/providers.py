@@ -31,7 +31,7 @@ class MeasurementProvider(ABC):
     name: str
 
     @abstractmethod
-    async def submit_http(self, target: str, probes: int = 3) -> ProviderSubmission:
+    async def submit_http(self, target: str, probes: int = 3, locations: list[dict[str, Any]] | None = None) -> ProviderSubmission:
         raise NotImplementedError
 
     @abstractmethod
@@ -67,7 +67,7 @@ class GlobalpingProvider(MeasurementProvider):
             # and URL path are represented in measurementOptions instead of
             # passing a browser URL as the target.
             "target": hostname,
-            "locations": [{"magic": "world"}],
+            "locations": locations or [{"magic": "world"}],
             "limit": max(1, min(probes, 10)),
             "measurementOptions": options,
         }

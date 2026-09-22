@@ -16,6 +16,8 @@ FastAPI and SQLite own resource identity, groups, global checks, incidents, hist
 
 Historical `EXTERNAL` rows migrate to `GLOBAL`. Historical router `DOMESTIC` rows are retained as `LEGACY` for data preservation but never participate in current conclusions.
 
+The runtime keeps three independent evidence scopes: `GLOBAL` (VPS baseline), `RUSSIA` (public Globalping probes selected in Russia), and `USER` (Android local measurements). `RUSSIA` is never inferred from Android and `USER` is never presented as regional evidence.
+
 ## Measurement and diagnostics
 
 `MeasurementProvider` isolates external services. `GlobalpingProvider` submits HTTP measurements, polls the documented result endpoint and normalizes per-probe results. `PersistentQuotaManager` stores usage in SQLite and protects 30% of the hourly budget by default for manual checks and new outages.

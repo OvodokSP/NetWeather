@@ -515,6 +515,9 @@ function renderOverview(){
   q("#kpiResourcesDelta").textContent="из "+resources.length;
   q("#kpiResourcesDelta").style.color=available.length===resources.length?"var(--green)":available.length?"var(--orange)":"var(--red)";
   q("#kpiResourcesHint").textContent=!resources.length?"добавьте первый ресурс":available.length===resources.length?"все отвечают сейчас":(resources.length-available.length)+" требуют внимания";
+  q("#kpiRussia").textContent=summary.russia_availability_index==null?"—":summary.russia_availability_index+"%";
+  q("#kpiRussiaHint").textContent=summary.russia_available?"публичные точки РФ · "+num(summary.avg_russia_latency_ms," мс")+"": "нет свежего измерения из РФ";
+  q("#kpiRussiaHint").style.color=summary.russia_available?"var(--green)":"var(--muted)";
   q("#kpiLatency").textContent=medianLatency==null?"—":Math.round(medianLatency);
   q("#kpiLatencyHint").textContent=medianLatency==null?"нет свежих измерений":medianLatency<500?"быстрый отклик":medianLatency<1500?"умеренная задержка":"высокая задержка";
 
@@ -528,6 +531,7 @@ function renderOverview(){
 
   drawSpark(q("#kpiGlobalSpark"),S.historyGlobal.map(function(x){return x.availability}),COLORS[1]);
   drawBars(q("#kpiResourcesSpark"),resources.map(function(r){return isReachable((r.global||{}).status)?1:0}),available.length===resources.length?COLORS[3]:COLORS[4]);
+  drawBars(q("#kpiRussiaSpark"),resources.map(function(r){return isReachable((r.russia||{}).status)?1:0}),summary.russia_available?COLORS[1]:COLORS[4]);
   drawSpark(q("#kpiLatencySpark"),latencies,COLORS[5]);
   drawSpark(q("#kpiPersonalSpark"),S.historyUser.map(function(x){return x.availability}),COLORS[3]);
   drawBars(q("#kpiIncidentSpark"),incidentSpark(),COLORS[0]);

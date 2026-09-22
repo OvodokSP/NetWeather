@@ -160,7 +160,7 @@ class FrontendContractTest(unittest.TestCase):
 
     def test_hardware_free_product_language(self):
         combined = self.html + self.js
-        for obsolete in ("Keenetic", "/api/agent", "DOMESTIC", "Российский контур", "Traceroute РФ"):
+        for obsolete in ("Keenetic", "/api/agent", "DOMESTIC", "Traceroute РФ"):
             self.assertNotIn(obsolete, combined)
         self.assertIn("Ваша сеть", combined)
         self.assertIn("Недоступно без приложения", combined)

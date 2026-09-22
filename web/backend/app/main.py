@@ -22,7 +22,7 @@ from .config import (
     DIAGNOSTIC_RESERVE_PERCENT, FRONTEND_DIR, GLOBALPING_BASE_URL, GLOBALPING_ENABLED,
     GLOBALPING_HOURLY_LIMIT, GLOBALPING_TOKEN, INTELLIGENCE_CACHE_SECONDS, IODA_BASE_URL,
     IODA_COUNTRY, IODA_ENABLED, KNOWN_GROUPS, OONI_BASE_URL, OONI_ENABLED, OONI_PROBE_COUNTRY,
-    PUBLIC_ADD_LIMIT, PUBLIC_ADD_WINDOW_SECONDS,
+    PUBLIC_ADD_LIMIT, PUBLIC_ADD_WINDOW_SECONDS, RUSSIA_CHECK_INTERVAL_SECONDS, RUSSIA_PROBE_COUNT, RUSSIA_PROBE_KEY,
     ResourceCreate, ResourcePatch, ClientProbeResult, ClientProbeRegistration, CatalogAddRequest, GroupCreate, GroupPatch,
     DeviceAuthorizationApprove, DeviceAuthorizationPoll, DeviceAuthorizationStart, OwnerLogin,
     SCHEDULER_ENABLED, SESSION_MAX_AGE, STARTED_AT, UI_PASSWORD,
@@ -149,6 +149,50 @@ async def run_scheduled(row) -> None:
         priority = DiagnosticPriority.NEW_DOWN if opened["kind"] == "DOWN" else DiagnosticPriority.DEGRADED
         await request_external_diagnostic(row["id"], priority)
     await refresh_external_intelligence(row["id"])
+
+
+async def run_russia_check(row) -> None:
+    """Measure the target from public Globalping probes located in Russia."""
+    try:
+        decision = _quota.consume(DiagnosticPriority.BACKGROUND, max(1, RUSSIA_PROBE_COUNT))
+        if not decision.allowed:
+            raise RuntimeError(f"Globalping quota: {decision.reason}")
+        submission = await _globalping.submit_http(row["target"], probes=RUSSIA_PROBE_COUNT, locations=[{"country": "RU"}])
+        result = None
+        for _ in range(10):
+            await asyncio.sleep(2)
+            result = await _globalping.get_result(submission.external_id)
+            if result.status in {"finished", "failed", "error"}:
+                break
+        summary = result.summary if result else {}
+        classification = result.classification if result else None
+        status = "OK" if classification == "OK" else "HTTP_ERROR" if classification in {"DNS_FAILURE", "SERVICE_DOWN", "REGIONAL_OUTAGE"} else "UNKNOWN_ERROR"
+        write_check(int(row["id"]), {
+            "status": status, "response_time_ms": int(summary.get("median_latency_ms") or 0),
+            "dns_ms": None, "tcp_ms": None, "tls_ms": None, "http_ms": None, "http_status": None,
+            "resolved_ip": None, "tls_days_left": None, "final_url": row["target"], "location": "RU",
+            "message": "РФ: публичные точки Globalping · " + (classification or (result.status if result else "нет результата")),
+        }, probe_key=RUSSIA_PROBE_KEY, probe_scope="RUSSIA")
+    except Exception as exc:
+        write_check(int(row["id"]), {
+            "status": "UNKNOWN_ERROR", "response_time_ms": 0, "dns_ms": None, "tcp_ms": None,
+            "tls_ms": None, "http_ms": None, "http_status": None, "resolved_ip": None,
+            "tls_days_left": None, "final_url": row["target"], "location": "RU",
+            "message": f"РФ Globalping: {str(exc)[:300]}",
+        }, probe_key=RUSSIA_PROBE_KEY, probe_scope="RUSSIA")
+
+
+async def russia_scheduler() -> None:
+    while True:
+        now = int(time.time())
+        with db() as conn:
+            rows = conn.execute("""SELECT r.* FROM resources r
+              LEFT JOIN checks c ON c.id=(SELECT id FROM checks WHERE resource_id=r.id AND probe_scope='RUSSIA' ORDER BY checked_at DESC,id DESC LIMIT 1)
+              WHERE r.enabled=1 AND (c.checked_at IS NULL OR ?>=c.checked_at+?) ORDER BY r.id LIMIT 30""",
+              (now, max(300, RUSSIA_CHECK_INTERVAL_SECONDS))).fetchall()
+        if rows and GLOBALPING_ENABLED:
+            await asyncio.gather(*(run_russia_check(row) for row in rows))
+        await asyncio.sleep(max(30, RUSSIA_CHECK_INTERVAL_SECONDS // 3))
 
 
 def _store_evidence(resource_id: int | None, provider: str, scope_key: str, evidence, now: int) -> None:
@@ -282,8 +326,9 @@ async def lifespan(_app: FastAPI):
     seed_defaults()
     task = asyncio.create_task(scheduler()) if SCHEDULER_ENABLED else None
     diagnostic_task = asyncio.create_task(diagnostic_poller()) if SCHEDULER_ENABLED and GLOBALPING_ENABLED else None
+    russia_task = asyncio.create_task(russia_scheduler()) if SCHEDULER_ENABLED and GLOBALPING_ENABLED else None
     yield
-    for active_task in (task, diagnostic_task):
+    for active_task in (task, diagnostic_task, russia_task):
         if active_task:
             active_task.cancel()
             try:
