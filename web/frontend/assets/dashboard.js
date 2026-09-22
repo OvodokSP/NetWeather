@@ -437,7 +437,7 @@ async function loadAll(silent){
       api("/api/history?hours="+hours+"&scope=DOMESTIC"),
       api("/api/session")
     ]);
-    S.dashboard=a[0];S.incidents=a[1];S.system=a[2];S.groups=a[3];S.realtime=a[4];S.realtimeDom=a[5];S.events=a[6];S.historyExt=a[7];S.historyDom=a[8];
+    S.dashboard=a[0];if(S.dashboard&&Array.isArray(S.dashboard.resources))S.dashboard.resources=S.dashboard.resources.map(normalizeResourceShape);S.incidents=a[1];S.system=a[2];S.groups=a[3];S.realtime=a[4];S.realtimeDom=a[5];S.events=a[6];S.historyExt=a[7];S.historyDom=a[8];
     S.authRequired=!!a[9].auth_required;S.owner=!S.authRequired||!!a[9].authenticated;
     S.lastSuccessAt=Date.now();renderAll();setCoreOnline(true)
   }catch(e){
@@ -491,6 +491,8 @@ function applyCapabilityNavigation(){
   if(domTrace)domTrace.classList.toggle("capability-hidden",!hasDomestic);
   if(!hasMap&&S.view==="map")openView("overview")
 }
+
+function normalizeResourceShape(r){if(r&&typeof r==="object"){if(!r.external&&r.global)r.external=r.global;if(!r.domestic&&r.russia)r.domestic=r.russia}return r}
 
 function isDomesticProbe(p){
   var scope=String(p&&p.scope||"").toUpperCase();
@@ -1177,7 +1179,7 @@ async function saveResource(e){
 }
 
 async function openDetail(id){
-  try{var d=await api("/api/resources/"+id),r=d.resource;S.detailId=id;q("#detailTitle").textContent=r.name;q("#detailBody").innerHTML='<div class="detail-top"><div class="detail-kv"><span>Вывод</span><b>'+diagText(r.diagnosis)+'</b></div><div class="detail-kv"><span>VPS</span><b>'+stText(r.external&&r.external.status)+'</b></div><div class="detail-kv"><span>РФ</span><b>'+stText(r.domestic&&r.domestic.status)+'</b></div><div class="detail-kv"><span>Отклик</span><b>'+num((r.domestic||r.external||{}).response_time_ms," мс")+'</b></div></div><div class="detail-section"><h3>'+esc(r.target)+'</h3><div class="detail-kv"><span>Пояснение</span><b>'+esc(r.diagnosis_text||"—")+'</b></div></div><div class="detail-section"><h3>Последние проверки</h3><div class="check-list">'+(d.checks.length?d.checks.map(function(c){return '<div class="check-row"><div>'+fmt(c.checked_at)+'</div><div>'+esc(c.probe_scope||"")+' · '+stText(c.status)+'</div><div>'+esc(c.message||"")+'</div><div>'+c.response_time_ms+' мс</div></div>'}).join(""):empty("Проверок нет",""))+'</div></div>';openDialog(q("#detailDialog"),"#detailCheck")}catch(e){toast(e.message)}
+  try{var d=await api("/api/resources/"+id),r=normalizeResourceShape(d.resource);S.detailId=id;q("#detailTitle").textContent=r.name;q("#detailBody").innerHTML='<div class="detail-top"><div class="detail-kv"><span>Вывод</span><b>'+diagText(r.diagnosis)+'</b></div><div class="detail-kv"><span>VPS</span><b>'+stText(r.external&&r.external.status)+'</b></div><div class="detail-kv"><span>РФ</span><b>'+stText(r.domestic&&r.domestic.status)+'</b></div><div class="detail-kv"><span>Отклик</span><b>'+num((r.domestic||r.external||{}).response_time_ms," мс")+'</b></div></div><div class="detail-section"><h3>'+esc(r.target)+'</h3><div class="detail-kv"><span>Пояснение</span><b>'+esc(r.diagnosis_text||"—")+'</b></div></div><div class="detail-section"><h3>Последние проверки</h3><div class="check-list">'+(d.checks.length?d.checks.map(function(c){return '<div class="check-row"><div>'+fmt(c.checked_at)+'</div><div>'+esc(c.probe_scope||"")+' · '+stText(c.status)+'</div><div>'+esc(c.message||"")+'</div><div>'+c.response_time_ms+' мс</div></div>'}).join(""):empty("Проверок нет",""))+'</div></div>';openDialog(q("#detailDialog"),"#detailCheck")}catch(e){toast(e.message)}
 }
 async function deleteResource(){var r=resourceById(S.detailId);if(!r)return;var ok=await confirmAction({title:"Удалить ресурс?",message:"«"+r.name+"» будет удалён из мониторинга.",hint:"История проверок этого ресурса также будет удалена.",accept:"Удалить ресурс"});if(!ok)return;try{await withBusy(q("#deleteResource"),"Удаляем…",async function(){await api("/api/resources/"+r.id,{method:"DELETE"},true);q("#detailDialog").close();await loadAll(true);toast("Ресурс удалён")})}catch(e){toast(e.message)}}
 
