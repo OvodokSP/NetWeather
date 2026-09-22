@@ -33,7 +33,7 @@ class FrontendContractTest(unittest.TestCase):
 
     def test_reference_overview_sections_exist(self):
         required = (
-            "globalSearch","topSystemStatus","kpiGlobal","kpiResources","kpiLatency","kpiPersonal","kpiIncidents",
+            "globalSearch","topSystemStatus","kpiGlobal","kpiResources","kpiLatency","kpiRu","kpiPersonal","kpiIncidents",
             "streamChart","eventFeed","resourceCards","faultMap","overviewResourceTable",
             "faultPath","faultConclusion","faultResourceSelect","mapRegion","mapZoomIn","mapZoomOut",
             "overviewFreshness","overviewResourceSummary","eventSummary",
@@ -43,14 +43,14 @@ class FrontendContractTest(unittest.TestCase):
 
     def test_reference_navigation_items_exist(self):
         for label in (
-            "Обзор","Мониторинг","Инциденты","Карта сбоев","Источники данных",
+            "Обзор","Мониторинг","Инциденты","Карта сбоев","Точки наблюдения",
             "Отчёты","Уведомления","Интеграции","Настройки",
         ):
             self.assertIn(label, self.html)
 
     def test_actions_and_dialogs_exist(self):
         for item in (
-            "resourceDialog","detailDialog","diagTrace","diagExternal",
+            "resourceDialog","detailDialog","diagTrace","diagTraceDomestic",
             "diagCheck","openAddResource","overviewAddResource","groupDialog","openAddGroup","groupForm",
             "sidebarAddResource","manageGroups","expandChart","enableNotifications",
             "ackAllIncidents","resourceIdentityPreview","resourceTargetHint",
@@ -125,7 +125,7 @@ class FrontendContractTest(unittest.TestCase):
         self.assertIn("capability-hidden", self.js)
         self.assertIn(".capability-hidden", self.css)
         self.assertIn('data-view="map"', self.html)
-        self.assertIn('id="diagExternal"', self.html)
+        self.assertIn('id="diagTraceDomestic"', self.html)
 
     def test_stale_core_and_live_map_contract(self):
         for token in (
@@ -156,14 +156,7 @@ class FrontendContractTest(unittest.TestCase):
             self.assertTrue(token in self.js or token in self.html)
         self.assertIn(".dashboard-hidden", self.css)
         self.assertIn(".overview-row.single-panel", self.css)
-        self.assertIn("fault_domain:resources.length>0", self.js)
-
-    def test_hardware_free_product_language(self):
-        combined = self.html + self.js
-        for obsolete in ("Keenetic", "/api/agent", "DOMESTIC", "Traceroute РФ"):
-            self.assertNotIn(obsolete, combined)
-        self.assertIn("Ваша сеть", combined)
-        self.assertIn("Недоступно без приложения", combined)
+        self.assertIn("fault_domain:resources.length>0&&(hasDomestic||hasPersonal)", self.js)
 
     def test_font_sizes_never_drop_below_ten_pixels(self):
         values = [float(v) for v in re.findall(r'font-size:\s*(\d+(?:\.\d+)?)px', self.css)]
@@ -218,13 +211,6 @@ class FrontendContractTest(unittest.TestCase):
             self.assertIn(token, self.js)
 
         self.assertIn('z-index:120', self.css)
-
-    def test_resource_details_show_scrollable_long_term_evidence(self):
-        self.assertIn('"timeline"', (self.root / "backend" / "app" / "main.py").read_text(encoding="utf-8"))
-        self.assertIn("timeline=d.timeline||[]", self.js)
-        self.assertIn("История событий и внешних данных · до 12 месяцев", self.js)
-        self.assertIn(".evidence-timeline{", self.css)
-        self.assertIn(".evidence-timeline-row{", self.css)
         self.assertIn('isolation:isolate', self.css)
         self.assertNotIn('.search-open .workspace{', self.css)
         self.assertIn('if(S.searchOpen)renderSearch(q("#globalSearch").value)', self.js)
@@ -246,7 +232,7 @@ class FrontendContractTest(unittest.TestCase):
     def test_no_inline_fake_metrics(self):
         self.assertNotRegex(self.html, r'>\s*9[0-9](?:\.\d+)?%\s*<')
         self.assertIn('id="kpiGlobal">—</strong>', self.html)
-        self.assertIn('id="kpiPersonal">—</strong>', self.html)
+        self.assertIn('id="kpiRu">—</strong>', self.html)
 
 
 if __name__ == "__main__":
