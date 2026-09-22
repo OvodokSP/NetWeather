@@ -22,10 +22,11 @@ var DASHBOARD_PANEL_LABELS={
   events:"Последние события",
   pinned_resources:"Закреплённые ресурсы",
   map:"Карта сбоев",
+  russia_kpi:"Российский контур",
   resources_table:"Таблица ресурсов",
   fault_domain:"Трассировка / fault domain"
 };
-var DASHBOARD_PANEL_ORDER=["global_kpi","resources_kpi","latency_kpi","incidents_kpi","personal_kpi","realtime","events","pinned_resources","map","resources_table","fault_domain"];
+var DASHBOARD_PANEL_ORDER=["global_kpi","resources_kpi","russia_kpi","latency_kpi","incidents_kpi","personal_kpi","realtime","events","pinned_resources","map","resources_table","fault_domain"];
 
 function defaultDashboardPreferences(){
   return{
@@ -62,6 +63,7 @@ function dashboardCapabilities(){
     global_kpi:true,
     resources_kpi:true,
     latency_kpi:true,
+    russia_kpi:true,
     personal_kpi:true,
     incidents_kpi:true,
     realtime:hasRealtime,
@@ -75,7 +77,11 @@ function dashboardCapabilities(){
 function visiblePinnedResourceIds(){
   var resources=S.dashboard&&S.dashboard.resources||[],valid=new Set(resources.map(function(r){return Number(r.id)})),prefs=loadDashboardPreferences();
   var chosen=(prefs.pinned_resource_ids||[]).filter(function(id){return valid.has(Number(id))}).slice(0,6);
-  if(!chosen.length)chosen=resources.slice(0,6).map(function(r){return Number(r.id)});
+  if(!chosen.length){
+    var russian=resources.filter(function(r){return String(r.group_name||"").toUpperCase()==="RUSSIAN"}).slice(0,2);
+    var russianIds=new Set(russian.map(function(r){return Number(r.id)}));
+    chosen=russian.concat(resources.filter(function(r){return !russianIds.has(Number(r.id))})).slice(0,6).map(function(r){return Number(r.id)})
+  }
   return chosen
 }
 function applyDashboardPreferences(){
