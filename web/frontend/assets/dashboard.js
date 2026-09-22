@@ -641,6 +641,7 @@ function drawAvailabilityChart(canvas,series){
   if(!allTs.length){S.streamMeta=null;return}
   var minValue=Math.min.apply(null,allVals),floor=Math.max(0,Math.floor((minValue-2)/5)*5);
   if(floor>=100)floor=95;
+  /* var ticks=[100,99,98,95,90] */
   var tickCount=5,plotBottom=h-p.b,ticks=[];
   for(var ti=0;ti<tickCount;ti++)ticks.push(100-(100-floor)*ti/(tickCount-1));
   ctx.font='600 11px "Inter","Segoe UI",system-ui,sans-serif';
