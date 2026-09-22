@@ -58,7 +58,7 @@ function saveDashboardPreferences(prefs){
 }
 function dashboardCapabilities(){
   var resources=S.dashboard&&S.dashboard.resources||[],probes=S.dashboard&&S.dashboard.probes||[];
-  var hasDomestic=probes.some(function(p){return isDomesticProbe(p)&&p.online});
+  var hasDomestic=!!((S.realtimeDom&&S.realtimeDom.resources&&S.realtimeDom.resources.length)||(S.historyDom&&S.historyDom.length));
   var hasPersonal=probes.some(function(p){return ["PERSONAL","BROWSER","DEVICE","LOCAL"].indexOf(String(p.scope||"").toUpperCase())>=0&&p.online});
   var hasMap=probes.some(function(p){return Number.isFinite(Number(p.lat))&&Number.isFinite(Number(p.lon))});
   var hasRealtime=!!(S.realtime&&S.realtime.resources&&S.realtime.resources.length);
@@ -543,7 +543,8 @@ function renderOverview(){
   q("#kpiRu").textContent=pct(ruAvail,2);
   q("#kpiRuDelta").textContent=(summary.russia_available||summary.domestic_probe_online)?(ruDelta==null?"живые данные":((ruDelta>=0?"▲ +":"▼ ")+Math.abs(ruDelta).toFixed(2)+"%")):"нет probe";
   q("#kpiRuDelta").style.color=(summary.russia_available||summary.domestic_probe_online)?(ruDelta!=null&&ruDelta<0?"var(--red)":"var(--green)"):"var(--muted)";
-  q("#kpiRuHint").textContent=(summary.russia_available||summary.domestic_probe_online)?"российский контур подключён":"российский probe не подключён";
+  var domesticHasData=!!((S.historyDom&&S.historyDom.length)||(S.realtimeDom&&S.realtimeDom.resources||[]).some(function(r){return (r.points||[]).some(function(p){return p.availability!=null})}));
+  q("#kpiRuHint").textContent=domesticHasData?"GLOBALPING_RU · серверный источник":"данные российского контура не получены";
 
   q("#kpiPersonal").textContent="—";
   q("#kpiPersonalHint").textContent="device-probe ещё не подключён";
@@ -651,17 +652,36 @@ function drawAvailabilityChart(canvas,series){
   ctx.fillStyle="rgba(184,204,226,.62)";ctx.font='500 10px "Inter","Segoe UI",system-ui,sans-serif';
   [tmin,tmax].forEach(function(t,i){ctx.fillText(new Date(t*1000).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"}),i?(w-p.r-34):p.l, h-8)});
   series.slice(0,10).forEach(function(row,si){
+    var active=!S.hoverSeries||((S.hoverSeries.id!=null&&row.id!=null&&String(S.hoverSeries.id)===String(row.id))||(S.hoverSeries.id==null&&S.hoverSeries.index===si));
+    ctx.globalAlpha=active?1:.22;
     var pts=(row.points||[]).filter(function(x){return x.availability!=null}).sort(function(a,b){return a.timestamp-b.timestamp});
     if(!pts.length)return;
     ctx.strokeStyle=COLORS[si%COLORS.length];ctx.lineWidth=2;ctx.beginPath();
     pts.forEach(function(pt,pi){var x=p.l+(Number(pt.timestamp)-tmin)/span*(w-p.l-p.r),val=Math.max(floor,Math.min(100,Number(pt.availability))),y=p.t+(plotBottom-p.t)*(1-(val-floor)/(100-floor||1));if(pi)ctx.lineTo(x,y);else ctx.moveTo(x,y)});
     ctx.stroke();
+    ctx.globalAlpha=1;
     if(pts.length===1){var pt=pts[0],x=p.l+(Number(pt.timestamp)-tmin)/span*(w-p.l-p.r),val=Math.max(floor,Math.min(100,Number(pt.availability))),y=p.t+(plotBottom-p.t)*(1-(val-floor)/(100-floor||1));ctx.fillStyle=COLORS[si%COLORS.length];ctx.beginPath();ctx.arc(x,y,3,0,Math.PI*2);ctx.fill()}
   });
   S.streamMeta={series:series.slice(0,10),tmin:tmin,tmax:tmax,min:floor,max:100,p:p,w:w,h:h,key:"availability"};
 }
 
 
+function chartHoverForEvent(canvas,e){
+  var m=S.streamMeta;if(!m)return null;
+  var rect=canvas.getBoundingClientRect(),x=e.clientX-rect.left,y=e.clientY-rect.top;
+  var ratio=Math.max(0,Math.min(1,(x-m.p.l)/(m.w-m.p.l-m.p.r))),ts=m.tmin+(m.tmax-m.tmin)*ratio,best=null;
+  m.series.slice(0,10).forEach(function(row,si){
+    var pts=(row.points||[]).filter(function(p){return p.availability!=null});if(!pts.length)return;
+    var pt=pts.reduce(function(a,p){return Math.abs(p.timestamp-ts)<Math.abs(a.timestamp-ts)?p:a},pts[0]);
+    var value=Math.max(m.min,Math.min(100,Number(pt.availability))),py=m.p.t+(m.h-m.p.t-m.p.b)*(1-(value-m.min)/(100-m.min||1)),distance=Math.abs(py-y);
+    if(!best||distance<best.distance)best={id:row.id,index:si,distance:distance};
+  });
+  return best&&best.distance<28?best:null;
+}
+function setChartHover(canvas,e){
+  var next=chartHoverForEvent(canvas,e),key=next?(next.id!=null?String(next.id):String(next.index)):null,current=S.hoverSeries?(S.hoverSeries.id!=null?String(S.hoverSeries.id):String(S.hoverSeries.index)):null;
+  if(key!==current){S.hoverSeries=next;renderRealtime();renderDomesticRealtime()}
+}
 function handleChartMove(e){
   var m=S.streamMeta;if(!m)return;
   var r=q("#streamChart").getBoundingClientRect(),x=e.clientX-r.left,ratio=Math.max(0,Math.min(1,(x-m.p.l)/(m.w-m.p.l-m.p.r))),ts=m.tmin+(m.tmax-m.tmin)*ratio;
@@ -690,6 +710,11 @@ function renderEvents(){
   bindIncidentActions()
 }
 
+function resourceScopeGap(r){
+  var ext=r&&r.external||{},dom=r&&r.domestic||{};
+  var globalOk=isReachable(ext.status),ruKnown=dom.status!=null&&String(dom.status).trim()!==''&&String(dom.status).toUpperCase()!=="UNKNOWN";
+  return globalOk&&ruKnown&&!isReachable(dom.status)?"Глобально доступен · в РФ недоступен":"";
+}
 function renderResourceCards(){
   var el=q("#resourceCards"),rows=S.realtime&&S.realtime.resources||[];
   if(!rows.length){el.innerHTML=empty("Нет ресурсов","Добавьте первую цель.");return}
@@ -697,8 +722,8 @@ function renderResourceCards(){
   var cards=pinned.map(function(id){return rows.find(function(r){return Number(r.id)===Number(id)})}).filter(Boolean).slice(0,MAX_PINNED_RESOURCES);
   el.innerHTML=cards.map(function(r,i){
     var rr=current.find(function(x){return x.id===r.id})||{},cls=resourceDisplayClass(rr);
-    var latency=(rr.domestic||rr.external||{}).response_time_ms;
-    return '<article class="resource-card" data-resource="'+r.id+'" tabindex="0" role="button" aria-label="Открыть ресурс «'+esc(r.name)+'»"><div class="resource-card-top"><div class="resource-card-name">'+resourceIconHtml(r.target,r.name)+'<b>'+esc(r.name)+'</b></div><span class="resource-state '+cls+'"><i></i>'+esc(resourceDisplayText(rr))+'</span></div><div class="resource-card-metrics"><div><span>Доступность · 24ч</span><strong>'+pct(r.availability_24h,1)+'</strong></div><div><span>Отклик сейчас</span><strong>'+num(latency," мс")+'</strong></div></div><canvas data-card-spark="'+r.id+'"></canvas><div class="resource-card-foot"><span>'+esc(groupTitle(r.group_name))+'</span><span>Проверен '+ago(r.last_checked_at||rr.checked_at)+'</span></div></article>'
+    var latency=(rr.domestic||rr.external||{}).response_time_ms,scopeGap=resourceScopeGap(rr),stateText=scopeGap||resourceDisplayText(rr),stateClass=scopeGap?"warn":cls;
+    return '<article class="resource-card" data-resource="'+r.id+'" tabindex="0" role="button" aria-label="Открыть ресурс «'+esc(r.name)+'»"><div class="resource-card-top"><div class="resource-card-name">'+resourceIconHtml(r.target,r.name)+'<b>'+esc(r.name)+'</b></div><span class="resource-state '+stateClass+'"><i></i>'+esc(stateText)+'</span></div><div class="resource-card-metrics"><div><span>Доступность · 24ч</span><strong>'+pct(r.availability_24h,1)+'</strong></div><div><span>Отклик сейчас</span><strong>'+num(latency," мс")+'</strong></div></div><canvas data-card-spark="'+r.id+'"></canvas><div class="resource-card-foot"><span>'+esc(groupTitle(r.group_name))+'</span><span>Проверен '+ago(r.last_checked_at||rr.checked_at)+'</span></div></article>'
   }).join("");
   qa(".resource-card").forEach(function(card){
     card.onclick=function(){openDetail(Number(card.dataset.resource))};
@@ -915,7 +940,7 @@ function renderResources(){
   q("#groupOptions").innerHTML=S.groups.map(function(g){return '<option value="'+esc(g.id)+'">'+esc(g.title)+'</option>'}).join("");
   var rows=filteredResources(),el=q("#resourcesTable");
   if(!rows.length){el.innerHTML=empty(all.length?"Ничего не найдено":"Список пуст",all.length?"Измените фильтры.":"Добавьте ресурс.");return}
-  el.innerHTML='<div class="table-head"><div>Ресурс</div><div>Вывод</div><div>VPS</div><div>РФ</div><div>DNS</div><div>HTTP</div><div>Действия</div></div>'+rows.map(function(r){var ext=r.external||{},dom=r.domestic||{};return '<div class="table-row" data-resource="'+r.id+'" tabindex="0" aria-label="Открыть ресурс «'+esc(r.name)+'»"><div class="table-resource"><b>'+esc(r.name)+'</b><span>'+esc(r.target)+' · '+esc(groupTitle(r.group_name))+'</span></div><div><span class="status-chip '+diagClass(r.diagnosis)+'">'+diagText(r.diagnosis)+'</span></div><div>'+stText(ext.status)+'</div><div>'+stText(dom.status)+'</div><div>'+num((dom.dns_ms!=null?dom.dns_ms:ext.dns_ms)," мс")+'</div><div>'+((dom.http_status!=null?dom.http_status:ext.http_status)||"—")+'</div><div><button class="btn tiny secondary row-check" data-check="'+r.id+'">Проверить</button></div></div>'}).join("");
+  el.innerHTML='<div class="table-head"><div>Ресурс</div><div>Вывод</div><div>VPS</div><div>РФ</div><div>DNS</div><div>HTTP</div><div>Действия</div></div>'+rows.map(function(r){var ext=r.external||{},dom=r.domestic||{};return '<div class="table-row" data-resource="'+r.id+'" tabindex="0" aria-label="Открыть ресурс «'+esc(r.name)+'»"><div class="table-resource"><b>'+esc(r.name)+'</b><span>'+esc(r.target)+' · '+esc(groupTitle(r.group_name))+'</span>'+(resourceScopeGap(r)?'<small class="resource-scope-gap">'+esc(resourceScopeGap(r))+'</small>':"")+"</div><div><span class="status-chip '+diagClass(r.diagnosis)+'">'+diagText(r.diagnosis)+'</span></div><div>'+stText(ext.status)+'</div><div>'+stText(dom.status)+'</div><div>'+num((dom.dns_ms!=null?dom.dns_ms:ext.dns_ms)," мс")+'</div><div>'+((dom.http_status!=null?dom.http_status:ext.http_status)||"—")+'</div><div><button class="btn tiny secondary row-check" data-check="'+r.id+'">Проверить</button></div></div>'}).join("");
   qa("#resourcesTable .table-row").forEach(function(row){
     row.onclick=function(e){if(e.target.closest(".row-check"))return;openDetail(Number(row.dataset.resource))};
     row.onkeydown=function(e){if((e.key==="Enter"||e.key===" ")&&!e.target.closest(".row-check")){e.preventDefault();openDetail(Number(row.dataset.resource))}}
@@ -926,7 +951,7 @@ function renderResources(){
 function incidentHtml(i){
   var severity=i.severity==="critical"?"critical":i.closed_at?"info":"";
   var read=!!i.acknowledged_at;
-  return '<div class="incident-row '+severity+' '+(read?"read":"unread")+'" data-incident="'+i.id+'"><i></i><div><b>'+esc(i.resource_name||"Событие")+'</b><p>'+esc(i.message||"")+'</p></div><div class="incident-row-actions"><time>'+ago(i.opened_at||i.closed_at)+'</time>'+(read?'<span class="incident-read-mark">✓ Прочитано</span>':'<button class="incident-read-btn" data-ack="'+i.id+'">✓ Прочитать</button>')+'</div></div>'
+  return '<div class="incident-row '+severity+' '+(read?"read":"unread")+'" data-incident="'+i.id+'"><i></i><div><b>'+esc(i.resource_name||"Событие")+'</b><p>'+esc(i.message||"")+'</p></div><div class="incident-row-actions"><time>'+ago(i.opened_at||i.closed_at)+'</time>'+(read?'<span class="incident-read-mark">✓ Прочитано · инцидент открыт</span>':'<button class="incident-read-btn" data-ack="'+i.id+'">✓ Прочитать</button>')+'</div></div>'
 }
 async function acknowledgeIncident(id){
   try{await api("/api/incidents/"+id+"/ack",{method:"POST"},true);await loadAll(true);toast("Инцидент отмечен прочитанным")}catch(e){toast(e.message)}
@@ -1262,7 +1287,7 @@ function setup(){
   qa(".modal-close").forEach(function(b){b.onclick=function(){closeDialog(b.closest("dialog"))}});
   qa('.seg[data-minutes]').forEach(function(b){b.onclick=async function(){if(b.dataset.busy==="1")return;qa('.seg[data-minutes]').forEach(function(x){x.classList.remove("active")});b.classList.add("active");S.streamMinutes=Number(b.dataset.minutes);try{await withBusy(b,"…",async function(){S.realtime=await api("/api/realtime?minutes="+S.streamMinutes+"&scope=EXTERNAL");renderRealtime();renderResourceCards();renderOverviewTable()})}catch(e){toast(e.message)}}});
   qa("[data-overview-resource-mode]").forEach(function(b){b.onclick=function(){S.overviewResourceMode=b.dataset.overviewResourceMode;qa("[data-overview-resource-mode]").forEach(function(x){x.classList.toggle("active",x===b)});renderOverviewTable()}});
-  q("#streamChart").addEventListener("mousemove",handleChartMove);q("#streamChart").addEventListener("mouseleave",function(){q("#chartTooltip").classList.add("hidden")});
+  q("#streamChart").addEventListener("mousemove",function(e){setChartHover(q("#streamChart"),e);handleChartMove(e)});q("#streamChart").addEventListener("mouseleave",function(){q("#chartTooltip").classList.add("hidden");if(S.hoverSeries){S.hoverSeries=null;renderRealtime();renderDomesticRealtime()}});q("#domesticStreamChart").addEventListener("mousemove",function(e){setChartHover(q("#domesticStreamChart"),e)});q("#domesticStreamChart").addEventListener("mouseleave",function(){if(S.hoverSeries){S.hoverSeries=null;renderRealtime();renderDomesticRealtime()}});
   q("#expandChart").onclick=function(){var panel=q(".streams-panel"),expanded=panel.classList.toggle("chart-expanded");this.setAttribute("aria-expanded",expanded?"true":"false");this.setAttribute("title",expanded?"Свернуть график":"Развернуть график")};
   q("#mapZoomIn").onclick=function(){S.mapScale=Math.min(2,S.mapScale+.15);q("#worldMapSvg").style.transform="scale("+S.mapScale+")"};
   q("#mapZoomOut").onclick=function(){S.mapScale=Math.max(.8,S.mapScale-.15);q("#worldMapSvg").style.transform="scale("+S.mapScale+")"};
