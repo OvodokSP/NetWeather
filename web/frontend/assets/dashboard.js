@@ -77,10 +77,12 @@ function dashboardCapabilities(){
 function visiblePinnedResourceIds(){
   var resources=S.dashboard&&S.dashboard.resources||[],valid=new Set(resources.map(function(r){return Number(r.id)})),prefs=loadDashboardPreferences();
   var chosen=(prefs.pinned_resource_ids||[]).filter(function(id){return valid.has(Number(id))}).slice(0,6);
+  var russian=resources.filter(function(r){return String(r.group_name||"").toUpperCase()==="RUSSIAN"}).slice(0,2);
+  var russianIds=new Set(russian.map(function(r){return Number(r.id)}));
   if(!chosen.length){
-    var russian=resources.filter(function(r){return String(r.group_name||"").toUpperCase()==="RUSSIAN"}).slice(0,2);
-    var russianIds=new Set(russian.map(function(r){return Number(r.id)}));
     chosen=russian.concat(resources.filter(function(r){return !russianIds.has(Number(r.id))})).slice(0,6).map(function(r){return Number(r.id)})
+  }else if(russian.length&&!chosen.some(function(id){return russianIds.has(Number(id))})){
+    chosen=russian.concat(chosen.filter(function(id){return !russianIds.has(Number(id))})).slice(0,6)
   }
   return chosen
 }
