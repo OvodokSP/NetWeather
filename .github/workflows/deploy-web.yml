@@ -99,6 +99,8 @@ jobs:
             --env NETWEATHER_API_TOKEN=deploy-ci-only \
             --env NETWEATHER_ALLOW_OPEN_ACCESS=false \
             --env NETWEATHER_GLOBALPING_ENABLED=true \
+            --env NETWEATHER_OONI_ENABLED=true \
+            --env NETWEATHER_IODA_ENABLED=true \
             --env ALLOW_PRIVATE_TARGETS=false \
             "netweather-web:$GITHUB_SHA" >/dev/null
 
@@ -123,6 +125,7 @@ jobs:
           curl -fsS --max-time 3 http://127.0.0.1:18081/ >/dev/null
           curl -fsS --max-time 3 http://127.0.0.1:18081/api/system >/dev/null
           curl -fsS --max-time 3 http://127.0.0.1:18081/api/diagnostics/status | python -c 'import json,sys; assert json.load(sys.stdin)["enabled"] is True'
+          curl -fsS --max-time 3 http://127.0.0.1:18081/api/system | python -c 'import json,sys; d=json.load(sys.stdin); assert d["ooni_enabled"] is True and d["ioda_enabled"] is True'
           curl -fsS --max-time 3 http://127.0.0.1:18081/api/groups >/dev/null
           python - <<'PY'
           import json
