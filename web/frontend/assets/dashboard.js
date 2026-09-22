@@ -414,23 +414,18 @@ function updateClock(){
 async function loadAll(silent){
   try{
     var hours=Number(q("#historyRange")&&q("#historyRange").value||24);
-    var a=await Promise.all([
-      api("/api/dashboard"),
-      api("/api/incidents?limit=100"),
-      api("/api/system"),
-      api("/api/groups"),
-      api("/api/realtime?minutes="+S.streamMinutes+"&scope=GLOBAL"),
-      api("/api/events?limit=30"),
-      api("/api/history?hours="+hours+"&scope=GLOBAL"),
-      api("/api/history?hours="+hours+"&scope=USER"),
-      api("/api/session")
-    ]);
+    var endpoints=["/api/dashboard","/api/incidents?limit=100","/api/system","/api/groups",
+      "/api/realtime?minutes="+S.streamMinutes+"&scope=GLOBAL","/api/events?limit=30",
+      "/api/history?hours="+hours+"&scope=GLOBAL","/api/history?hours="+hours+"&scope=USER","/api/session"];
+    var a=await Promise.all(endpoints.map(function(endpoint){return api(endpoint).catch(function(err){
+      err.endpoint=endpoint;throw err
+    })}));
     S.dashboard=a[0];S.incidents=a[1];S.system=a[2];S.groups=a[3];S.realtime=a[4];S.events=a[5];S.historyGlobal=a[6];S.historyUser=a[7];
     S.authRequired=!!a[8].auth_required;S.owner=!S.authRequired||!!a[8].authenticated;
     S.lastSuccessAt=Date.now();renderAll();setCoreOnline(true)
   }catch(e){
     setCoreOnline(false);
-    if(!silent)toast("Ошибка загрузки: "+e.message)
+    if(!silent)toast("Ошибка обновления ("+(e.endpoint||"API")+"): "+e.message)
   }
 }
 

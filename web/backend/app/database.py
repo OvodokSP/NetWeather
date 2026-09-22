@@ -6,7 +6,11 @@ import time
 from contextlib import contextmanager
 from typing import Any
 
-from .config import CLIENT_PROBE_STALE_SECONDS, DB_PATH, DEFAULT_INTERVAL, DEFAULT_RESOURCES, RUSSIA_PROBE_KEY, RUSSIA_PROBE_NAME, RUSSIA_PROBE_STALE_SECONDS, SEED_DEFAULTS, SERVER_PROBE_KEY, SERVER_PROBE_NAME, SERVER_PROBE_STALE_SECONDS
+from .config import (CLIENT_PROBE_STALE_SECONDS, DB_PATH, DEFAULT_INTERVAL, DEFAULT_RESOURCES,
+                     RUSSIA_PROBE_KEY, RUSSIA_PROBE_LAT, RUSSIA_PROBE_LON,
+                     RUSSIA_PROBE_NAME, RUSSIA_PROBE_STALE_SECONDS, SEED_DEFAULTS,
+                     SERVER_PROBE_KEY, SERVER_PROBE_LAT, SERVER_PROBE_LON,
+                     SERVER_PROBE_NAME, SERVER_PROBE_STALE_SECONDS)
 from .resource_catalog import CATALOG_BY_KEY, catalog_match
 from .availability import is_reachable
 from .assessment import assess_incident
@@ -298,11 +302,19 @@ def probe_statuses() -> list[dict[str, Any]]:
     now = int(time.time())
     with db() as conn:
         rows = conn.execute("SELECT * FROM probes ORDER BY scope, name").fetchall()
-    return [{
+    result = [{
         **dict(r),
         "online": bool(r["last_seen_at"] and now - r["last_seen_at"] <= (RUSSIA_PROBE_STALE_SECONDS if r["scope"] == "RUSSIA" else SERVER_PROBE_STALE_SECONDS if r["scope"] == "GLOBAL" else CLIENT_PROBE_STALE_SECONDS)),
         "age_seconds": max(0, now - int(r["last_seen_at"] or 0)) if r["last_seen_at"] else None,
     } for r in rows]
+    for item in result:
+        # Coarse regional anchors are safe for public/server probes. Android
+        # probes intentionally stay unlocated to avoid exposing device position.
+        if item["probe_key"] == SERVER_PROBE_KEY:
+            item.update({"lat": SERVER_PROBE_LAT, "lon": SERVER_PROBE_LON, "location_precision": "region"})
+        elif item["probe_key"] == RUSSIA_PROBE_KEY:
+            item.update({"lat": RUSSIA_PROBE_LAT, "lon": RUSSIA_PROBE_LON, "location_precision": "region"})
+    return result
 
 
 def _latest_probe_check(conn: sqlite3.Connection, resource_id: int, scope: str):

@@ -31,6 +31,8 @@ CLIENT_PROBE_STALE_SECONDS = int(os.getenv("NETWEATHER_CLIENT_PROBE_STALE_SECOND
 SERVER_PROBE_STALE_SECONDS = int(os.getenv("NETWEATHER_SERVER_PROBE_STALE_SECONDS", "180"))
 SERVER_PROBE_KEY = os.getenv("NETWEATHER_SERVER_PROBE_KEY", "VPS_EU").strip() or "VPS_EU"
 SERVER_PROBE_NAME = os.getenv("NETWEATHER_SERVER_PROBE_NAME", "NetWeather VPS").strip() or "NetWeather VPS"
+SERVER_PROBE_LAT = float(os.getenv("NETWEATHER_SERVER_PROBE_LAT", "50.11"))
+SERVER_PROBE_LON = float(os.getenv("NETWEATHER_SERVER_PROBE_LON", "8.68"))
 # Globalping's public API is available without a token; keep the provider on by
 # default so a production deployment cannot silently degrade to a stub. A token
 # may still be supplied to receive the higher authenticated quota.
@@ -43,6 +45,8 @@ RUSSIA_PROBE_COUNT = int(os.getenv("NETWEATHER_RUSSIA_PROBE_COUNT", "3"))
 RUSSIA_PROBE_KEY = os.getenv("NETWEATHER_RUSSIA_PROBE_KEY", "GLOBALPING_RU").strip() or "GLOBALPING_RU"
 RUSSIA_PROBE_NAME = os.getenv("NETWEATHER_RUSSIA_PROBE_NAME", "Публичные точки РФ (Globalping)").strip() or "Публичные точки РФ (Globalping)"
 RUSSIA_PROBE_STALE_SECONDS = int(os.getenv("NETWEATHER_RUSSIA_PROBE_STALE_SECONDS", "1800"))
+RUSSIA_PROBE_LAT = float(os.getenv("NETWEATHER_RUSSIA_PROBE_LAT", "55.75"))
+RUSSIA_PROBE_LON = float(os.getenv("NETWEATHER_RUSSIA_PROBE_LON", "37.62"))
 DIAGNOSTIC_RESERVE_PERCENT = int(os.getenv("NETWEATHER_DIAGNOSTIC_RESERVE_PERCENT", "30"))
 DIAGNOSTIC_COOLDOWN_SECONDS = int(os.getenv("NETWEATHER_DIAGNOSTIC_COOLDOWN_SECONDS", "900"))
 DIAGNOSTIC_POLL_SECONDS = int(os.getenv("NETWEATHER_DIAGNOSTIC_POLL_SECONDS", "10"))
