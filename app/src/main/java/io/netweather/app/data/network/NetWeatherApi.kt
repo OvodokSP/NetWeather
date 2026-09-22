@@ -30,20 +30,8 @@ class NetWeatherApi(
             if (!response.isSuccessful) error("NetWeather API: HTTP ${response.code}")
             val root = json.parseToJsonElement(response.body?.string().orEmpty()).jsonObject
             val summary = root["summary"]?.jsonObject ?: buildJsonObject { }
-            val resources = (root["resources"]?.jsonArray ?: buildJsonArray { }).map { element ->
-                val item = element.jsonObject
-                val group = runCatching { ResourceGroup.valueOf(item.string("group_name")) }.getOrDefault(ResourceGroup.CUSTOM)
-                RemoteResource(
-                    id = item.long("id"),
-                    name = item.string("name"),
-                    target = item.string("target"),
-                    group = group,
-                    enabled = item.boolean("enabled", true),
-                    intervalSeconds = item.int("interval_seconds", 300),
-                )
-            }
             RemoteDashboard(
-                resources = resources,
+                resources = parseResources(root["resources"]?.jsonArray ?: buildJsonArray { }),
                 global = GlobalState(
                     availability = summary["availability_index"]?.jsonPrimitive?.intOrNull,
                     mode = summary.string("mode", "NO_DATA"),
@@ -51,6 +39,25 @@ class NetWeatherApi(
                     active = true,
                 ),
             )
+        }
+    }
+
+    /** Authenticated catalog used by a paired Android installation. */
+    suspend fun clientProbeResources(): RemoteDashboard = withContext(Dispatchers.IO) {
+        val store = requireNotNull(stateStore) { "StateStore is required for device sync" }
+        val token = store.accessToken() ?: error("Устройство не подключено")
+        val request = Request.Builder()
+            .url("${baseUrl.trimEnd('/')}/api/v1/client-probe/resources")
+            .header("Authorization", "Bearer $token")
+            .get().build()
+        client.newCall(request).execute().use { response ->
+            if (response.code == 401) {
+                store.clearAccessToken()
+                error("Привязка устройства истекла. Подключите устройство повторно.")
+            }
+            if (!response.isSuccessful) error("Каталог NetWeather: HTTP ${response.code}")
+            val items = json.parseToJsonElement(response.body?.string().orEmpty()).jsonArray
+            RemoteDashboard(resources = parseResources(items), global = GlobalState(active = true))
         }
     }
 
@@ -131,6 +138,16 @@ class NetWeatherApi(
             }
             if (!response.isSuccessful) error("Передача локального результата: HTTP ${response.code}")
         }
+    }
+
+    private fun parseResources(items: JsonArray): List<RemoteResource> = items.map { element ->
+        val item = element.jsonObject
+        val group = runCatching { ResourceGroup.valueOf(item.string("group_name")) }.getOrDefault(ResourceGroup.CUSTOM)
+        RemoteResource(
+            id = item.long("id"), name = item.string("name"), target = item.string("target"),
+            group = group, enabled = item.boolean("enabled", true),
+            intervalSeconds = item.int("interval_seconds", 300),
+        )
     }
 
     private fun JsonObject.string(key: String, fallback: String = ""): String = this[key]?.jsonPrimitive?.contentOrNull ?: fallback

@@ -62,7 +62,10 @@ class NetWeatherRepositoryImpl(
     }
 
     override suspend fun runChecks(): NetworkSummary {
-        val synchronizedResourceIds = runCatching { syncRemoteResources(api.dashboard()) }
+        val synchronizedResourceIds = runCatching {
+            if (stateStore.accessToken() != null) syncRemoteResources(api.clientProbeResources())
+            else syncRemoteResources(api.dashboard())
+        }
             .onFailure { ensureDefaultResources() }
             .getOrDefault(emptySet())
         val resources = db.resourceDao().getEnabled().map { it.toDomain() }
