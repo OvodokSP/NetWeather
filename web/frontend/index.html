@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#08111f">
   <meta name="description" content="NetWeather — мониторинг доступности ресурсов и диагностика сетевых проблем в реальном времени.">
   <title>NetWeather</title>
-  <link rel="stylesheet" href="/assets/dashboard.css?v=0.4.1-russia-kpi">
+  <link rel="stylesheet" href="/assets/dashboard.css?v=0.3.10-dynamic3">
 </head>
 <body>
 <div class="shell">
@@ -18,13 +18,11 @@
 
     <nav class="side-nav" aria-label="Основная навигация">
       <button class="side-item active" data-view="overview"><span>⌂</span>Обзор</button>
-      <button class="side-item" data-view="resources"><span>▱</span>Мониторинг</button>
+      <button class="side-item" data-view="resources"><span>▱</span>Мониторинг и трассировка</button>
       <button class="side-item" data-view="alerts"><span>△</span>Инциденты <i id="alertBadge" class="badge hidden">0</i></button>
       <button class="side-item" data-view="map"><span>◇</span>Карта сбоев</button>
-      <button class="side-item" data-view="probes"><span>⌾</span>Источники данных</button>
+      <button class="side-item" data-view="probes"><span>⌾</span>Точки наблюдения</button>
       <button class="side-item" data-view="history"><span>▥</span>Отчёты</button>
-      <button class="side-item" data-view="notifications"><span>♢</span>Уведомления</button>
-      <button class="side-item" data-view="integrations"><span>⌘</span>Интеграции</button>
       <button class="side-item" data-view="settings"><span>⚙</span>Настройки</button>
     </nav>
 
@@ -107,15 +105,6 @@
               </div>
               <canvas class="mini-spark" id="kpiResourcesSpark"></canvas>
             </article>
-            <article class="kpi-card" id="kpiRussiaCard" data-dashboard-panel="russia_kpi">
-              <div class="kpi-icon blue">РФ</div>
-              <div class="kpi-body">
-                <span>Российский контур</span>
-                <div><strong id="kpiRussia">—</strong><em>RU probes</em></div>
-                <small id="kpiRussiaHint">ожидаем проверку из РФ</small>
-              </div>
-              <canvas class="mini-spark" id="kpiRussiaSpark"></canvas>
-            </article>
             <article class="kpi-card" id="kpiLatencyCard" data-dashboard-panel="latency_kpi">
               <div class="kpi-icon violet">◷</div>
               <div class="kpi-body">
@@ -125,12 +114,21 @@
               </div>
               <canvas class="mini-spark" id="kpiLatencySpark"></canvas>
             </article>
+            <article class="kpi-card" id="kpiDomesticCard" data-dashboard-panel="domestic_kpi">
+              <div class="kpi-icon violet">◒</div>
+              <div class="kpi-body">
+                <span>Российский контур</span>
+                <div><strong id="kpiRu">—</strong><em id="kpiRuDelta">нет probe</em></div>
+                <small id="kpiRuHint">данные не получены</small>
+              </div>
+              <canvas class="mini-spark" id="kpiRuSpark"></canvas>
+            </article>
             <article class="kpi-card" id="kpiPersonalCard" data-dashboard-panel="personal_kpi">
               <div class="kpi-icon green">⌘</div>
               <div class="kpi-body">
-                <span>Ваша сеть</span>
-                <div><strong id="kpiPersonal">—</strong><em>Android</em></div>
-                <small id="kpiPersonalHint">локальная проверка недоступна</small>
+                <span>Моя сеть</span>
+                <div><strong id="kpiPersonal">—</strong><em>устройство</em></div>
+                <small id="kpiPersonalHint">device-probe ещё не подключён</small>
               </div>
               <canvas class="mini-spark" id="kpiPersonalSpark"></canvas>
             </article>
@@ -173,6 +171,19 @@
                 <button class="link-btn" data-view-jump="alerts">Все события →</button>
               </div>
               <div id="eventFeed" class="event-feed"></div>
+            </article>
+          </div>
+
+          <div class="overview-row overview-row-domestic">
+            <article class="panel domestic-stream-panel" data-dashboard-panel="domestic_realtime">
+              <div class="panel-head compact">
+                <div><h2>Доступность из российского контура <span class="info-dot">i</span></h2><span class="panel-subtitle" id="domesticGraphMeta">Проверка с общедоступного российского probe</span></div>
+                <div class="panel-actions"><span class="stream-scope-badge" id="domesticGraphStatus">нет данных</span></div>
+              </div>
+              <div class="chart-wrap domestic-chart-wrap">
+                <canvas id="domesticStreamChart"></canvas>
+                <div id="domesticStreamEmpty" class="chart-empty">Нет измерений российского контура</div>
+              </div>
             </article>
           </div>
 
@@ -251,14 +262,14 @@
 
       <section class="view" id="view-resources">
         <div class="page-head">
-          <div><h1>Мониторинг</h1><p>Ресурсы, группы, интервалы и диагностические этапы.</p></div>
-          <div class="page-actions"><button class="btn secondary owner-only" id="manageGroups">Группы</button><button class="btn primary" id="openAddResource">+ Добавить ресурс</button></div>
+          <div><h1>Мониторинг и трассировка</h1><p>Ресурсы, группы, интервалы, диагностика и маршрут до цели.</p></div>
+          <div class="page-actions"><button class="btn secondary" data-view-jump="diagnostics">Трассировка</button><button class="btn secondary owner-only" id="manageGroups">Группы</button><button class="btn primary" id="openAddResource">+ Добавить ресурс</button></div>
         </div>
         <article class="panel page-panel">
           <div class="filters">
             <input class="input" id="searchInput" placeholder="Поиск по имени, адресу или IP">
             <select class="select" id="groupFilter"><option value="ALL">Все группы</option></select>
-            <select class="select" id="statusFilter"><option value="ALL">Все состояния</option><option value="OK">Работают</option><option value="LOCAL">Проблема вашей сети</option><option value="OUTAGE">Недоступны глобально</option><option value="UNKNOWN">Недостаточно данных</option></select>
+            <select class="select" id="statusFilter"><option value="ALL">Все состояния</option><option value="AVAILABLE">Доступны</option><option value="RESTRICTION">Вероятно ограничены</option><option value="OUTAGE">Вероятно упали</option><option value="UNKNOWN">Нет данных РФ</option></select>
           </div>
           <div id="resourcesTable" class="full-table"></div>
         </article>
@@ -286,7 +297,7 @@
       </section>
 
       <section class="view" id="view-probes">
-        <div class="page-head"><div><h1>Источники данных</h1><p>VPS, внешние провайдеры и необязательная локальная проверка Android.</p></div></div>
+        <div class="page-head"><div><h1>Точки наблюдения</h1><p>Все probes, их роль, состояние и последнее измерение.</p></div></div>
         <div id="probesGrid" class="probe-page-grid"></div>
       </section>
 
@@ -297,7 +308,7 @@
             <select class="select" id="diagResource"></select>
             <button class="btn primary" id="diagCheck">Проверить</button>
             <button class="btn secondary" id="diagTrace">Traceroute VPS</button>
-            <button class="btn secondary" id="diagExternal">Проверить извне</button>
+            <button class="btn secondary" id="diagTraceDomestic">Traceroute РФ</button>
           </div>
           <div id="diagSummary" class="diag-summary"></div>
           <div class="diag-pipeline">
@@ -332,10 +343,10 @@
       </section>
 
       <section class="view" id="view-integrations">
-        <div class="page-head"><div><h1>Интеграции</h1><p>Единый API, внешняя диагностика и локальная проверка Android.</p></div></div>
+        <div class="page-head"><div><h1>Интеграции</h1><p>API, probes и внешние каналы.</p></div></div>
         <div class="settings-grid">
           <article class="panel setting-card"><span>API</span><h2>NetWeather API</h2><p>Чтение публичных данных доступно без входа; управляющие запросы требуют права владельца.</p><div class="setting-box">/api/dashboard · /api/resources · /api/incidents · /api/realtime</div></article>
-          <article class="panel setting-card"><span>ДИАГНОСТИКА</span><h2>Globalping + Android</h2><p>Сбои подтверждаются внешними точками; Android может добровольно добавить состояние вашей сети.</p><div class="setting-box">/api/diagnostics/status · /api/v1/client-probe/resources</div></article>
+          <article class="panel setting-card"><span>PROBE</span><h2>Agent API</h2><p>Подключение Keenetic/устройств использует отдельный agent token.</p><div class="setting-box">/api/agent/config.tsv · /api/agent/result</div></article>
         </div>
       </section>
 
@@ -344,10 +355,11 @@
         <div class="settings-grid">
           <article class="panel setting-card"><span>ДОСТУП</span><h2>Публичный режим</h2><p>Просмотр и добавление ресурсов доступны всем. Изменение и удаление ресурсов, ручные проверки и служебные действия доступны только владельцу.</p><div id="tokenState" class="setting-box"></div><button class="btn primary" id="ownerAuthAction" type="button">Войти как владелец</button></article>
           <article class="panel setting-card"><span>ТОЧКИ НАБЛЮДЕНИЯ</span><h2>Probes</h2><div id="probeSettings" class="probe-settings"></div></article>
-          <article class="panel setting-card wide"><span>ANDROID</span><h2>Подключение устройства</h2><p>Откройте настройки приложения, получите уникальный одноразовый код и введите его здесь. Новый запрос автоматически отменяет предыдущий код устройства.</p><form id="deviceApprovalForm" class="device-approval-form"><label><span>Код устройства</span><input id="deviceApprovalCode" autocomplete="one-time-code" maxlength="9" placeholder="ABCD-2345" required></label><button class="btn primary" type="submit">Подключить</button></form><div id="deviceSettings" class="probe-settings"></div></article>
           <article class="panel setting-card"><span>ТРЕВОГИ</span><h2>Триггеры</h2><p>Последовательные ошибки, высокая задержка и срок TLS.</p><div id="alertSystemState" class="setting-box"></div></article>
           <article class="panel setting-card"><span>CORE</span><h2>Runtime</h2><div id="systemInfo" class="system-info"></div></article>
           <article class="panel setting-card wide"><span>БЕЗОПАСНОСТЬ</span><h2>Изоляция NetWeather</h2><p>NetWeather работает через собственный контейнер и upstream. Конфигурация VPN/Xray не является частью deployment сайта.</p><div id="securityState" class="setting-box"></div></article>
+          <article class="panel setting-card"><span>УВЕДОМЛЕНИЯ</span><h2>Каналы и политика оповещений</h2><p>Браузерные уведомления и серверный webhook для открытий и закрытий инцидентов.</p><div class="setting-box">Состояние каналов доступно в подробностях.</div><button class="btn secondary" data-view-jump="notifications">Открыть подробности</button></article>
+          <article class="panel setting-card"><span>ИНТЕГРАЦИИ</span><h2>API и точки наблюдения</h2><p>Публичное чтение данных, agent API и внешние каналы подключения.</p><div class="setting-box">/api/dashboard · /api/resources · /api/realtime</div><button class="btn secondary" data-view-jump="integrations">Открыть подробности</button></article>
         </div>
       </section>
 
@@ -365,7 +377,7 @@
     <div class="dashboard-preferences-body">
       <section class="preferences-section">
         <div class="preferences-section-head">
-          <div><h3>Закреплённые ресурсы</h3><p>До 6 карточек на главном экране. Ресурсы сгруппированы так же, как в мониторинге.</p></div>
+          <div><h3>Закреплённые ресурсы</h3><p>До 10 компактных карточек на главном экране. Ресурсы сгруппированы так же, как в мониторинге.</p></div>
           <span id="pinnedResourceCount" class="preferences-counter">0 / 6</span>
         </div>
         <div id="pinnedResourceGroups" class="pinned-resource-groups"></div>
@@ -484,6 +496,6 @@
 </dialog>
 
 <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
-<script src="/assets/dashboard.js?v=0.4.1-russia-kpi"></script>
+<script src="/assets/dashboard.js?v=0.3.10-dynamic3"></script>
 </body>
 </html>
