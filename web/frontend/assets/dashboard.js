@@ -6,7 +6,7 @@ var MAX_PINNED_RESOURCES=10;
 var S={
   dashboard:null,incidents:[],system:null,groups:[],realtime:null,realtimeDom:null,events:[],
   historyExt:[],historyDom:[],streamMinutes:60,detailId:null,diagId:null,
-  faultId:null,view:"overview",poll:null,streamMeta:null,authRequired:false,
+  faultId:null,view:"overview",poll:null,streamMeta:null,chartMeta:{},authRequired:false,
   owner:true,mapScale:1,metaCache:{},catalog:null,catalogSelected:{},customCatalogMatch:null,customAutoCatalogKey:null,
   dashboardPrefs:null,searchIndex:-1,searchAddTarget:null,pendingSearchTarget:null,coreOnline:false,lastSuccessAt:null,
   overviewResourceMode:"ALL"
@@ -596,7 +596,16 @@ function renderRealtime(){
   var series=realtimePinnedSeries(S.realtime),withPoints=series.filter(function(r){return (r.points||[]).some(function(p){return p.availability!=null})});
   q("#streamEmpty").classList.toggle("hidden",!!withPoints.length);
   drawAvailabilityChart(q("#streamChart"),series);
-  q("#streamLegend").innerHTML=series.slice(0,10).map(function(r,i){return '<span class="legend-item"><i class="legend-dot" style="background:'+COLORS[i%COLORS.length]+'"></i>'+esc(r.name||r.target||("Ресурс "+r.id))+'</span>'}).join("")
+  q("#streamLegend").innerHTML=series.slice(0,10).map(chartLegendItem).join("")
+}
+
+function chartSeriesActive(row,index){
+  if(!S.hoverSeries)return true;
+  return (S.hoverSeries.id!=null&&row.id!=null&&String(S.hoverSeries.id)===String(row.id))||(S.hoverSeries.id==null&&S.hoverSeries.index===index)
+}
+function chartLegendItem(row,index){
+  var hovered=chartSeriesActive(row,index),state=S.hoverSeries?(hovered?" is-active":" is-muted"):"";
+  return '<span class="legend-item'+state+'" data-series-id="'+esc(row.id==null?index:row.id)+'"><i class="legend-dot" style="background:'+COLORS[index%COLORS.length]+'"></i>'+esc(row.name||row.target||("Ресурс "+row.id))+'</span>'
 }
 
 
@@ -613,7 +622,7 @@ function renderDomesticRealtime(){
   if(emptyEl)emptyEl.classList.toggle("hidden",hasRows);
   if(status){status.textContent=hasRows?"данные обновлены":"нет данных";status.className="stream-scope-badge "+(hasRows?"ok":"neutral")}
   if(meta)meta.textContent=hasRows?"GLOBALPING_RU · общедоступный сервер в России · выбранные ресурсы":"Ожидается ответ российского probe; мобильное приложение на этот график не влияет";
-  if(legend)legend.innerHTML=series.slice(0,10).map(function(r,i){return '<span class="legend-item"><i class="legend-dot" style="background:'+COLORS[i%COLORS.length]+'"></i>'+esc(r.name||r.target||("Ресурс "+r.id))+'</span>'}).join("");
+  if(legend)legend.innerHTML=series.slice(0,10).map(chartLegendItem).join("");
   drawAvailabilityChart(canvas,series);
 }
 
@@ -637,10 +646,10 @@ function drawAvailabilityChart(canvas,series){
   canvas.width=Math.max(480,Math.floor(rect.width*dpr));canvas.height=Math.max(190,Math.floor(rect.height*dpr));
   var ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);
   var w=rect.width,h=rect.height,p={l:54,r:12,t:13,b:29};ctx.clearRect(0,0,w,h);
-  if(!series.length){S.streamMeta=null;return}
+  if(!series.length){S.streamMeta=null;S.chartMeta[canvas.id]=null;return}
   var allTs=[],allVals=[];
   series.forEach(function(row){(row.points||[]).forEach(function(x){if(x.availability!=null){allTs.push(Number(x.timestamp));allVals.push(Number(x.availability));}})});
-  if(!allTs.length){S.streamMeta=null;return}
+  if(!allTs.length){S.streamMeta=null;S.chartMeta[canvas.id]=null;return}
   var minValue=Math.min.apply(null,allVals),floor=Math.max(0,Math.floor((minValue-2)/5)*5);
   if(floor>=100)floor=95;
   /* var ticks=[100,99,98,95,90] */
@@ -662,12 +671,14 @@ function drawAvailabilityChart(canvas,series){
     ctx.globalAlpha=1;
     if(pts.length===1){var pt=pts[0],x=p.l+(Number(pt.timestamp)-tmin)/span*(w-p.l-p.r),val=Math.max(floor,Math.min(100,Number(pt.availability))),y=p.t+(plotBottom-p.t)*(1-(val-floor)/(100-floor||1));ctx.fillStyle=COLORS[si%COLORS.length];ctx.beginPath();ctx.arc(x,y,3,0,Math.PI*2);ctx.fill()}
   });
-  S.streamMeta={series:series.slice(0,10),tmin:tmin,tmax:tmax,min:floor,max:100,p:p,w:w,h:h,key:"availability"};
+  ctx.globalAlpha=1;
+  var meta={series:series.slice(0,10),tmin:tmin,tmax:tmax,min:floor,max:100,p:p,w:w,h:h,key:"availability",canvasId:canvas.id};
+  S.streamMeta=meta;S.chartMeta[canvas.id]=meta;
 }
 
 
 function chartHoverForEvent(canvas,e){
-  var m=S.streamMeta;if(!m)return null;
+  var m=(S.chartMeta&&S.chartMeta[canvas.id])||S.streamMeta;if(!m)return null;
   var rect=canvas.getBoundingClientRect(),x=e.clientX-rect.left,y=e.clientY-rect.top;
   var ratio=Math.max(0,Math.min(1,(x-m.p.l)/(m.w-m.p.l-m.p.r))),ts=m.tmin+(m.tmax-m.tmin)*ratio,best=null;
   m.series.slice(0,10).forEach(function(row,si){
@@ -682,19 +693,21 @@ function setChartHover(canvas,e){
   var next=chartHoverForEvent(canvas,e),key=next?(next.id!=null?String(next.id):String(next.index)):null,current=S.hoverSeries?(S.hoverSeries.id!=null?String(S.hoverSeries.id):String(S.hoverSeries.index)):null;
   if(key!==current){S.hoverSeries=next;renderRealtime();renderDomesticRealtime()}
 }
-function handleChartMove(e){
-  var m=S.streamMeta;if(!m)return;
-  var r=q("#streamChart").getBoundingClientRect(),x=e.clientX-r.left,ratio=Math.max(0,Math.min(1,(x-m.p.l)/(m.w-m.p.l-m.p.r))),ts=m.tmin+(m.tmax-m.tmin)*ratio;
+function handleChartMoveForCanvas(canvas,tooltipSelector,e){
+  var m=(S.chartMeta&&S.chartMeta[canvas.id])||S.streamMeta;if(!m)return;
+  var r=canvas.getBoundingClientRect(),x=e.clientX-r.left,ratio=Math.max(0,Math.min(1,(x-m.p.l)/(m.w-m.p.l-m.p.r))),ts=m.tmin+(m.tmax-m.tmin)*ratio;
   var rows=[];
   m.series.slice(0,10).forEach(function(s,si){
-    if(!s.points.length)return;
+    if(!(s.points||[]).length)return;
     var pt=s.points.reduce(function(best,p){return Math.abs(p.timestamp-ts)<Math.abs(best.timestamp-ts)?p:best},s.points[0]);
     if(pt.availability!=null)rows.push({name:s.name,value:pt.availability,color:COLORS[si%COLORS.length],time:pt.timestamp})
   });
-  if(!rows.length)return;
-  var tip=q("#chartTooltip");tip.innerHTML='<b>'+new Date(rows[0].time*1000).toLocaleString("ru-RU",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})+'</b>'+rows.map(function(x){return '<span><i class="legend-dot" style="background:'+x.color+'"></i><em>'+esc(x.name)+'</em><strong>'+pct(x.value,1)+'</strong></span>'}).join("");
+  var tip=q(tooltipSelector);if(!tip)return;
+  if(!rows.length){tip.classList.add("hidden");return}
+  tip.innerHTML='<b>'+new Date(rows[0].time*1000).toLocaleString("ru-RU",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})+'</b>'+rows.map(function(x){return '<span><i class="legend-dot" style="background:'+x.color+'"></i><em>'+esc(x.name)+'</em><strong>'+pct(x.value,1)+'</strong></span>'}).join("");
   tip.classList.remove("hidden")
 }
+function handleChartMove(e){handleChartMoveForCanvas(q("#streamChart"),"#chartTooltip",e)}
 
 function renderEvents(){
   var el=q("#eventFeed"),rows=S.events||[];
@@ -1290,7 +1303,7 @@ function setup(){
   qa(".modal-close").forEach(function(b){b.onclick=function(){closeDialog(b.closest("dialog"))}});
   qa('.seg[data-minutes]').forEach(function(b){b.onclick=async function(){if(b.dataset.busy==="1")return;qa('.seg[data-minutes]').forEach(function(x){x.classList.remove("active")});b.classList.add("active");S.streamMinutes=Number(b.dataset.minutes);try{await withBusy(b,"…",async function(){S.realtime=await api("/api/realtime?minutes="+S.streamMinutes+"&scope=EXTERNAL");renderRealtime();renderResourceCards();renderOverviewTable()})}catch(e){toast(e.message)}}});
   qa("[data-overview-resource-mode]").forEach(function(b){b.onclick=function(){S.overviewResourceMode=b.dataset.overviewResourceMode;qa("[data-overview-resource-mode]").forEach(function(x){x.classList.toggle("active",x===b)});renderOverviewTable()}});
-  q("#streamChart").addEventListener("mousemove",function(e){setChartHover(q("#streamChart"),e);handleChartMove(e)});q("#streamChart").addEventListener("mouseleave",function(){q("#chartTooltip").classList.add("hidden");if(S.hoverSeries){S.hoverSeries=null;renderRealtime();renderDomesticRealtime()}});q("#domesticStreamChart").addEventListener("mousemove",function(e){setChartHover(q("#domesticStreamChart"),e)});q("#domesticStreamChart").addEventListener("mouseleave",function(){if(S.hoverSeries){S.hoverSeries=null;renderRealtime();renderDomesticRealtime()}});
+  q("#streamChart").addEventListener("mousemove",function(e){var canvas=q("#streamChart");setChartHover(canvas,e);handleChartMoveForCanvas(canvas,"#chartTooltip",e)});q("#streamChart").addEventListener("mouseleave",function(){q("#chartTooltip").classList.add("hidden");if(S.hoverSeries){S.hoverSeries=null;renderRealtime();renderDomesticRealtime()}});q("#domesticStreamChart").addEventListener("mousemove",function(e){var canvas=q("#domesticStreamChart");setChartHover(canvas,e);handleChartMoveForCanvas(canvas,"#domesticChartTooltip",e)});q("#domesticStreamChart").addEventListener("mouseleave",function(){q("#domesticChartTooltip").classList.add("hidden");if(S.hoverSeries){S.hoverSeries=null;renderRealtime();renderDomesticRealtime()}});
   q("#expandChart").onclick=function(){var panel=q(".streams-panel"),expanded=panel.classList.toggle("chart-expanded");this.setAttribute("aria-expanded",expanded?"true":"false");this.setAttribute("title",expanded?"Свернуть график":"Развернуть график")};
   q("#mapZoomIn").onclick=function(){S.mapScale=Math.min(2,S.mapScale+.15);q("#worldMapSvg").style.transform="scale("+S.mapScale+")"};
   q("#mapZoomOut").onclick=function(){S.mapScale=Math.max(.8,S.mapScale-.15);q("#worldMapSvg").style.transform="scale("+S.mapScale+")"};
