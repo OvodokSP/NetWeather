@@ -2,6 +2,7 @@ package io.netweather.app.presentation
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -42,12 +43,13 @@ private val Cyan = Color(0xFF00B4DB)
 fun AppScreen(vm: MainViewModel = hiltViewModel()) {
     val summary by vm.summary.collectAsState(); val global by vm.global.collectAsState(); val loading by vm.loading.collectAsState()
     val error by vm.error.collectAsState(); val resources by vm.resources.collectAsState(); val pairing by vm.pairing.collectAsState(); val history by vm.historyDay.collectAsState()
-    var tab by rememberSaveable { mutableIntStateOf(0) }; var showAdd by rememberSaveable { mutableStateOf(false) }; val snackbar = remember { SnackbarHostState() }
+    var tab by rememberSaveable { mutableIntStateOf(0) }; var showAdd by rememberSaveable { mutableStateOf(false) }; var selectedResource by remember { mutableStateOf<ResourceWithResult?>(null) }; val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(error) { error?.let { snackbar.showSnackbar(it); vm.clearError() } }
     Scaffold(containerColor = MaterialTheme.colorScheme.background, snackbarHost = { SnackbarHost(snackbar) }, bottomBar = { BottomBar(tab) { tab = it } }, floatingActionButton = { if (tab == 0) FloatingActionButton({ showAdd = true }, containerColor = Cyan) { Icon(Icons.Outlined.Add, "Добавить ресурс") } }) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) { when (tab) { 0 -> HomeTab(global, summary, resources, loading, vm::refreshNow); 1 -> HistoryTab(history); else -> SettingsTab(vm, pairing) } }
+        Box(Modifier.fillMaxSize().padding(padding)) { when (tab) { 0 -> HomeTab(global, summary, resources, loading, vm::refreshNow, onResourceClick = { selectedResource = it }); 1 -> HistoryTab(history); else -> SettingsTab(vm, pairing) } }
     }
     if (showAdd) AddResourceDialog({ showAdd = false }) { name, url, group -> vm.addResource(name, url, group); showAdd = false }
+    selectedResource?.let { ResourceDetailsDialog(it) { selectedResource = null } }
 }
 
 @Composable private fun BottomBar(selected: Int, onSelect: (Int) -> Unit) { NavigationBar(containerColor = Color(0xFF071827), tonalElevation = 0.dp) {
@@ -58,14 +60,14 @@ fun AppScreen(vm: MainViewModel = hiltViewModel()) {
 
 @Composable private fun Header(title: String, action: @Composable (() -> Unit)? = null) { Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 18.dp), verticalAlignment = Alignment.CenterVertically) { Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); Spacer(Modifier.weight(1f)); action?.invoke() } }
 
-@Composable private fun HomeTab(global: GlobalState, summary: NetworkSummary, resources: List<ResourceWithResult>, loading: Boolean, refresh: () -> Unit) { LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp, 0.dp, 16.dp, 28.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+@Composable private fun HomeTab(global: GlobalState, summary: NetworkSummary, resources: List<ResourceWithResult>, loading: Boolean, refresh: () -> Unit, onResourceClick: (ResourceWithResult) -> Unit) { LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp, 0.dp, 16.dp, 28.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
     item { Header("Главная") { IconButton(refresh, enabled = !loading) { Icon(Icons.Outlined.Refresh, "Обновить") } } }
     item { AvailabilityCard(summary, global) }
     item { Button(refresh, enabled = !loading, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(16.dp)) { Icon(Icons.Outlined.PlayArrow, null); Spacer(Modifier.width(8.dp)); Text(if (loading) "Проверка…" else "Проверить сейчас") } }
     item { SectionHeader("Группы ресурсов", Icons.Outlined.Tune) }
     items(groupCards(resources)) { GroupCard(it) }
     item { SectionHeader("Ресурсы", Icons.Outlined.Public) }
-    items(resources.take(8), key = { it.resource.id }) { ResourceRow(it) }
+    items(resources.take(8), key = { it.resource.id }) { ResourceRow(it, onClick = { onResourceClick(it) }) }
     if (resources.isEmpty()) item { EmptyCard("Ресурсы ещё не добавлены", "Нажмите +, чтобы начать мониторинг") }
 } }
 
@@ -83,7 +85,24 @@ private fun groupCards(rows: List<ResourceWithResult>) = ResourceGroup.values().
 
 @Composable private fun GroupCard(data: GroupCardData) { val percentage = if (data.count == 0) 0 else data.available * 100 / data.count; val color = if (percentage >= 95) Good else if (percentage >= 70) Warn else Bad; Card(colors = CardDefaults.cardColors(CardBlue2), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) { Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Outlined.Language, null, tint = Color(0xFF4FA3FF), modifier = Modifier.size(28.dp)); Spacer(Modifier.width(14.dp)); Column(Modifier.weight(1f)) { Text(data.group.title, fontWeight = FontWeight.SemiBold); Text("${data.count} ресурсов", color = Muted, fontSize = 12.sp) }; Column(horizontalAlignment = Alignment.End) { Text("$percentage%", color = color, fontSize = 19.sp, fontWeight = FontWeight.Bold); Text("онлайн", color = Muted, fontSize = 11.sp) } } } }
 
-@Composable private fun ResourceRow(row: ResourceWithResult) { val result = row.result; val color = if (result == null) Muted else if (result.isOk) Good else Bad; Card(colors = CardDefaults.cardColors(CardBlue), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) { Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(10.dp).clip(CircleShape).background(color)); Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) { Text(row.resource.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis); Text(row.resource.url, color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }; Text(result?.let { if (it.isOk) "${it.responseTimeMs} мс" else it.status.title } ?: "Нет данных", color = color, fontSize = 12.sp) } } }
+@Composable private fun ResourceRow(row: ResourceWithResult, onClick: () -> Unit) { val result = row.result; val color = if (result == null) Muted else if (result.isOk) Good else Bad; Card(colors = CardDefaults.cardColors(CardBlue), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) { Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(10.dp).clip(CircleShape).background(color)); Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) { Text(row.resource.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis); Text(row.resource.url, color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }; Text(result?.let { if (it.isOk) "${it.responseTimeMs} мс" else it.status.title } ?: "Нет данных", color = color, fontSize = 12.sp) } } }
+
+@Composable private fun ResourceDetailsDialog(row: ResourceWithResult, onDismiss: () -> Unit) {
+    val resource = row.resource
+    val result = row.result
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(resource.name) }, text = {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(resource.url, color = Muted)
+            Text("Группа: ${resource.group.title}")
+            Text("Метод: ${resource.method.title}")
+            Text("Интервал: ${resource.intervalSeconds} секунд")
+            Text("Состояние: ${result?.status?.title ?: "Нет данных"}")
+            result?.let { Text("Ответ: ${it.responseTimeMs} мс") }
+            Text("Последний успех: ${formatTime(result?.lastSuccessfulCheck ?: 0)}")
+            result?.message?.takeIf { it.isNotBlank() }?.let { Text(it, fontSize = 12.sp, color = Muted) }
+        }
+    }, confirmButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } })
+}
 
 @Composable private fun HistoryTab(history: List<NetworkSummary>) { LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { item { Header("История") { Icon(Icons.Outlined.CalendarMonth, "Календарь", tint = Muted) } }; item { Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(CardBlue), horizontalArrangement = Arrangement.SpaceEvenly) { Text("Статистика", fontWeight = FontWeight.Bold, modifier = Modifier.padding(12.dp)); Text("Журнал", color = Muted, modifier = Modifier.padding(12.dp)) } }; item { HistorySummary(history) }; item { HistoryChart(history) }; items(history.reversed().take(20)) { h -> ListItem(headlineContent = { Text("${h.availabilityIndex}% · ${h.mode.title}") }, supportingContent = { Text(formatTime(h.lastUpdated), color = Muted) }, leadingContent = { Icon(if (h.mode == NetworkMode.NORMAL) Icons.Outlined.CheckCircle else Icons.Outlined.WarningAmber, null, tint = if (h.mode == NetworkMode.NORMAL) Good else Warn) }, colors = ListItemDefaults.colors(containerColor = Color.Transparent)) }; if (history.isEmpty()) item { EmptyCard("История появится после первой проверки", "Откройте Главную и запустите проверку") } } }
 @Composable private fun HistorySummary(history: List<NetworkSummary>) { val latest = history.lastOrNull()?.availabilityIndex ?: 0; Card(colors = CardDefaults.cardColors(CardBlue), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Text("Общая доступность", fontWeight = FontWeight.SemiBold); Spacer(Modifier.weight(1f)); Text("$latest%", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Good) }; Spacer(Modifier.height(12.dp)); LinearProgressIndicator(progress = { latest / 100f }, modifier = Modifier.fillMaxWidth().height(8.dp).clip(CircleShape), color = Good, trackColor = Color(0xFF294761)) } } }
