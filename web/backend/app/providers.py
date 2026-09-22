@@ -46,7 +46,7 @@ class GlobalpingProvider(MeasurementProvider):
         self.token = token.strip()
         self.base_url = base_url.rstrip("/")
 
-    async def submit_http(self, target: str, probes: int = 3) -> ProviderSubmission:
+    async def submit_http(self, target: str, probes: int = 3, locations: list[dict[str, Any]] | None = None) -> ProviderSubmission:
         headers = {"User-Agent": "NetWeather/0.4", "Content-Type": "application/json"}
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
