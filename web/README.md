@@ -58,3 +58,7 @@ bash -n deploy/smoke-test.sh
 Production runtime: UID/GID `10001`, read-only rootfs, `CAP_DROP=ALL`, `no-new-privileges`, без Docker socket и host bind mounts, с единственной writable областью `/data`. Egress к host/private/VPN подсетям блокируется host policy.
 
 Production secrets принадлежат root и хранятся в `/etc/netweather/netweather.env`; их нельзя добавлять в репозиторий или рабочий каталог.
+
+## Failure map
+
+Карта использует обезличенные региональные якоря для серверного VPS и публичного российского контура. Точное местоположение Android-устройств намеренно не публикуется.
