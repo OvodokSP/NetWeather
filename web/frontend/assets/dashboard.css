@@ -1171,3 +1171,5 @@ body.core-offline .overview-view .kpi-card::after{
 .overview-row-dual>.domestic-stream-panel{grid-template-rows:56px minmax(0,1fr) 38px}
 .overview-row-dual>.domestic-stream-panel .domestic-chart-wrap{min-height:0;height:auto!important}
 .overview-row-dual>.domestic-stream-panel .stream-legend{min-height:38px;overflow:hidden}
+
+.overview-row-dual>.domestic-stream-panel .domestic-chart-wrap{padding:6px 10px 0}
