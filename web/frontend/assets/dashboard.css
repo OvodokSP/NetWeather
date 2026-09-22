@@ -1173,3 +1173,7 @@ body.core-offline .overview-view .kpi-card::after{
 .overview-row-dual>.domestic-stream-panel .stream-legend{min-height:38px;overflow:hidden}
 
 .overview-row-dual>.domestic-stream-panel .domestic-chart-wrap{padding:6px 10px 0}
+
+.resource-scope-gap{display:block;margin-top:3px;color:var(--orange);font-size:10px;line-height:1.2}
+.resource-state.warn{max-width:62%;white-space:normal;text-align:right;line-height:1.15}
+.incident-read-mark{color:var(--muted);font-size:10px}
