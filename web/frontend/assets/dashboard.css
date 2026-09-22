@@ -1166,3 +1166,8 @@ body.core-offline .overview-view .kpi-card::after{
   .overview-row-dual>.streams-panel,.overview-row-dual>.domestic-stream-panel{height:300px!important}
   .overview-row-pinned .resource-card{flex-basis:180px;width:180px}
 }
+
+/* Ensure domestic chart and legend share the same panel height. */
+.overview-row-dual>.domestic-stream-panel{grid-template-rows:56px minmax(0,1fr) 38px}
+.overview-row-dual>.domestic-stream-panel .domestic-chart-wrap{min-height:0;height:auto!important}
+.overview-row-dual>.domestic-stream-panel .stream-legend{min-height:38px;overflow:hidden}
