@@ -1143,3 +1143,26 @@ body.core-offline .overview-view .kpi-card::after{
 .resource-card-name{gap:4px}.resource-card-name b{font-size:10px}.resource-glyph{width:18px;height:18px;font-size:10px}.resource-state{font-size:10px}.resource-card-metrics{gap:4px}.resource-card-metrics strong{font-size:16px}.resource-card-metrics span{font-size:10px}.resource-card-foot{font-size:10px;gap:4px}
 @media(max-width:1050px){.overview-row-domestic{grid-template-columns:minmax(0,1fr)}.domestic-stream-panel{max-width:none}.resource-cards{grid-template-columns:repeat(auto-fit,minmax(132px,1fr))}}
 @media(max-width:640px){.resource-cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.resource-card{height:132px!important;padding:7px;grid-template-rows:22px 30px minmax(22px,1fr) 15px}.resource-card-metrics strong{font-size:15px}.resource-card-foot{font-size:10px}}
+
+
+/* 0.3.10 — dual scope charts, pinned resource strip, events/map row */
+.overview-row-dual{grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch}
+.overview-row-dual>.streams-panel,.overview-row-dual>.domestic-stream-panel{height:360px!important;max-width:none;width:auto}
+.overview-row-dual .domestic-chart-wrap{height:auto!important}
+.overview-row-pinned{display:block}
+.overview-row-pinned .resource-cards{display:flex;overflow-x:auto;gap:10px;padding:0 0 6px;scroll-snap-type:x proximity}
+.overview-row-pinned .resource-card{flex:0 0 190px;width:190px;height:156px!important;min-height:156px;scroll-snap-align:start;grid-template-rows:auto auto minmax(24px,1fr) auto}
+.overview-row-pinned .resource-card-name{align-items:flex-start}
+.overview-row-pinned .resource-card-name b{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.2}
+.overview-row-pinned .resource-state{white-space:normal;text-align:right}
+.overview-row-events-map{grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:stretch}
+.overview-row-events-map>.events-panel,.overview-row-events-map>.map-panel{height:360px!important}
+@media(max-width:1050px){
+  .overview-row-dual,.overview-row-events-map{grid-template-columns:minmax(0,1fr)!important}
+  .overview-row-dual>.streams-panel,.overview-row-dual>.domestic-stream-panel{height:320px!important}
+  .overview-row-events-map>.events-panel,.overview-row-events-map>.map-panel{height:320px!important}
+}
+@media(max-width:640px){
+  .overview-row-dual>.streams-panel,.overview-row-dual>.domestic-stream-panel{height:300px!important}
+  .overview-row-pinned .resource-card{flex-basis:180px;width:180px}
+}
