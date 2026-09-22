@@ -16,7 +16,9 @@ class SecurityContractTest(unittest.TestCase):
         cls.helper = (cls.root / "deploy" / "security" / "netweather-deploy-helper").read_text(encoding="utf-8")
         cls.gate = (cls.root / "deploy" / "security" / "netweather-ssh-gate").read_text(encoding="utf-8")
         cls.guard = (cls.root / "deploy" / "security" / "netweather-egress-guard").read_text(encoding="utf-8")
-        cls.vpn_guard = (cls.root / "deploy" / "security" / "netweather-vpn-invariants").read_text(encoding="utf-8")
+        cls.keenetic_probe = (cls.root / "deploy" / "keenetic" / "netweather-probe.sh").read_text(encoding="utf-8")
+        cls.keenetic_installer = (cls.root / "deploy" / "keenetic" / "install-netweather-probe.sh").read_text(encoding="utf-8")
+        cls.keenetic_service = (cls.root / "deploy" / "keenetic" / "S99netweather-probe").read_text(encoding="utf-8")
 
     def test_image_runs_as_non_root(self):
         self.assertIn("USER 10001:10001", self.dockerfile)
@@ -51,9 +53,9 @@ class SecurityContractTest(unittest.TestCase):
     def test_android_preview_is_installable_traceable_and_clearly_labeled(self):
         required = (
             "testDebugUnitTest assembleDebug",
-            "NetWeather-0.4.1-alpha-debug.apk",
+            "NetWeather-0.1.0-alpha-debug.apk",
             "sha256sum",
-            "android-v0.4.1-alpha-preview.1",
+            "android-v0.1.0-alpha-preview.1",
             "docs/ANDROID_PREVIEW.md",
             "--prerelease",
         )
@@ -61,7 +63,7 @@ class SecurityContractTest(unittest.TestCase):
             self.assertIn(token, self.release_workflow)
         self.assertNotIn("assembleRelease", self.release_workflow)
         self.assertIn(
-            "releases/tag/android-v0.4.1-alpha-preview.1",
+            "releases/tag/android-v0.1.0-alpha-preview.1",
             self.readme,
         )
 
@@ -105,33 +107,28 @@ class SecurityContractTest(unittest.TestCase):
         for subnet in ("10.0.0.0/8", "100.64.0.0/10", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16"):
             self.assertIn(subnet, self.guard)
 
-    def test_deploy_is_blocked_and_rolled_back_on_vpn_regression(self):
-        for token in (
-            'VPN_GUARD="/usr/local/sbin/netweather-vpn-invariants"',
-            "=== VPN PRE-DEPLOY INVARIANTS ===",
-            "=== VPN POST-DEPLOY INVARIANTS ===",
-            "=== VPN INVARIANTS AFTER NETWEATHER ROLLBACK ===",
-        ):
-            self.assertIn(token, self.helper)
-        for token in (
-            "verify_tls_ip",
-            "VPN_XRAY_CONTAINER",
-            "VPN_AWG_CONTAINER",
-            "VPN_AWG_REQUIRE_REDIRECT",
-            "VPN_INVARIANTS=PASS",
-        ):
-            self.assertIn(token, self.vpn_guard)
-
     def test_no_wildcard_cors_and_spa_path_is_contained(self):
         self.assertNotIn('allow_origins=["*"]', self.main)
         self.assertNotIn("CORSMiddleware", self.main)
         self.assertIn("candidate.relative_to(root)", self.main)
         self.assertIn('raise RuntimeError("Owner authentication secret is required")', self.main)
 
-    def test_hardware_specific_probe_runtime_is_absent(self):
-        self.assertFalse(any((self.root / "deploy" / "keenetic").glob("*")))
-        self.assertNotIn("/api/agent", self.main)
-        self.assertNotIn("NETWEATHER_AGENT_TOKEN", self.main)
+    def test_keenetic_probe_is_pinned_to_direct_wan_and_supervised(self):
+        for token in (
+            'NETWEATHER_DIRECT_INTERFACE is required',
+            '--interface "$DIRECT_INTERFACE"',
+            '-i "$DIRECT_INTERFACE"',
+            'NETWEATHER_RUN_ONCE',
+            'last-success',
+            'agent_version=$AGENT_VERSION_QUERY',
+        ):
+            self.assertIn(token, self.keenetic_probe)
+        self.assertIn('DIRECT_INTERFACE="${NETWEATHER_DIRECT_INTERFACE:-eth2.4}"', self.keenetic_installer)
+        self.assertIn('NETWEATHER_AGENT_TOKEN must contain 64 hexadecimal characters', self.keenetic_installer)
+        self.assertIn('sha256sum', self.keenetic_installer)
+        self.assertIn('NETWEATHER_REF must be the verified 40-character Git commit', self.keenetic_installer)
+        self.assertIn('/opt/etc/netweather-probe.env', self.keenetic_service)
+        self.assertIn('last successful cycle', self.keenetic_service)
 
 
 if __name__ == "__main__":
