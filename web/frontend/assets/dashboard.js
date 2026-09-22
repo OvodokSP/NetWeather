@@ -595,20 +595,26 @@ function renderRealtime(){
   q("#streamLegend").innerHTML=withPoints.slice(0,7).map(function(r,i){return '<span class="legend-item"><i class="legend-dot" style="background:'+COLORS[i%COLORS.length]+'"></i>'+esc(r.name)+'</span>'}).join("")
 }
 
+function escapeHtml(value){return String(value==null?"":value).replace(/[&<>\"]/g,function(ch){return {"&":"&amp;","<":"&lt;",">":"&gt;",'\"':'&quot;'}[ch]||ch})}
+
+function domesticGraphSeries(){
+  var resources=S.realtimeDom&&S.realtimeDom.resources||[];
+  var pinned=new Set(visiblePinnedResourceIds());
+  return resources.filter(function(r){
+    return pinned.has(Number(r.id)) && (r.points||[]).some(function(p){return p.availability!=null});
+  });
+}
+
 function renderDomesticRealtime(){
-  var rows=domesticGraphRows(),canvas=q("#domesticStreamChart"),emptyEl=q("#domesticStreamEmpty"),status=q("#domesticGraphStatus"),meta=q("#domesticGraphMeta");
-  var hasRows=rows.some(function(x){return Number.isFinite(Number(x.availability))});
+  var series=domesticGraphSeries(),canvas=q("#domesticStreamChart"),emptyEl=q("#domesticStreamEmpty"),status=q("#domesticGraphStatus"),meta=q("#domesticGraphMeta"),legend=q("#domesticStreamLegend");
+  var hasRows=series.length>0;
   if(emptyEl)emptyEl.classList.toggle("hidden",hasRows);
   if(status){status.textContent=hasRows?"данные обновлены":"нет данных";status.className="stream-scope-badge "+(hasRows?"ok":"neutral")}
-  if(meta)meta.textContent=hasRows?"GLOBALPING_RU · общедоступный сервер в России · обновляется автоматически":"Ожидается ответ российского probe; мобильное приложение на этот график не влияет";
-  var values=rows.map(function(x){return Number(x.availability)}).filter(Number.isFinite);var floor=90;if(values.length){var min=Math.min.apply(null,values);floor=Math.max(0,Math.floor((min-2)/5)*5)}drawSimpleChart(canvas,rows,"availability",true,COLORS[0],floor)
+  if(meta)meta.textContent=hasRows?"GLOBALPING_RU · общедоступный сервер в России · выбранные ресурсы":"Ожидается ответ российского probe; мобильное приложение на этот график не влияет";
+  if(legend)legend.innerHTML=series.slice(0,10).map(function(r,i){return '<span><i style="background:'+COLORS[i%COLORS.length]+'"></i>'+escapeHtml(r.name||r.target||("Ресурс "+r.id))+'</span>'}).join("");
+  drawAvailabilityChart(canvas,series);
 }
-function domesticGraphRows(){
-  var resources=S.realtimeDom&&S.realtimeDom.resources||[],buckets={};
-  resources.forEach(function(r){(r.points||[]).forEach(function(p){var v=Number(p.availability);if(!Number.isFinite(v))return;var key=String(p.timestamp);if(!buckets[key])buckets[key]=[];buckets[key].push(v)})});
-  var rows=Object.keys(buckets).map(function(k){var v=buckets[k],avg=v.reduce(function(a,b){return a+b},0)/v.length;return{timestamp:Number(k),availability:avg}}).sort(function(a,b){return a.timestamp-b.timestamp});
-  return rows.length?rows:(S.historyDom||[])
-}
+
 
 function availabilityY(value,top,bottom){
   var v=Math.max(0,Math.min(100,Number(value))),ticks=[100,99,98,95,90];
@@ -630,39 +636,35 @@ function drawAvailabilityChart(canvas,series){
   var ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);
   var w=rect.width,h=rect.height,p={l:54,r:12,t:13,b:29};ctx.clearRect(0,0,w,h);
   if(!series.length){S.streamMeta=null;return}
-  var allTs=[];series.forEach(function(row){row.points.forEach(function(x){if(x.availability!=null)allTs.push(x.timestamp)})});
+  var allTs=[],allVals=[];
+  series.forEach(function(row){(row.points||[]).forEach(function(x){if(x.availability!=null){allTs.push(Number(x.timestamp));allVals.push(Number(x.availability))})});
   if(!allTs.length){S.streamMeta=null;return}
-  var ticks=[100,99,98,95,90],plotBottom=h-p.b;
+  var minValue=Math.min.apply(null,allVals),floor=Math.max(0,Math.floor((minValue-2)/5)*5);
+  if(floor>=100)floor=95;
+  var tickCount=5,plotBottom=h-p.b,ticks=[];
+  for(var ti=0;ti<tickCount;ti++)ticks.push(100-(100-floor)*ti/(tickCount-1));
   ctx.font='600 11px "Inter","Segoe UI",system-ui,sans-serif';
-  ctx.textBaseline="middle";ctx.fillStyle=getCss("--muted");ctx.strokeStyle=getCss("--line-soft");ctx.lineWidth=1;
-  ticks.forEach(function(v,i){
-    var y=p.t+(plotBottom-p.t)*i/(ticks.length-1);
-    ctx.beginPath();ctx.moveTo(p.l,y);ctx.lineTo(w-p.r,y);ctx.stroke();
-    ctx.fillText(v+"%",5,y)
+  ticks.forEach(function(v,i){var y=p.t+(plotBottom-p.t)*i/(tickCount-1);ctx.strokeStyle="rgba(137,170,206,.14)";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(p.l,y+.5);ctx.lineTo(w-p.r,y+.5);ctx.stroke();ctx.fillStyle="rgba(184,204,226,.72)";ctx.fillText(Math.round(v)+"%",5,y+4)});
+  var tmin=Math.min.apply(null,allTs),tmax=Math.max.apply(null,allTs),span=Math.max(1,tmax-tmin);
+  ctx.fillStyle="rgba(184,204,226,.62)";ctx.font='500 10px "Inter","Segoe UI",system-ui,sans-serif';
+  [tmin,tmax].forEach(function(t,i){ctx.fillText(new Date(t*1000).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"}),i?(w-p.r-34):p.l, h-8)});
+  series.slice(0,10).forEach(function(row,si){
+    var pts=(row.points||[]).filter(function(x){return x.availability!=null}).sort(function(a,b){return a.timestamp-b.timestamp});
+    if(!pts.length)return;
+    ctx.strokeStyle=COLORS[si%COLORS.length];ctx.lineWidth=2;ctx.beginPath();
+    pts.forEach(function(pt,pi){var x=p.l+(Number(pt.timestamp)-tmin)/span*(w-p.l-p.r),val=Math.max(floor,Math.min(100,Number(pt.availability))),y=p.t+(plotBottom-p.t)*(1-(val-floor)/(100-floor||1));if(pi)ctx.lineTo(x,y);else ctx.moveTo(x,y)});
+    ctx.stroke();
+    if(pts.length===1){var pt=pts[0],x=p.l+(Number(pt.timestamp)-tmin)/span*(w-p.l-p.r),val=Math.max(floor,Math.min(100,Number(pt.availability))),y=p.t+(plotBottom-p.t)*(1-(val-floor)/(100-floor||1));ctx.fillStyle=COLORS[si%COLORS.length];ctx.beginPath();ctx.arc(x,y,3,0,Math.PI*2);ctx.fill()}
   });
-  var tmin=Math.min.apply(null,allTs),tmax=Math.max.apply(null,allTs);if(tmax===tmin)tmax=tmin+1;
-  series.slice(0,7).forEach(function(row,si){
-    ctx.strokeStyle=COLORS[si%COLORS.length];ctx.lineWidth=1.75;ctx.lineJoin="round";ctx.lineCap="round";ctx.beginPath();
-    var started=false;
-    row.points.forEach(function(pt){
-      if(pt.availability==null)return;
-      var x=p.l+(w-p.l-p.r)*(pt.timestamp-tmin)/(tmax-tmin),y=availabilityY(pt.availability,p.t,plotBottom);
-      if(!started){ctx.moveTo(x,y);started=true}else ctx.lineTo(x,y)
-    });ctx.stroke()
-  });
-  ctx.font='500 10px "Inter","Segoe UI",system-ui,sans-serif';ctx.textBaseline="alphabetic";
-  for(var j=0;j<=6;j++){
-    var ts=tmin+(tmax-tmin)*j/6,x=p.l+(w-p.l-p.r)*j/6;
-    ctx.fillStyle=getCss("--muted");ctx.fillText(shortTime(ts),Math.max(p.l-2,Math.min(x,w-42)),h-7)
-  }
-  S.streamMeta={series:series,tmin:tmin,tmax:tmax,min:90,max:100,p:p,w:w,h:h,key:"availability"}
+  S.streamMeta={series:series.slice(0,10),tmin:tmin,tmax:tmax,min:floor,max:100,p:p,w:w,h:h,key:"availability"};
 }
+
 
 function handleChartMove(e){
   var m=S.streamMeta;if(!m)return;
   var r=q("#streamChart").getBoundingClientRect(),x=e.clientX-r.left,ratio=Math.max(0,Math.min(1,(x-m.p.l)/(m.w-m.p.l-m.p.r))),ts=m.tmin+(m.tmax-m.tmin)*ratio;
   var rows=[];
-  m.series.slice(0,7).forEach(function(s,si){
+  m.series.slice(0,10).forEach(function(s,si){
     if(!s.points.length)return;
     var pt=s.points.reduce(function(best,p){return Math.abs(p.timestamp-ts)<Math.abs(best.timestamp-ts)?p:best},s.points[0]);
     if(pt.availability!=null)rows.push({name:s.name,value:pt.availability,color:COLORS[si%COLORS.length],time:pt.timestamp})
