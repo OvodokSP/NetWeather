@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
@@ -49,12 +50,26 @@ class GlobalpingProvider(MeasurementProvider):
         headers = {"User-Agent": "NetWeather/0.4", "Content-Type": "application/json"}
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
+        parsed = urlparse(target if "://" in target else f"https://{target}")
+        hostname = parsed.hostname or target
+        protocol = "HTTP" if parsed.scheme.lower() == "http" else "HTTPS"
+        request_options: dict[str, Any] = {"method": "GET"}
+        if parsed.path and parsed.path != "/":
+            request_options["path"] = parsed.path
+        if parsed.query:
+            request_options["query"] = parsed.query
+        options: dict[str, Any] = {"protocol": protocol, "request": request_options}
+        if parsed.port:
+            options["port"] = parsed.port
         payload = {
             "type": "http",
-            "target": target,
+            # Globalping's MeasurementTarget is a hostname/IP. Protocol, port
+            # and URL path are represented in measurementOptions instead of
+            # passing a browser URL as the target.
+            "target": hostname,
             "locations": [{"magic": "world"}],
             "limit": max(1, min(probes, 10)),
-            "measurementOptions": {"request": {"method": "GET"}},
+            "measurementOptions": options,
         }
         async with httpx.AsyncClient(timeout=12, headers=headers) as client:
             response = await client.post(f"{self.base_url}/measurements", json=payload)
