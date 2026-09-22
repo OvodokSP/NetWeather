@@ -887,10 +887,11 @@ def acknowledge_all_incidents():
 
 
 @app.get("/api/realtime")
-def realtime(minutes:int=Query(default=60,ge=5,le=10080), scope:str=Query(default="GLOBAL")):
+def realtime(minutes:int=Query(default=60,ge=5,le=10080), scope:str=Query(default="EXTERNAL")):
     scope=scope.upper()
-    if scope not in {"GLOBAL","USER"}:
-        raise HTTPException(400,"scope must be GLOBAL or USER")
+    scope_key={"EXTERNAL":"GLOBAL","DOMESTIC":"RUSSIA"}.get(scope,scope)
+    if scope_key not in {"GLOBAL","RUSSIA","USER"}:
+        raise HTTPException(400,"scope must be EXTERNAL, DOMESTIC or USER")
     now=int(time.time())
     since=now-minutes*60
     bucket=max(30,(minutes*60)//240)
@@ -901,14 +902,14 @@ def realtime(minutes:int=Query(default=60,ge=5,le=10080), scope:str=Query(defaul
         ).fetchall()]
         rows=conn.execute("""SELECT resource_id,checked_at,status,response_time_ms,dns_ms,tcp_ms,tls_ms,http_ms,http_status
           FROM checks WHERE checked_at>=? AND probe_scope=? ORDER BY checked_at ASC,id ASC""",
-          (since-availability_window,scope)).fetchall()
+          (since-availability_window,scope_key)).fetchall()
         stats24=conn.execute("""SELECT resource_id,
           COUNT(*) total,
           SUM(CASE WHEN status IN ('OK','HTTP_REJECTED') THEN 1 ELSE 0 END) ok,
           AVG(response_time_ms) avg_latency,
           MAX(checked_at) last_checked
           FROM checks WHERE checked_at>=? AND probe_scope=? GROUP BY resource_id""",
-          (now-86400,scope)).fetchall()
+          (now-86400,scope_key)).fetchall()
     stats={int(r["resource_id"]):dict(r) for r in stats24}
     by_resource={}
     for row in rows:
@@ -1008,13 +1009,14 @@ def recent_events(limit:int=Query(default=30,ge=1,le=100)):
 
 
 @app.get("/api/history")
-def history(hours:int=24, scope:str=Query(default="GLOBAL")):
+def history(hours:int=24, scope:str=Query(default="EXTERNAL")):
     hours=max(1,min(hours,720)); since=int(time.time())-hours*3600
     scope=scope.upper()
-    if scope not in {"GLOBAL","USER"}:
-        raise HTTPException(400,"scope must be GLOBAL or USER")
+    scope_key={"EXTERNAL":"GLOBAL","DOMESTIC":"RUSSIA"}.get(scope,scope)
+    if scope_key not in {"GLOBAL","RUSSIA","USER"}:
+        raise HTTPException(400,"scope must be EXTERNAL, DOMESTIC or USER")
     with db() as conn:
-        rows=conn.execute("SELECT resource_id,checked_at,status,response_time_ms FROM checks WHERE checked_at>=? AND probe_scope=? ORDER BY checked_at ASC",(since,scope)).fetchall()
+        rows=conn.execute("SELECT resource_id,checked_at,status,response_time_ms FROM checks WHERE checked_at>=? AND probe_scope=? ORDER BY checked_at ASC",(since,scope_key)).fetchall()
     buckets={}; size=max(60,(hours*3600)//240)
     for row in rows:
         bucket=(row["checked_at"]//size)*size; data=buckets.setdefault(bucket,{"timestamp":bucket,"total":0,"ok":0,"latency_sum":0})
