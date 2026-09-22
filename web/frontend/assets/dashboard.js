@@ -587,31 +587,32 @@ function incidentSpark(){
   return b
 }
 
-function renderRealtime(){
-  var data=S.realtime&&S.realtime.resources||[];
-  var withPoints=data.filter(function(r){return r.points&&r.points.some(function(p){return p.availability!=null})});
-  q("#streamEmpty").classList.toggle("hidden",!!withPoints.length);
-  drawAvailabilityChart(q("#streamChart"),withPoints);
-  q("#streamLegend").innerHTML=withPoints.slice(0,7).map(function(r,i){return '<span class="legend-item"><i class="legend-dot" style="background:'+COLORS[i%COLORS.length]+'"></i>'+esc(r.name)+'</span>'}).join("")
+function realtimePinnedSeries(source){
+  var resources=source&&source.resources||[],byId=new Map(resources.map(function(r){return [Number(r.id),r]}));
+  return visiblePinnedResourceIds().map(function(id){return byId.get(Number(id))}).filter(Boolean);
 }
+function renderRealtime(){
+  var series=realtimePinnedSeries(S.realtime),withPoints=series.filter(function(r){return (r.points||[]).some(function(p){return p.availability!=null})});
+  q("#streamEmpty").classList.toggle("hidden",!!withPoints.length);
+  drawAvailabilityChart(q("#streamChart"),series);
+  q("#streamLegend").innerHTML=series.slice(0,10).map(function(r,i){return '<span class="legend-item"><i class="legend-dot" style="background:'+COLORS[i%COLORS.length]+'"></i>'+esc(r.name||r.target||("Ресурс "+r.id))+'</span>'}).join("")
+}
+
 
 function escapeHtml(value){return String(value==null?"":value).replace(/[&<>\"]/g,function(ch){return {"&":"&amp;","<":"&lt;",">":"&gt;",'\"':'&quot;'}[ch]||ch})}
 
 function domesticGraphSeries(){
-  var resources=S.realtimeDom&&S.realtimeDom.resources||[];
-  var pinned=new Set(visiblePinnedResourceIds());
-  return resources.filter(function(r){
-    return pinned.has(Number(r.id)) && (r.points||[]).some(function(p){return p.availability!=null});
-  });
+  return realtimePinnedSeries(S.realtimeDom);
 }
+
 
 function renderDomesticRealtime(){
   var series=domesticGraphSeries(),canvas=q("#domesticStreamChart"),emptyEl=q("#domesticStreamEmpty"),status=q("#domesticGraphStatus"),meta=q("#domesticGraphMeta"),legend=q("#domesticStreamLegend");
-  var hasRows=series.length>0;
+  var hasRows=series.some(function(r){return (r.points||[]).some(function(p){return p.availability!=null})});
   if(emptyEl)emptyEl.classList.toggle("hidden",hasRows);
   if(status){status.textContent=hasRows?"данные обновлены":"нет данных";status.className="stream-scope-badge "+(hasRows?"ok":"neutral")}
   if(meta)meta.textContent=hasRows?"GLOBALPING_RU · общедоступный сервер в России · выбранные ресурсы":"Ожидается ответ российского probe; мобильное приложение на этот график не влияет";
-  if(legend)legend.innerHTML=series.slice(0,10).map(function(r,i){return '<span><i style="background:'+COLORS[i%COLORS.length]+'"></i>'+escapeHtml(r.name||r.target||("Ресурс "+r.id))+'</span>'}).join("");
+  if(legend)legend.innerHTML=series.slice(0,10).map(function(r,i){return '<span class="legend-item"><i class="legend-dot" style="background:'+COLORS[i%COLORS.length]+'"></i>'+esc(r.name||r.target||("Ресурс "+r.id))+'</span>'}).join("");
   drawAvailabilityChart(canvas,series);
 }
 
