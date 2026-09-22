@@ -539,9 +539,9 @@ function renderOverview(){
   q("#kpiLatencyHint").textContent=medianLatency==null?"нет свежих измерений":medianLatency<500?"быстрый отклик":medianLatency<1500?"умеренная задержка":"высокая задержка";
 
   q("#kpiRu").textContent=pct(ruAvail,2);
-  q("#kpiRuDelta").textContent=summary.domestic_probe_online?(ruDelta==null?"живые данные":((ruDelta>=0?"▲ +":"▼ ")+Math.abs(ruDelta).toFixed(2)+"%")):"нет probe";
-  q("#kpiRuDelta").style.color=summary.domestic_probe_online?(ruDelta!=null&&ruDelta<0?"var(--red)":"var(--green)"):"var(--muted)";
-  q("#kpiRuHint").textContent=summary.domestic_probe_online?"российский контур подключён":"российский probe не подключён";
+  q("#kpiRuDelta").textContent=(summary.russia_available||summary.domestic_probe_online)?(ruDelta==null?"живые данные":((ruDelta>=0?"▲ +":"▼ ")+Math.abs(ruDelta).toFixed(2)+"%")):"нет probe";
+  q("#kpiRuDelta").style.color=(summary.russia_available||summary.domestic_probe_online)?(ruDelta!=null&&ruDelta<0?"var(--red)":"var(--green)"):"var(--muted)";
+  q("#kpiRuHint").textContent=(summary.russia_available||summary.domestic_probe_online)?"российский контур подключён":"российский probe не подключён";
 
   q("#kpiPersonal").textContent="—";
   q("#kpiPersonalHint").textContent="device-probe ещё не подключён";
@@ -599,7 +599,7 @@ function renderDomesticRealtime(){
   if(emptyEl)emptyEl.classList.toggle("hidden",hasRows);
   if(status){status.textContent=hasRows?"данные обновлены":"нет данных";status.className="stream-scope-badge "+(hasRows?"ok":"neutral")}
   if(meta)meta.textContent=hasRows?"GLOBALPING_RU · общедоступный сервер в России · обновляется автоматически":"Ожидается ответ российского probe; мобильное приложение на этот график не влияет";
-  drawSimpleChart(canvas,rows,"availability",true,COLORS[0],90)
+  var values=rows.map(function(x){return Number(x.availability)}).filter(Number.isFinite);var floor=90;if(values.length){var min=Math.min.apply(null,values);floor=Math.max(0,Math.floor((min-2)/5)*5)}drawSimpleChart(canvas,rows,"availability",true,COLORS[0],floor)
 }
 function domesticGraphRows(){
   var resources=S.realtimeDom&&S.realtimeDom.resources||[],buckets={};
@@ -688,7 +688,7 @@ function renderResourceCards(){
   var el=q("#resourceCards"),rows=S.realtime&&S.realtime.resources||[];
   if(!rows.length){el.innerHTML=empty("Нет ресурсов","Добавьте первую цель.");return}
   var current=S.dashboard.resources||[],pinned=visiblePinnedResourceIds();
-  var cards=pinned.map(function(id){return rows.find(function(r){return Number(r.id)===Number(id)})}).filter(Boolean).slice(0,6);
+  var cards=pinned.map(function(id){return rows.find(function(r){return Number(r.id)===Number(id)})}).filter(Boolean).slice(0,MAX_PINNED_RESOURCES);
   el.innerHTML=cards.map(function(r,i){
     var rr=current.find(function(x){return x.id===r.id})||{},cls=resourceDisplayClass(rr);
     var latency=(rr.domestic||rr.external||{}).response_time_ms;
@@ -982,7 +982,7 @@ function renderHistory(){
 }
 
 function drawSimpleChart(canvas,data,key,percent,color,floor){
-  if(!canvas)return;var rect=canvas.getBoundingClientRect(),dpr=Math.min(2,devicePixelRatio||1);canvas.width=Math.max(280,Math.floor(rect.width*dpr));canvas.height=Math.max(180,Math.floor(rect.height*dpr));var ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);var w=rect.width,h=rect.height,p={l:38,r:10,t:12,b:24};ctx.clearRect(0,0,w,h);if(!data.length)return;var vals=data.map(function(x){return Number(x[key]||0)}),min=percent?(floor==null?0:floor):Math.min.apply(null,vals),max=percent?100:Math.max.apply(null,vals);if(max===min)max=min+1;ctx.font="10px system-ui";ctx.strokeStyle=getCss("--line-soft");ctx.fillStyle=getCss("--muted");for(var i=0;i<=4;i++){var y=p.t+(h-p.t-p.b)*i/4;ctx.beginPath();ctx.moveTo(p.l,y);ctx.lineTo(w-p.r,y);ctx.stroke();var v=max-(max-min)*i/4;ctx.fillText(percent?Math.round(v)+"%":Math.round(v)+"",3,y+3)}ctx.strokeStyle=color||COLORS[1];ctx.lineWidth=1.7;ctx.beginPath();data.forEach(function(x,i){var xx=p.l+(w-p.l-p.r)*(data.length===1?.5:i/(data.length-1)),yy=p.t+(h-p.t-p.b)*(1-(Number(x[key]||0)-min)/(max-min));if(i===0)ctx.moveTo(xx,yy);else ctx.lineTo(xx,yy)});ctx.stroke()
+  if(!canvas)return;var rect=canvas.getBoundingClientRect(),dpr=Math.min(2,devicePixelRatio||1);canvas.width=Math.max(280,Math.floor(rect.width*dpr));canvas.height=Math.max(180,Math.floor(rect.height*dpr));var ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);var w=rect.width,h=rect.height,p={l:38,r:10,t:12,b:24};ctx.clearRect(0,0,w,h);if(!data.length)return;var vals=data.map(function(x){return Number(x[key]||0)}),min=percent?(floor==null?0:floor):Math.min.apply(null,vals),max=percent?100:Math.max.apply(null,vals);if(max===min)max=min+1;ctx.font="10px system-ui";ctx.strokeStyle=getCss("--line-soft");ctx.fillStyle=getCss("--muted");for(var i=0;i<=4;i++){var y=p.t+(h-p.t-p.b)*i/4;ctx.beginPath();ctx.moveTo(p.l,y);ctx.lineTo(w-p.r,y);ctx.stroke();var v=max-(max-min)*i/4;ctx.fillText(percent?Math.round(v)+"%":Math.round(v)+"",3,y+3)}ctx.strokeStyle=color||COLORS[1];ctx.lineWidth=1.7;ctx.beginPath();data.forEach(function(x,i){var xx=p.l+(w-p.l-p.r)*(data.length===1?.5:i/(data.length-1)),yy=p.t+(h-p.t-p.b)*(1-(Number(x[key]||0)-min)/(max-min));if(i===0)ctx.moveTo(xx,yy);else ctx.lineTo(xx,yy)});ctx.stroke();if(data.length===1){var only=Number(data[0][key]||0),xx=p.l+(w-p.l-p.r)/2,yy=p.t+(h-p.t-p.b)*(1-(only-min)/(max-min));ctx.fillStyle=color||COLORS[1];ctx.beginPath();ctx.arc(xx,yy,3,0,Math.PI*2);ctx.fill()}
 }
 
 function drawSpark(canvas,values,color){
