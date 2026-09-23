@@ -1,61 +1,4 @@
-from __future__ import annotations
-
-import json
-import sqlite3
-import time
-from contextlib import contextmanager
-from typing import Any
-
-from .config import (CLIENT_PROBE_STALE_SECONDS, DB_PATH, DEFAULT_INTERVAL, DEFAULT_RESOURCES,
-                     RUSSIA_PROBE_KEY, RUSSIA_PROBE_LAT, RUSSIA_PROBE_LON,
-                     RUSSIA_PROBE_NAME, RUSSIA_PROBE_STALE_SECONDS, SEED_DEFAULTS,
-                     SERVER_PROBE_KEY, SERVER_PROBE_LAT, SERVER_PROBE_LON,
-                     SERVER_PROBE_NAME, SERVER_PROBE_STALE_SECONDS)
-from .resource_catalog import CATALOG_BY_KEY, catalog_match
-from .availability import is_reachable
-from .assessment import assess_incident
-
-
-@contextmanager
-def db():
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=15)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys=ON")
-    conn.execute("PRAGMA busy_timeout=5000")
-    try:
-        yield conn
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
-
-
-def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
-    return {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
-
-
-def _ensure_column(conn: sqlite3.Connection, table: str, name: str, ddl: str) -> None:
-    if name not in _columns(conn, table):
-        conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
-
-
-def init_db() -> None:
-    with db() as conn:
-        conn.executescript("""
-        PRAGMA journal_mode=WAL;
-        CREATE TABLE IF NOT EXISTS resources (
-          id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, target TEXT NOT NULL,
-          group_name TEXT NOT NULL DEFAULT 'CUSTOM', interval_seconds INTEGER NOT NULL DEFAULT 60,
-          enabled INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
-          last_checked_at INTEGER NOT NULL DEFAULT 0
-        );
-        CREATE TABLE IF NOT EXISTS checks (
-          id INTEGER PRIMARY KEY AUTOINCREMENT, resource_id INTEGER NOT NULL, checked_at INTEGER NOT NULL,
-          status TEXT NOT NULL, response_time_ms INTEGER NOT NULL, dns_ms INTEGER, tcp_ms INTEGER,
-          tls_ms INTEGER, http_ms INTEGER, http_status INTEGER, resolved_ip TEXT, message TEXT,
+YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×5N‹Z–‹­¦ëeŠw¬Õ™É½´}}™ÕÑÕÉ•}|¥µÁ½ÉĞ…¹¹½Ñ…Ñ¥½¹Ì()¥µÁ½ÉĞ©Í½¸)¥µÁ½ÉĞÍÅ±¥Ñ”Ì)¥µÁ½ÉĞÑ¥µ”)™É½´½¹Ñ•áÑ±¥ˆ¥µÁ½ÉĞ½¹Ñ•áÑµ…¹…•È)™É½´ÑåÁ¥¹œ¥µÁ½ÉĞ¹ä()™É½´€¹½¹™¥œ¥µÁ½ÉĞ€¡1%9Q}AI=	}MQ1}M=9L°	}AQ °U1Q}%9QIY0°U1Q}IM=UIL°(€€€€€€€€€€€€€€€€€€€€IUMM%}AI=	}-d°IUMM%}AI=	}1P°IUMM%}AI=	}1=8°(€€€€€€€€€€€€€€€€€€€€IUMM%}AI=	}95°IUMM%}AI=	}MQ1}M=9L°M}U1QL°(€€€€€€€€€€€€€€€€€€€€MIYI}AI=	}-d°MIYI}AI=	}1P°MIYI}AI=	}1=8°(€€€€€€€€€€€€€€€€€€€€MIYI}AI=	}95°MIYI}AI=	}MQ1}M=9L¤)™É½´€¹É•Í½ÕÉ•}…Ñ…±½œ¥µÁ½ÉĞQ1=}	e}-d°…Ñ…±½}µ…Ñ )™É½´€¹…Ù…¥±…‰¥±¥Ñä¥µÁ½ÉĞ¥Í}É•…¡…‰±”)™É½´€¹…ÍÍ•ÍÍµ•¹Ğ¥µÁ½ÉĞ…ÍÍ•ÍÍ}¥¹¥‘•¹Ğ(()½¹Ñ•áÑµ…¹…•È)‘•˜‘ˆ ¤è(€€€	}AQ ¹Á…É•¹Ğ¹µ­‘¥È¡Á…É•¹ÑÌõQÉÕ”°•á¥ÍÑ}½¬õQÉÕ”¤(€€€½¹¸€ôÍÅ±¥Ñ”Ì¹½¹¹•Ğ¡	}AQ °¡•­}Í…µ•}Ñ¡É•…õ…±Í”°Ñ¥µ•½ÕĞôÄÔ¤(€€€½¹¸¹É½İ}™…Ñ½Éä€ôÍÅ±¥Ñ”Ì¹I½Ü(€€€½¹¸¹•á•ÕÑ” ‰AI5™½É•¥¹}­•åÌõ=8ˆ¤(€€€½¹¸¹•á•ÕÑ” ‰AI5‰ÕÍå}Ñ¥µ•½ÕĞôÔÀÀÀˆ¤(€€€ÑÉäè(€€€€€€€å¥•±½¹¸(€€€€€€€½¹¸¹½µµ¥Ğ ¤(€€€•á•ÁĞá•ÁÑ¥½¸è(€€€€€€€½¹¸¹É½±±‰…¬ ¤(€€€€€€€É…¥Í”(€€€™¥¹…±±äè(€€€€€€€½¹¸¹±½Í” ¤(()‘•˜}½±Õµ¹Ì¡½¹¸èÍÅ±¥Ñ”Ì¹½¹¹•Ñ¥½¸°Ñ…‰±”èÍÑÈ¤€´øÍ•ÑmÍÑÉtè(€€€É•ÑÕÉ¸íÉ½İlÅt™½ÈÉ½Ü¥¸½¹¸¹•á•ÕÑ”¡˜‰AI5Ñ…‰±•}¥¹™¼¡íÑ…‰±•ô¤ˆ¥ô(()‘•˜}•¹ÍÕÉ•}½±Õµ¸¡½¹¸èÍÅ±¥Ñ”Ì¹½¹¹•Ñ¥½¸°Ñ…‰±”èÍÑÈ°¹…µ”èÍÑÈ°‘‘°èÍÑÈ¤€´ø9½¹”è(€€€¥˜¹…µ”¹½Ğ¥¸}½±Õµ¹Ì¡½¹¸°Ñ…‰±”¤è(€€€€€€€½¹¸¹•á•ÕÑ”¡˜‰1QHQ	1íÑ…‰±•ô=1U58í¹…µ•ôí‘‘±ôˆ¤(()‘•˜¥¹¥Ñ}‘ˆ ¤€´ø9½¹”è(€€€İ¥Ñ ‘ˆ ¤…Ì½¹¸è(€€€€€€€½¹¸¹•á•ÕÑ•ÍÉ¥ÁĞ ˆˆˆ(€€€€€€€AI5©½ÕÉ¹…±}µ½‘”õ]0ì(€€€€€€€IQQ	1%9=Pa%MQLÉ•Í½ÕÉ•Ì€ (€€€€€€€€€¥%9QHAI%5Id-dUQ=%9I59P°¹…µ”QaP9=P9U10°Ñ…É•ĞQaP9=P9U10°(€€€€€€€€€É½ÕÁ}¹…µ”QaP9=P9U10U1P€UMQ=4œ°¥¹Ñ•ÉÙ…±}Í•½¹‘Ì%9QH9=P9U10U1P€ØÀ°(€€€€€€€€€•¹…‰±•%9QH9=P9U10U1P€Ä°É•…Ñ•‘}…Ğ%9QH9=P9U10°ÕÁ‘…Ñ•‘}…Ğ%9QH9=P9U10°(€€€€€€€€€±…ÍÑ}¡•­•‘}…Ğ%9QH9=P9U10U1P€À(€€€€€€€€¤ì(€€€€€€€IQQ	1%9=Pa%MQL¡•­Ì€ (€€€€€€€€€¥%9QHAI%5Id-dUQ=%9I59P°É•Í½ÕÉ•}¥%9QH9=P9U10°¡•­•‘}…Ğ%9QH9=P9U10°(€€€€€€€€€ÍÑ…ÑÕÌQaP9=P9U10°É•ÍÁ½¹Í•}Ñ¥µ•}µÌ%9QH9=P9U10°‘¹Í}µÌ%9QH°ÑÁ}µÌ%9QH°(€€€€€€€€€Ñ±Í}µÌ%9QH°¡ÑÑÁ}µÌ%9QH°¡ÑÑÁ}Ï[h‘éì¶»§q«^tatus INTEGER, resolved_ip TEXT, message TEXT,
           FOREIGN KEY(resource_id) REFERENCES resources(id) ON DELETE CASCADE
         );
         CREATE INDEX IF NOT EXISTS idx_checks_resource_time ON checks(resource_id, checked_at DESC);
@@ -86,41 +29,7 @@ def init_db() -> None:
           status TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
           error TEXT, FOREIGN KEY(resource_id) REFERENCES resources(id) ON DELETE CASCADE
         );
-        CREATE INDEX IF NOT EXISTS idx_diagnostic_jobs_resource ON diagnostic_jobs(resource_id,created_at DESC);
-        CREATE TABLE IF NOT EXISTS provider_quota_uses (
-          id INTEGER PRIMARY KEY AUTOINCREMENT, provider TEXT NOT NULL, used_at INTEGER NOT NULL,
-          cost INTEGER NOT NULL, priority INTEGER NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_provider_quota_time ON provider_quota_uses(provider,used_at);
-        CREATE TABLE IF NOT EXISTS external_evidence (
-          id INTEGER PRIMARY KEY AUTOINCREMENT, resource_id INTEGER,
-          provider TEXT NOT NULL, scope_key TEXT NOT NULL, status TEXT NOT NULL,
-          classification TEXT, confidence TEXT, summary_json TEXT NOT NULL DEFAULT '{}',
-          raw_json TEXT NOT NULL DEFAULT '{}', fetched_at INTEGER NOT NULL, expires_at INTEGER NOT NULL,
-          FOREIGN KEY(resource_id) REFERENCES resources(id) ON DELETE CASCADE
-        );
-        CREATE INDEX IF NOT EXISTS idx_external_evidence_lookup
-          ON external_evidence(provider,scope_key,expires_at DESC);
-        CREATE TABLE IF NOT EXISTS devices (
-          device_id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT,
-          app_version TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'PENDING',
-          created_at INTEGER NOT NULL, approved_at INTEGER, last_seen_at INTEGER NOT NULL DEFAULT 0,
-          revoked_at INTEGER, updated_at INTEGER NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS device_authorizations (
-          session_id TEXT PRIMARY KEY, device_id TEXT NOT NULL, user_code_hash TEXT NOT NULL,
-          poll_secret_hash TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'PENDING',
-          created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, approved_at INTEGER,
-          delivered_at INTEGER, FOREIGN KEY(device_id) REFERENCES devices(device_id) ON DELETE CASCADE
-        );
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_device_auth_code
-          ON device_authorizations(user_code_hash) WHERE status='PENDING';
-        """)
-        for table, name, ddl in [
-            ("resources","expected_status_min","INTEGER NOT NULL DEFAULT 200"),
-            ("resources","expected_status_max","INTEGER NOT NULL DEFAULT 399"),
-            ("resources","slow_threshold_ms","INTEGER NOT NULL DEFAULT 1500"),
-            ("resources","failure_threshold","INTEGER NOT NULL DEFAULT 2"),
+        CREATE INDEX IF NOT EXISTS idx_diagnostic_jobs_resource ON diagnostic_jobs(resource_id,createYªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×5N‹Z–‹­¦ëeŠw¬Õ‘}…ĞM¤ì(€€€€€€€IQQ	1%9=Pa%MQLÁÉ½Ù¥‘•É}ÅÕ½Ñ…}ÕÍ•Ì€ (€€€€€€€€€¥%9QHAI%5Id-dUQ=%9I59P°ÁÉ½Ù¥‘•ÈQaP9=P9U10°ÕÍ•‘}…Ğ%9QH9=P9U10°(€€€€€€€€€½ÍĞ%9QH9=P9U10°ÁÉ¥½É¥Ñä%9QH9=P9U10(€€€€€€€€¤ì(€€€€€€€IQ%9`%9=Pa%MQL¥‘á}ÁÉ½Ù¥‘•É}ÅÕ½Ñ…}Ñ¥µ”=8ÁÉ½Ù¥‘•É}ÅÕ½Ñ…}ÕÍ•Ì¡ÁÉ½Ù¥‘•È±ÕÍ•‘}…Ğ¤ì(€€€€€€€IQQ	1%9=Pa%MQL•áÑ•É¹…±}•Ù¥‘•¹”€ (€€€€€€€€€¥%9QHAI%5Id-dUQ=%9I59P°É•Í½ÕÉ•}¥%9QH°(€€€€€€€€€ÁÉ½Ù¥‘•ÈQaP9=P9U10°Í½Á•}­•äQaP9=P9U10°ÍÑ…ÑÕÌQaP9=P9U10°(€€€€€€€€€±…ÍÍ¥™¥…Ñ¥½¸QaP°½¹™¥‘•¹”QaP°ÍÕµµ…Éå}©Í½¸QaP9=P9U10U1P€íôœ°(€€€€€€€€€É…İ}©Í½¸QaP9=P9U10U1P€íôœ°™•Ñ¡•‘}…Ğ%9QH9=P9U10°•áÁ¥É•Í}…Ğ%9QH9=P9U10°(€€€€€€€€€=I%8-d¡É•Í½ÕÉ•}¥¤II9LÉ•Í½ÕÉ•Ì¡¥¤=81QM(€€€€€€€€¤ì(€€€€€€€IQ%9`%9=Pa%MQL¥‘á}•áÑ•É¹…±}•Ù¥‘•¹•}±½½­ÕÀ(€€€€€€€€€=8•áÑ•É¹…±}•Ù¥‘•¹”¡ÁÉ½Ù¥‘•È±Í½Á•}­•ä±•áÁ¥É•Í}…ĞM¤ì(€€€€€€€IQQ	1%9=Pa%MQL‘•Ù¥•Ì€ (€€€€€€€€€‘•Ù¥•}¥QaPAI%5Id-d°¹…µ”QaP9=P9U10°Ñ½­•¹}¡…Í QaP°(€€€€€€€€€…ÁÁ}Ù•ÉÍ¥½¸QaP9=P9U10U1P€œœ°ÍÑ…ÑÕÌQaP9=P9U10U1P€A9%9œ°(€€€€€€€€€É•…Ñ•‘}…Ğ%9QH9=P9U10°…ÁÁÉ½Ù•‘}…Ğ%9QH°±…ÍÑ}Í••¹}…Ğ%9QH9=P9U10U1P€À°(€€€€€€€€€É•Ù½­•‘}…Ğ%9QH°ÕÁ‘…Ñ•‘}…Ğ%9QH9=P9U10(€€€€€€€€¤ì(€€€€€€€IQQ	1%9=Pa%MQL‘•Ù¥•}…ÕÑ¡½É¥é…Ñ¥½¹Ì€ (€€€€€€€€€Í•ÍÍ¥½¹}¥QaPAI%5Id-d°‘•Ù¥•}¥QaP9=P9U10°ÕÍ•É}½‘•}¡…Í QaP9=P9U10°(€€€€€€€€€Á½±±}Í•É•Ñ}¡…Í QaP9=P9U10°ÍÑ…ÑÕÌQaP9=P9U10U1P€A9%9œ°(€€€€€€€€€É•…Ñ•‘}…Ğ%9QH9=P9U10°•áÁ¥É•Í}…Ğ%9QH9=P9U10°…ÁÁÉ½Ù•‘}…Ğ%9QH°(€€€€€€€€€‘•±¥Ù•É•‘}…Ğ%9QH°=I%8-d¡‘•Ù¥•}¥¤II9L‘•Ù¥•Ì¡‘•Ù¥•}¥¤=81QM(€€€€€€€€¤ì(€€€€€€€IQU9%EU%9`%9=Pa%MQL¥‘á}‘•Ù¥•}…ÕÑ¡}½‘”(€€€€€€€€€=8‘•Ù¥•}…ÕÑ¡½É¥é…Ñ¥½¹Ì¡ÕÍ•É}½‘•}¡…Í ¤]!IÍÑ…ÑÕÌôA9%9œì(€€€€€€€€ˆˆˆ¤(€€€€€€€™½ÈÑ…‰±”°¹…µ”°‘‘°¥¸l(€€€€€€€€€€€€ ‰É•Í½ÕÉ•Ìˆ°‰•áÁ•Ñ•‘}ÍÑ…ÑÕÍ}µ¥¸ˆ°‰%9QH9=P9U10U1P€ÈÀÀˆ¤°(€€€€€€€€€€€€ ‰É•Í½ÕÉ•Ìˆ°‰•áÁ•Ñ•‘}ÍÑ…ÑÕÍ}µ…àˆ°‰%9QH9=P9U10U1P€Ìääˆ¤°(€€€€€€€€€€€€ ‰É•Í½ÕÉ•Ìˆ°‰Í±½İ}Ñ¡É•Í¡½±‘}µÌˆ°‰%9QH9=P9U10U1P€ÄÔÀÀˆ¤°(€€€€€€€€€€€€ ‰É•Í½ÕÉ•Ìˆ°‰™…¥±ÕÉ•}Ñ¡É•Í¡½±ˆ°‰%9Q[h‘éì¶»§q«^v NOT NULL DEFAULT 2"),
             ("resources","alerts_enabled","INTEGER NOT NULL DEFAULT 1"),
             ("resources","last_success_at","INTEGER NOT NULL DEFAULT 0"),
             ("resources","last_failure_at","INTEGER NOT NULL DEFAULT 0"),
@@ -158,44 +67,7 @@ def init_db() -> None:
                         "UPDATE resources SET catalog_key=?,target=?,group_name=?,allow_http_rejected=1 WHERE id=?",
                         (match.key, match.target, match.group_key, row["id"]),
                     )
-                except sqlite3.IntegrityError:
-                    pass
-        # Older databases can already have catalog_key while the new flag still has its
-        # column default (0). Repair both the flag and telemetry produced by anti-bot
-        # responses before this migration, so a reachable catalog service is not shown
-        # as a historical outage after an upgrade.
-        conn.execute("""UPDATE checks
-          SET status='HTTP_REJECTED',
-              message='HTTP ' || http_status || ': ÑĞµÑ€Ğ²Ğ¸Ñ Ğ´Ğ¾ÑÑ‚ÑƒĞ¿ĞµĞ½, Ğ½Ğ¾ Ğ¾Ñ‚ĞºĞ»Ğ¾Ğ½Ğ¸Ğ» Ğ°Ğ²Ñ‚Ğ¾Ğ¼Ğ°Ñ‚Ğ¸Ñ‡ĞµÑĞºÑƒÑ Ğ¿Ñ€Ğ¾Ğ²ĞµÑ€ĞºÑƒ'
-          WHERE status='HTTP_ERROR' AND http_status IN (401,403,405,429)
-            AND resource_id IN (SELECT id FROM resources WHERE allow_http_rejected=1)""")
-        conn.execute("""DELETE FROM incidents
-          WHERE kind='DOWN'
-            AND resource_id IN (SELECT id FROM resources WHERE allow_http_rejected=1)
-            AND (message LIKE '%HTTP_ERROR%HTTP 401%'
-              OR message LIKE '%HTTP_ERROR%HTTP 403%'
-              OR message LIKE '%HTTP_ERROR%HTTP 405%'
-              OR message LIKE '%HTTP_ERROR%HTTP 429%')""")
-        now = int(time.time())
-        default_groups = [
-            ("RUSSIAN","Ğ Ğ¾ÑÑĞ¸Ğ¹ÑĞºĞ¸Ğµ","#35D89A",10),
-            ("INTERNATIONAL","ĞœĞµĞ¶Ğ´ÑƒĞ½Ğ°Ñ€Ğ¾Ğ´Ğ½Ñ‹Ğµ","#55C7FF",20),
-            ("MESSENGERS","ĞœĞµÑÑĞµĞ½Ğ´Ğ¶ĞµÑ€Ñ‹ Ğ¸ ÑĞ¾Ñ†ÑĞµÑ‚Ğ¸","#7C62FF",30),
-            ("INFRASTRUCTURE","Ğ˜Ğ½Ñ„Ñ€Ğ°ÑÑ‚Ñ€ÑƒĞºÑ‚ÑƒÑ€Ğ°","#FFAD4D",40),
-            ("CUSTOM","ĞŸĞ¾Ğ»ÑŒĞ·Ğ¾Ğ²Ğ°Ñ‚ĞµĞ»ÑŒÑĞºĞ¸Ğµ","#8A96A3",90),
-        ]
-        for group_key, title, color, sort_order in default_groups:
-            conn.execute("""INSERT INTO resource_groups(group_key,title,color,sort_order,created_at,updated_at)
-              VALUES(?,?,?,?,?,?)
-              ON CONFLICT(group_key) DO NOTHING""",
-              (group_key,title,color,sort_order,now,now))
-        for row in conn.execute("SELECT DISTINCT group_name FROM resources").fetchall():
-            key = row["group_name"]
-            conn.execute("""INSERT INTO resource_groups(group_key,title,color,sort_order,created_at,updated_at)
-              VALUES(?,?,?,?,?,?)
-              ON CONFLICT(group_key) DO NOTHING""",
-              (key,key,"#8A96A3",100,now,now))
-        conn.execute("""DELETE FROM resource_groups
+                except sqlite3.IntegrityYªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×5N‹Z–‹­¦ëeŠw¬ÕÉÉ½Èè(€€€€€€€€€€€€€€€€€€€Á…ÍÌ(€€€€€€€€Œ=±‘•È‘…Ñ…‰…Í•Ì…¸…±É•…‘ä¡…Ù”…Ñ…±½}­•äİ¡¥±”Ñ¡”¹•Ü™±…œÍÑ¥±°¡…Ì¥ÑÌ(€€€€€€€€Œ½±Õµ¸‘•™…Õ±Ğ€ À¤¸I•Á…¥È‰½Ñ Ñ¡”™±…œ…¹Ñ•±•µ•ÑÉäÁÉ½‘Õ•‰ä…¹Ñ¤µ‰½Ğ(€€€€€€€€ŒÉ•ÍÁ½¹Í•Ì‰•™½É”Ñ¡¥Ìµ¥É…Ñ¥½¸°Í¼„É•…¡…‰±”…Ñ…±½œÍ•ÉÙ¥”¥Ì¹½ĞÍ¡½İ¸(€€€€€€€€Œ…Ì„¡¥ÍÑ½É¥…°½ÕÑ…”…™Ñ•È…¸ÕÁÉ…‘”¸(€€€€€€€½¹¸¹•á•ÕÑ” ˆˆ‰UAQ¡•­Ì(€€€€€€€€€MPÍÑ…ÑÕÌô!QQA}I)Qœ°(€€€€€€€€€€€€€µ•ÍÍ…”ô!QQ@€œñğ¡ÑÑÁ}ÍÑ…ÑÕÌñğ€œèƒFB×FBËBãFƒBÓBûFFFBÿB×Bô°ƒB÷BøƒBûFBëBïBûB÷BãBìƒBÃBËFBûBóBÃFBãFB×FBëFF8ƒBÿFBûBËB×FBëFœ(€€€€€€€€€]!IÍÑ…ÑÕÌô!QQA}II=Hœ9¡ÑÑÁ}ÍÑ…ÑÕÌ%8€ ĞÀÄ°ĞÀÌ°ĞÀÔ°ĞÈä¤(€€€€€€€€€€€9É•Í½ÕÉ•}¥%8€¡M1P¥I=4É•Í½ÕÉ•Ì]!I…±±½İ}¡ÑÑÁ}É•©•Ñ•ôÄ¤ˆˆˆ¤(€€€€€€€½¹¸¹•á•ÕÑ” ˆˆ‰1QI=4¥¹¥‘•¹ÑÌ(€€€€€€€€€]!I­¥¹ô=]8œ(€€€€€€€€€€€9É•Í½ÕÉ•}¥%8€¡M1P¥I=4É•Í½ÕÉ•Ì]!I…±±½İ}¡ÑÑÁ}É•©•Ñ•ôÄ¤(€€€€€€€€€€€9€¡µ•ÍÍ…”1%-€œ•!QQA}II=H•!QQ@€ĞÀÄ”œ(€€€€€€€€€€€€€=Hµ•ÍÍ…”1%-€œ•!QQA}II=H•!QQ@€ĞÀÌ”œ(€€€€€€€€€€€€€=Hµ•ÍÍ…”1%-€œ•!QQA}II=H•!QQ@€ĞÀÔ”œ(€€€€€€€€€€€€€=Hµ•ÍÍ…”1%-€œ•!QQA}II=H•!QQ@€ĞÈä”œ¤ˆˆˆ¤(€€€€€€€¹½Ü€ô¥¹Ğ¡Ñ¥µ”¹Ñ¥µ” ¤¤(€€€€€€€‘•™…Õ±Ñ}É½ÕÁÌ€ôl(€€€€€€€€€€€€ ‰IUMM%8ˆ°‹BƒBûFFBãBçFBëBãBÔˆ°ˆŒÌÕàåˆ°ÄÀ¤°(€€€€€€€€€€€€ ‰%9QI9Q%=90ˆ°‹BsB×BÛBÓFB÷BÃFBûBÓB÷F/BÔˆ°ˆŒÔÕİˆ°ÈÀ¤°(€€€€€€€€€€€€ ‰5MM9ILˆ°‹BsB×FFB×B÷BÓBÛB×FF,ƒBàƒFBûFFB×FBàˆ°ˆŒİØÉˆ°ÌÀ¤°(€€€€€€€€€€€€ ‰%9IMQIUQUIˆ°‹BcB÷FFBÃFFFFBëFFFBÀˆ°ˆÑˆ°ĞÀ¤°(€€€€€€€€€€€€ ‰UMQ=4ˆ°‹BBûBïF3BßBûBËBÃFB×BïF3FBëBãBÔˆ°ˆŒáäÙÌˆ°äÀ¤°(€€€€€€€t(€€€€€€€™½ÈÉ½ÕÁ}­•ä°Ñ¥Ñ±”°½±½È°Í½ÉÑ}½É‘•È¥¸‘•™…Õ±Ñ}É½ÕÁÌè(€€€€€€€€€€€½¹¸¹•á•ÕÑ” ˆˆ‰%9MIP%9Q<É•Í½ÕÉ•}É½ÕÁÌ¡É½ÕÁ}­•ä±Ñ¥Ñ±”±½±½È±Í½ÉÑ}½É‘•È±É•…Ñ•‘}…Ğ±ÕÁ‘…Ñ•‘}…Ğ¤(€€€€€€€€€€€€€Y1UL ü°ü°ü°ü°ü°ü¤(€€€€€€€€€€€€€=8=91%P¡É½ÕÁ}­•ä¤<9=Q!%9ˆˆˆ°(€€€€€€€€€€€€€€¡É½ÕÁ}­•ä±Ñ¥Ñ±”±½±½È±Í½ÉÑ}½É‘•È±¹½Ü±¹½Ü¤¤(€€€€€€€™½ÈÉ½Ü¥¸½¹¸¹•á•ÕÑ” ‰M1P%MQ%9PÉ½ÕÁ}¹…µ”I=4É•Í½ÕÉ•Ìˆ¤¹™•Ñ¡…±° ¤è(€€€€€€€€€€€­•ä€ôÉ½İl‰É½ÕÁ}¹…µ”‰t(€€€€€€€€€€€½¹¸¹•á•ÕÑ” ˆˆ‰%9MIP%9Q<É•Í½ÕÉ•}É½ÕÁÌ¡É½ÕÁ}­•ä±Ñ¥Ñ±”±½±½È±Í½ÉÑ}½É‘•È±É•…Ñ•‘}…Ğ±ÕÁ‘…Ñ•‘}…Ğ¤(€€€€€€€€€€€€€Y1UL ü°ü°ü°ü°ü°ü¤(€€€€€€€€€€€€€=8=91%P¡É½ÕÁ}­•ä¤<9=Q!%9ˆˆˆ°(€€€€€€€€€€€€€€¡­•ä±­•ä°ˆŒáäÙÌˆ°ÄÀÀ±¹½Ü±¹½Ü¤¤(€€€€€€€ƒ[h‘éì¶»§q«^wonn.execute("""DELETE FROM resource_groups
           WHERE group_key='SELFTEST'
             AND NOT EXISTS(SELECT 1 FROM resources WHERE group_name='SELFTEST')""")
         # 0.4 keeps historical router telemetry but excludes it from live conclusions.
@@ -231,46 +103,7 @@ def seed_defaults() -> None:
               match.name if match else name,
               match.target if match else target,
               match.group_key if match else group,
-              DEFAULT_INTERVAL,1,now,now,0,200,399,1800,2,1,0,0,
-              match.key if match else None, 1 if match else 0,
-            ))
-
-
-def latest_resources() -> list[dict[str, Any]]:
-    with db() as conn:
-        rows = conn.execute("""
-        SELECT r.*, c.status, c.response_time_ms, c.dns_ms, c.tcp_ms, c.tls_ms, c.http_ms,
-               c.http_status, c.resolved_ip, c.message, c.checked_at, c.tls_days_left, c.final_url, c.location,
-               (SELECT COUNT(*) FROM incidents i WHERE i.resource_id=r.id AND i.closed_at IS NULL) active_incidents
-        FROM resources r
-        LEFT JOIN checks c ON c.id=(SELECT id FROM checks WHERE resource_id=r.id AND probe_scope='GLOBAL' ORDER BY checked_at DESC,id DESC LIMIT 1)
-        ORDER BY r.group_name,r.name
-        """).fetchall()
-    return [dict(r) for r in rows]
-
-
-def get_incidents(active_only: bool=False, limit: int=100) -> list[dict[str, Any]]:
-    where = "WHERE i.closed_at IS NULL" if active_only else ""
-    with db() as conn:
-        rows = conn.execute(f"""SELECT i.*,r.name resource_name,r.target,r.group_name
-          FROM incidents i JOIN resources r ON r.id=i.resource_id {where}
-          ORDER BY (i.closed_at IS NULL) DESC,i.opened_at DESC LIMIT ?""",(max(1,min(limit,500)),)).fetchall()
-    return [dict(r) for r in rows]
-
-
-def summary() -> dict[str, Any]:
-    resources = [r for r in latest_resources() if r["enabled"]]
-    checked = [r for r in resources if r.get("checked_at")]
-    if not resources:
-        return {"availability_index":0,"mode":"NO_DATA","total":0,"checked":0,"available":0,"problematic":0,"last_updated":0,"groups":{},"avg_latency_ms":None,"active_incidents":0,"tls_expiring":0}
-    by_group: dict[str,list[dict[str,Any]]] = {}
-    for row in resources:
-        by_group.setdefault(row["group_name"],[]).append(row)
-    if not checked:
-        groups={name:{"total":len(rows),"checked":0,"available":0,"problematic":0,"availability":None} for name,rows in by_group.items()}
-        return {"availability_index":0,"mode":"INITIALIZING","total":len(resources),"checked":0,"available":0,"problematic":0,"last_updated":0,"groups":groups,"avg_latency_ms":None,"active_incidents":0,"tls_expiring":0}
-    available=sum(1 for r in checked if is_reachable(r.get("status")))
-    score=round(available/len(checked)*100)
+              DEFAULT_INTERVAL,YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×5N‹Z–‹­¦ëeŠw¬ÔÄ±¹½Ü±¹½Ü°À°ÈÀÀ°Ìää°ÄàÀÀ°È°À°À°À°(€€€€€€€€€€€€€µ…Ñ ¹­•ä¥˜µ…Ñ •±Í”9½¹”°€Ä¥˜µ…Ñ •±Í”€À°(€€€€€€€€€€€€¤¤(()‘•˜±…Ñ•ÍÑ}É•Í½ÕÉ•Ì ¤€´ø±¥ÍÑm‘¥ÑmÍÑÈ°¹åutè(€€€İ¥Ñ ‘ˆ ¤…Ì½¹¸è(€€€€€€€É½İÌ€ô½¹¸¹•á•ÕÑ” ˆˆˆ(€€€€€€€M1PÈ¸¨°Œ¹ÍÑ…ÑÕÌ°Œ¹É•ÍÁ½¹Í•}Ñ¥µ•}µÌ°Œ¹‘¹Í}µÌ°Œ¹ÑÁ}µÌ°Œ¹Ñ±Í}µÌ°Œ¹¡ÑÑÁ}µÌ°(€€€€€€€€€€€€€€Œ¹¡ÑÑÁ}ÍÑ…ÑÕÌ°Œ¹É•Í½±Ù•‘}¥À°Œ¹µ•ÍÍ…”°Œ¹¡•­•‘}…Ğ°Œ¹Ñ±Í}‘…åÍ}±•™Ğ°Œ¹™¥¹…±}ÕÉ°°Œ¹±½…Ñ¥½¸°(€€€€€€€€€€€€€€€¡M1P=U9P ¨¤I=4¥¹¥‘•¹ÑÌ¤]!I¤¹É•Í½ÕÉ•}¥õÈ¹¥9¤¹±½Í•‘}…Ğ%L9U10¤…Ñ¥Ù•}¥¹¥‘•¹ÑÌ(€€€€€€€I=4É•Í½ÕÉ•ÌÈ(€€€€€€€1P)=%8¡•­ÌŒ=8Œ¹¥ô¡M1P¥I=4¡•­Ì]!IÉ•Í½ÕÉ•}¥õÈ¹¥9ÁÉ½‰•}Í½Á”ô1=	0œ=IH	d¡•­•‘}…ĞM±¥M1%5%P€Ä¤(€€€€€€€=IH	dÈ¹É½ÕÁ}¹…µ”±È¹¹…µ”(€€€€€€€€ˆˆˆ¤¹™•Ñ¡…±° ¤(€€€É•ÑÕÉ¸m‘¥Ğ¡È¤™½ÈÈ¥¸É½İÍt(()‘•˜•Ñ}¥¹¥‘•¹ÑÌ¡…Ñ¥Ù•}½¹±äè‰½½°õ…±Í”°±¥µ¥Ğè¥¹ĞôÄÀÀ¤€´ø±¥ÍÑm‘¥ÑmÍÑÈ°¹åutè(€€€İ¡•É”€ô€‰]!I¤¹±½Í•‘}…Ğ%L9U10ˆ¥˜…Ñ¥Ù•}½¹±ä•±Í”€ˆˆ(€€€İ¥Ñ ‘ˆ ¤…Ì½¹¸è(€€€€€€€É½İÌ€ô½¹¸¹•á•ÕÑ”¡˜ˆˆ‰M1P¤¸¨±È¹¹…µ”É•Í½ÕÉ•}¹…µ”±È¹Ñ…É•Ğ±È¹É½ÕÁ}¹…µ”(€€€€€€€€€I=4¥¹¥‘•¹ÑÌ¤)=%8É•Í½ÕÉ•ÌÈ=8È¹¥õ¤¹É•Í½ÕÉ•}¥íİ¡•É•ô(€€€€€€€€€=IH	d€¡¤¹±½Í•‘}…Ğ%L9U10¤M±¤¹½Á•¹•‘}…ĞM1%5%P€üˆˆˆ°¡µ…à Ä±µ¥¸¡±¥µ¥Ğ°ÔÀÀ¤¤°¤¤¹™•Ñ¡…±° ¤(€€€É•ÑÕÉ¸m‘¥Ğ¡È¤™½ÈÈ¥¸É½İÍt(()‘•˜ÍÕµµ…Éä ¤€´ø‘¥ÑmÍÑÈ°¹åtè(€€€É•Í½ÕÉ•Ì€ômÈ™½ÈÈ¥¸±…Ñ•ÍÑ}É•Í½ÕÉ•Ì ¤¥˜Él‰•¹…‰±•‰ut(€€€¡•­•€ômÈ™½ÈÈ¥¸É•Í½ÕÉ•Ì¥˜È¹•Ğ ‰¡•­•‘}…Ğˆ¥t(€€€¥˜¹½ĞÉ•Í½ÕÉ•Ìè(€€€€€€€É•ÑÕÉ¸ì‰…Ù…¥±…‰¥±¥Ñå}¥¹‘•àˆèÀ°‰µ½‘”ˆè‰9=}Qˆ°‰Ñ½Ñ…°ˆèÀ°‰¡•­•ˆèÀ°‰…Ù…¥±…‰±”ˆèÀ°‰ÁÉ½‰±•µ…Ñ¥ŒˆèÀ°‰±…ÍÑ}ÕÁ‘…Ñ•ˆèÀ°‰É½ÕÁÌˆéíô°‰…Ù}±…Ñ•¹å}µÌˆé9½¹”°‰…Ñ¥Ù•}¥¹¥‘•¹ÑÌˆèÀ°‰Ñ±Í}•áÁ¥É¥¹œˆèÁô(€€€‰å}É½ÕÀè‘¥ÑmÍÑÈ±±¥ÍÑm‘¥ÑmÍÑÈ±¹åuut€ôíô(€€€™½ÈÉ½Ü¥¸É•Í½ÕÉ•Ìè(€€€€€€€‰å}É½ÕÀ¹Í•Ñ‘•™…Õ±Ğ¡É½İl‰É½ÕÁ}¹…µ”‰t±mt¤¹…ÁÁ•¹¡É½Ü¤(€€€¥˜¹½Ğ¡•­•è(€€€€€€€É½ÕÁÌõí¹…µ”éì‰Ñ½Ñ…°ˆé±•¸¡É½İÌ¤°‰¡•­•ˆèÀ°‰…Ù…¥±…‰±”ˆèÀ°‰ÁÉ½‰±•µ…Ñ¥ŒˆèÀ°‰…Ù…¥±…‰¥±¥Ñäˆé9½¹•ô™½È¹…µ”±É½İÌ¥¸‰å}É½ÕÀ¹¥Ñ•µÌ ¥ô(€€€€€€€É•ÑÕÉ¸ì‰…Ù…¥±…‰¥±¥Ñå}¥¹‘•àˆèÀ°‰µ½‘”ˆè‰%9%Q%1%i%9ˆ°‰Ñ½Ñ…°ˆé±•¸¡É•Í½ÕÉ•Ì¤°‰¡•­•ˆèÀ°‰…Ù…¥±…‰±”ˆèÀ°‰ÁÉ½‰±•µ…Ñ¥ŒˆèÀ°‰±…ÍÑ}ÕÁ‘…Ñ•ˆèÀ°‰É½ÕÁÌˆéÉ½ÕÁÌ°‰…Ù}±…Ñ•¹å}µÌˆé9½¹”°‰…Ñ¥Ù•}¥¹¥‘•¹ÑÌˆèÀ°‰Ñ±Í}•áÁ¥É¥¹œˆèÁô(€€€…Ù…¥±…‰±”õÍÕ´ Ä™½ÈÈ¥¸¡•­•¥˜¥Í}É•…¡…‰±”¡È¹•Ğ ‰ÍÑ…ÑÕÌˆ¤¤¤(€ƒ[h‘éì¶»§q«^t score=round(available/len(checked)*100)
     def ratio(name:str):
         rows=[r for r in by_group.get(name,[]) if r.get("checked_at")]
         return None if not rows else sum(1 for r in rows if is_reachable(r.get("status")))/len(rows)
@@ -303,45 +136,7 @@ def probe_statuses() -> list[dict[str, Any]]:
     with db() as conn:
         rows = conn.execute("SELECT * FROM probes ORDER BY scope, name").fetchall()
     result = [{
-        **dict(r),
-        "online": bool(r["last_seen_at"] and now - r["last_seen_at"] <= (RUSSIA_PROBE_STALE_SECONDS if r["scope"] == "RUSSIA" else SERVER_PROBE_STALE_SECONDS if r["scope"] == "GLOBAL" else CLIENT_PROBE_STALE_SECONDS)),
-        "age_seconds": max(0, now - int(r["last_seen_at"] or 0)) if r["last_seen_at"] else None,
-    } for r in rows]
-    for item in result:
-        # Coarse regional anchors are safe for public/server probes. Android
-        # probes intentionally stay unlocated to avoid exposing device position.
-        if item["probe_key"] == SERVER_PROBE_KEY:
-            item.update({"lat": SERVER_PROBE_LAT, "lon": SERVER_PROBE_LON, "location_precision": "region"})
-        elif item["probe_key"] == RUSSIA_PROBE_KEY:
-            item.update({"lat": RUSSIA_PROBE_LAT, "lon": RUSSIA_PROBE_LON, "location_precision": "region"})
-    return result
-
-
-def _latest_probe_check(conn: sqlite3.Connection, resource_id: int, scope: str):
-    return conn.execute("""SELECT * FROM checks WHERE resource_id=? AND probe_scope=?
-      ORDER BY checked_at DESC,id DESC LIMIT 1""", (resource_id, scope)).fetchone()
-
-
-def resource_matrix() -> list[dict[str, Any]]:
-    now = int(time.time())
-    with db() as conn:
-        resources = conn.execute("SELECT * FROM resources ORDER BY group_name,name").fetchall()
-        probes = {r["probe_key"]: dict(r) for r in conn.execute("SELECT * FROM probes").fetchall()}
-        result = []
-        for r in resources:
-            ext = _latest_probe_check(conn, r["id"], "GLOBAL")
-            russia = _latest_probe_check(conn, r["id"], "RUSSIA")
-            user = _latest_probe_check(conn, r["id"], "USER")
-            ext_d = dict(ext) if ext else None
-            russia_d = dict(russia) if russia else None
-            user_d = dict(user) if user else None
-            user_fresh = False
-            if user_d:
-                p = probes.get(user_d.get("probe_key"))
-                user_fresh = bool(p and p.get("last_seen_at") and now - int(p["last_seen_at"]) <= CLIENT_PROBE_STALE_SECONDS)
-            current_user = user_d if user_fresh else None
-            diagnostic = conn.execute("""SELECT classification,confidence,result_summary_json,completed_at
-              FROM diagnostic_jobs WHERE resource_id=? AND status='finished'
+       YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×5N‹Z–‹­¦ëeŠw¬Ô€¨©‘¥Ğ¡È¤°(€€€€€€€€‰½¹±¥¹”ˆè‰½½°¡Él‰±…ÍÑ}Í••¹}…Ğ‰t…¹¹½Ü€´Él‰±…ÍÑ}Í••¹}…Ğ‰t€ğô€¡IUMM%}AI=	}MQ1}M=9L¥˜Él‰Í½Á”‰t€ôô€‰IUMM%ˆ•±Í”MIYI}AI=	}MQ1}M=9L¥˜Él‰Í½Á”‰t€ôô€‰1=	0ˆ•±Í”1%9Q}AI=	}MQ1}M=9L¤¤°(€€€€€€€€‰…•}Í•½¹‘Ìˆèµ…à À°¹½Ü€´¥¹Ğ¡Él‰±…ÍÑ}Í••¹}…Ğ‰t½È€À¤¤¥˜Él‰±…ÍÑ}Í••¹}…Ğ‰t•±Í”9½¹”°(€€€ô™½ÈÈ¥¸É½İÍt(€€€™½È¥Ñ•´¥¸É•ÍÕ±Ğè(€€€€€€€€Œ½…ÉÍ”É•¥½¹…°…¹¡½ÉÌ…É”Í…™”™½ÈÁÕ‰±¥Œ½Í•ÉÙ•ÈÁÉ½‰•Ì¸¹‘É½¥(€€€€€€€€ŒÁÉ½‰•Ì¥¹Ñ•¹Ñ¥½¹…±±äÍÑ…äÕ¹±½…Ñ•Ñ¼…Ù½¥•áÁ½Í¥¹œ‘•Ù¥”Á½Í¥Ñ¥½¸¸(€€€€€€€¥˜¥Ñ•µl‰ÁÉ½‰•}­•ä‰t€ôôMIYI}AI=	}-dè(€€€€€€€€€€€¥Ñ•´¹ÕÁ‘…Ñ”¡ì‰±…ĞˆèMIYI}AI=	}1P°€‰±½¸ˆèMIYI}AI=	}1=8°€‰±½…Ñ¥½¹}ÁÉ•¥Í¥½¸ˆè€‰É•¥½¸‰ô¤(€€€€€€€•±¥˜¥Ñ•µl‰ÁÉ½‰•}­•ä‰t€ôôIUMM%}AI=	}-dè(€€€€€€€€€€€¥Ñ•´¹ÕÁ‘…Ñ”¡ì‰±…ĞˆèIUMM%}AI=	}1P°€‰±½¸ˆèIUMM%}AI=	}1=8°€‰±½…Ñ¥½¹}ÁÉ•¥Í¥½¸ˆè€‰É•¥½¸‰ô¤(€€€É•ÑÕÉ¸É•ÍÕ±Ğ(()‘•˜}±…Ñ•ÍÑ}ÁÉ½‰•}¡•¬¡½¹¸èÍÅ±¥Ñ”Ì¹½¹¹•Ñ¥½¸°É•Í½ÕÉ•}¥è¥¹Ğ°Í½Á”èÍÑÈ¤è(€€€É•ÑÕÉ¸½¹¸¹•á•ÕÑ” ˆˆ‰M1P€¨I=4¡•­Ì]!IÉ•Í½ÕÉ•}¥ôü9ÁÉ½‰•}Í½Á”ôü(€€€€€=IH	d¡•­•‘}…ĞM±¥M1%5%P€Äˆˆˆ°€¡É•Í½ÕÉ•}¥°Í½Á”¤¤¹™•Ñ¡½¹” ¤(()‘•˜É•Í½ÕÉ•}µ…ÑÉ¥à ¤€´ø±¥ÍÑm‘¥ÑmÍÑÈ°¹åutè(€€€¹½Ü€ô¥¹Ğ¡Ñ¥µ”¹Ñ¥µ” ¤¤(€€€İ¥Ñ ‘ˆ ¤…Ì½¹¸è(€€€€€€€É•Í½ÕÉ•Ì€ô½¹¸¹•á•ÕÑ” ‰M1P€¨I=4É•Í½ÕÉ•Ì=IH	dÉ½ÕÁ}¹…µ”±¹…µ”ˆ¤¹™•Ñ¡…±° ¤(€€€€€€€ÁÉ½‰•Ì€ôíÉl‰ÁÉ½‰•}­•ä‰tè‘¥Ğ¡È¤™½ÈÈ¥¸½¹¸¹•á•ÕÑ” ‰M1P€¨I=4ÁÉ½‰•Ìˆ¤¹™•Ñ¡…±° ¥ô(€€€€€€€É•ÍÕ±Ğ€ômt(€€€€€€€™½ÈÈ¥¸É•Í½ÕÉ•Ìè(€€€€€€€€€€€•áĞ€ô}±…Ñ•ÍÑ}ÁÉ½‰•}¡•¬¡½¹¸°Él‰¥‰t°€‰1=	0ˆ¤(€€€€€€€€€€€ÉÕÍÍ¥„€ô}±…Ñ•ÍÑ}ÁÉ½‰•}¡•¬¡½¹¸°Él‰¥‰t°€‰IUMM%ˆ¤(€€€€€€€€€€€ÕÍ•È€ô}±…Ñ•ÍÑ}ÁÉ½‰•}¡•¬¡½¹¸°Él‰¥‰t°€‰UMHˆ¤(€€€€€€€€€€€•áÑ}€ô‘¥Ğ¡•áĞ¤¥˜•áĞ•±Í”9½¹”(€€€€€€€€€€€ÉÕÍÍ¥…}€ô‘¥Ğ¡ÉÕÍÍ¥„¤¥˜ÉÕÍÍ¥„•±Í”9½¹”(€€€€€€€€€€€ÕÍ•É}€ô‘¥Ğ¡ÕÍ•È¤¥˜ÕÍ•È•±Í”9½¹”(€€€€€€€€€€€ÕÍ•É}™É•Í €ô…±Í”(€€€€€€€€€€€¥˜ÕÍ•É}è(€€€€€€€€€€€€€€€À€ôÁÉ½‰•Ì¹•Ğ¡ÕÍ•É}¹•Ğ ‰ÁÉ½‰•}­•äˆ¤¤(€€€€€€€€€€€€€€€ÕÍ•É}™É•Í €ô‰½½°¡À…¹À¹•Ğ ‰±…ÍÑ}Í••¹}…Ğˆ¤…¹¹½Ü€´¥¹Ğ¡Ál‰±…ÍÑ}Í••¹}…Ğ‰t¤€ğô1%9Q}AI=	}MQ1}M=9L¤(€€€€€€€€€€€ÕÉÉ•¹Ñ}ÕÍ•È€ôÕÍ•É}¥˜ÕÍ•É}™É•Í •±Í”9½¹”(€€€€€€€€€€€‘¥…¹½ÍÑ¥Œ€ô½¹¸¹•á•ÕÑ” ˆˆ‰M1P±…ÍÍ¥™¥…Ñ¥½¸±½¹™¥‘•¹”±É•ÍÕ±Ñ}ÍÕµµ…Éå}©Í½¸±½µÁ±•Ñ•‘}…Ğ(€€€€€€€€€€€€€I=4‘¥…¹½ÍÑ¥}©½‰Ì]!IË[h‘éì¶»§q«^usource_id=? AND status='finished'
               ORDER BY completed_at DESC,id DESC LIMIT 1""", (r["id"],)).fetchone()
             evidence_rows = conn.execute("""SELECT provider,status,classification,confidence,summary_json,fetched_at,expires_at
               FROM external_evidence WHERE (resource_id=? OR resource_id IS NULL) AND expires_at>?
@@ -370,58 +165,7 @@ def resource_matrix() -> list[dict[str, Any]]:
                 "dns_ms": ext_d.get("dns_ms") if ext_d else None,
                 "tcp_ms": ext_d.get("tcp_ms") if ext_d else None,
                 "tls_ms": ext_d.get("tls_ms") if ext_d else None,
-                "http_ms": ext_d.get("http_ms") if ext_d else None,
-                "http_status": ext_d.get("http_status") if ext_d else None,
-                "resolved_ip": ext_d.get("resolved_ip") if ext_d else None,
-                "message": ext_d.get("message") if ext_d else None,
-                "checked_at": ext_d.get("checked_at") if ext_d else None,
-                "tls_days_left": ext_d.get("tls_days_left") if ext_d else None,
-            }
-            result.append({
-                **dict(r),
-                **legacy,
-                "global": ext_d,
-                "russia": russia_d,
-                "russia_available": bool(russia_d and is_reachable(russia_d.get("status"))),
-                "your_network": current_user,
-                "your_network_available": bool(current_user),
-                "your_network_stale": bool(user_d and not user_fresh),
-                "diagnosis": assessment.classification.value,
-                "diagnosis_text": assessment.explanation,
-                "confidence": assessment.confidence,
-                "external_diagnostic": ({
-                    "classification": diagnostic["classification"],
-                    "confidence": diagnostic["confidence"],
-                    "summary": diagnostic_summary,
-                    "completed_at": diagnostic["completed_at"],
-                } if diagnostic else None),
-                "evidence": list(evidence_by_provider.values()),
-            })
-    return result
-
-
-def dual_summary() -> dict[str, Any]:
-    rows = [r for r in resource_matrix() if r["enabled"]]
-    probes = probe_statuses()
-    user_online = any(p["scope"] == "USER" and p["online"] for p in probes)
-    russia_online = any(p["scope"] == "RUSSIA" and p["online"] for p in probes)
-    counts = {
-        "ok": 0, "degraded": 0, "down": 0, "local": 0, "unknown": 0,
-    }
-    user_lat = []
-    russia_lat = []
-    russia_seen = 0
-    russia_unknown = 0
-    russia_ok = 0
-    russia_last_updated = 0
-    last_updated = 0
-    groups: dict[str, dict[str, int]] = {}
-    for r in rows:
-        d = r["diagnosis"]
-        if d == "OK": counts["ok"] += 1
-        elif d == "DEGRADED": counts["degraded"] += 1
-        elif d in {"SERVICE_DOWN","REGIONAL_OUTAGE","DNS_FAILURE"}: counts["down"] += 1
-        elif d in {"LOCAL_NETWORK","ISP_OUTAGE","ROUTING_FAILURE","POSSIBLE_FILTERING"}: counts["local"] += 1
+                "http_ms": ext_d.get("http_ms") if ext_d YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×5N‹Z–‹­¦ëeŠw¬Õ•±Í”9½¹”°(€€€€€€€€€€€€€€€€‰¡ÑÑÁ}ÍÑ…ÑÕÌˆè•áÑ}¹•Ğ ‰¡ÑÑÁ}ÍÑ…ÑÕÌˆ¤¥˜•áÑ}•±Í”9½¹”°(€€€€€€€€€€€€€€€€‰É•Í½±Ù•‘}¥Àˆè•áÑ}¹•Ğ ‰É•Í½±Ù•‘}¥Àˆ¤¥˜•áÑ}•±Í”9½¹”°(€€€€€€€€€€€€€€€€‰µ•ÍÍ…”ˆè•áÑ}¹•Ğ ‰µ•ÍÍ…”ˆ¤¥˜•áÑ}•±Í”9½¹”°(€€€€€€€€€€€€€€€€‰¡•­•‘}…Ğˆè•áÑ}¹•Ğ ‰¡•­•‘}…Ğˆ¤¥˜•áÑ}•±Í”9½¹”°(€€€€€€€€€€€€€€€€‰Ñ±Í}‘…åÍ}±•™Ğˆè•áÑ}¹•Ğ ‰Ñ±Í}‘…åÍ}±•™Ğˆ¤¥˜•áÑ}•±Í”9½¹”°(€€€€€€€€€€€ô(€€€€€€€€€€€É•ÍÕ±Ğ¹…ÁÁ•¹¡ì(€€€€€€€€€€€€€€€€¨©‘¥Ğ¡È¤°(€€€€€€€€€€€€€€€€¨©±•…ä°(€€€€€€€€€€€€€€€€‰±½‰…°ˆè•áÑ}°(€€€€€€€€€€€€€€€€‰ÉÕÍÍ¥„ˆèÉÕÍÍ¥…}°(€€€€€€€€€€€€€€€€‰ÉÕÍÍ¥…}…Ù…¥±…‰±”ˆè‰½½°¡ÉÕÍÍ¥…}…¹¥Í}É•…¡…‰±”¡ÉÕÍÍ¥…}¹•Ğ ‰ÍÑ…ÑÕÌˆ¤¤¤°(€€€€€€€€€€€€€€€€‰å½ÕÉ}¹•Ñİ½É¬ˆèÕÉÉ•¹Ñ}ÕÍ•È°(€€€€€€€€€€€€€€€€‰å½ÕÉ}¹•Ñİ½É­}…Ù…¥±…‰±”ˆè‰½½°¡ÕÉÉ•¹Ñ}ÕÍ•È¤°(€€€€€€€€€€€€€€€€‰å½ÕÉ}¹•Ñİ½É­}ÍÑ…±”ˆè‰½½°¡ÕÍ•É}…¹¹½ĞÕÍ•É}™É•Í ¤°(€€€€€€€€€€€€€€€€‰‘¥…¹½Í¥Ìˆè…ÍÍ•ÍÍµ•¹Ğ¹±…ÍÍ¥™¥…Ñ¥½¸¹Ù…±Õ”°(€€€€€€€€€€€€€€€€‰‘¥…¹½Í¥Í}Ñ•áĞˆè…ÍÍ•ÍÍµ•¹Ğ¹•áÁ±…¹…Ñ¥½¸°(€€€€€€€€€€€€€€€€‰½¹™¥‘•¹”ˆè…ÍÍ•ÍÍµ•¹Ğ¹½¹™¥‘•¹”°(€€€€€€€€€€€€€€€€‰•áÑ•É¹…±}‘¥…¹½ÍÑ¥Œˆè€¡ì(€€€€€€€€€€€€€€€€€€€€‰±…ÍÍ¥™¥…Ñ¥½¸ˆè‘¥…¹½ÍÑ¥l‰±…ÍÍ¥™¥…Ñ¥½¸‰t°(€€€€€€€€€€€€€€€€€€€€‰½¹™¥‘•¹”ˆè‘¥…¹½ÍÑ¥l‰½¹™¥‘•¹”‰t°(€€€€€€€€€€€€€€€€€€€€‰ÍÕµµ…Éäˆè‘¥…¹½ÍÑ¥}ÍÕµµ…Éä°(€€€€€€€€€€€€€€€€€€€€‰½µÁ±•Ñ•‘}…Ğˆè‘¥…¹½ÍÑ¥l‰½µÁ±•Ñ•‘}…Ğ‰t°(€€€€€€€€€€€€€€€ô¥˜‘¥…¹½ÍÑ¥Œ•±Í”9½¹”¤°(€€€€€€€€€€€€€€€€‰•Ù¥‘•¹”ˆè±¥ÍĞ¡•Ù¥‘•¹•}‰å}ÁÉ½Ù¥‘•È¹Ù…±Õ•Ì ¤¤°(€€€€€€€€€€€ô¤(€€€É•ÑÕÉ¸É•ÍÕ±Ğ(()‘•˜‘Õ…±}ÍÕµµ…Éä ¤€´ø‘¥ÑmÍÑÈ°¹åtè(€€€É½İÌ€ômÈ™½ÈÈ¥¸É•Í½ÕÉ•}µ…ÑÉ¥à ¤¥˜Él‰•¹…‰±•‰ut(€€€ÁÉ½‰•Ì€ôÁÉ½‰•}ÍÑ…ÑÕÍ•Ì ¤(€€€ÕÍ•É}½¹±¥¹”€ô…¹ä¡Ál‰Í½Á”‰t€ôô€‰UMHˆ…¹Ál‰½¹±¥¹”‰t™½ÈÀ¥¸ÁÉ½‰•Ì¤(€€€ÉÕÍÍ¥…}½¹±¥¹”€ô…¹ä¡Ál‰Í½Á”‰t€ôô€‰IUMM%ˆ…¹Ál‰½¹±¥¹”‰t™½ÈÀ¥¸ÁÉ½‰•Ì¤(€€€½Õ¹ÑÌ€ôì(€€€€€€€€‰½¬ˆè€À°€‰‘•É…‘•ˆè€À°€‰‘½İ¸ˆè€À°€‰±½…°ˆè€À°€‰Õ¹­¹½İ¸ˆè€À°(€€€ô(€€€ÕÍ•É}±…Ğ€ômt(€€€ÉÕÍÍ¥…}±…Ğ€ômt(€€€ÉÕÍÍ¥…}Í••¸€ô€À(€€€ÉÕÍÍ¥…}Õ¹­¹½İ¸€ô€À(€€€ÉÕÍÍ¥…}½¬€ô€À(€€€ÉÕÍÍ¥…}±…ÍÑ}ÕÁ‘…Ñ•€ô€À(€€€±…ÍÑ}ÕÁ‘…Ñ•€ô€À(€€€É½ÕÁÌè‘¥ÑmÍÑÈ°‘¥ÑmÍÑÈ°¥¹Ñut€ôíô(€€€™½ÈÈ¥¸É½İÌè(€€€€€€€€ôÉl‰‘¥…¹½Í¥Ì‰t(€€€€€€€¥˜€ôô€‰=,ˆè½Õ¹ÑÍl‰½¬‰t€¬ô€Ä(€€€€€€€•±¥˜€ôô€‰Iˆè½Õ¹ÑÍl‰‘•É…‘•‰t€¬ô€Ä(€€€€€€€•±¥˜¥¸ì‰MIY%}=]8ˆ°‰I%=91}=UQˆ°‰9M}%1UI‰ôè½Õ¹ÑÍl‰‘½İ¸‰t€¬ô€Ä(€€€€€€€•±¥˜¥¸ì‰1=1}9Q]=I,ˆ°‹[h‘éì¶»§q«^uSP_OUTAGE","ROUTING_FAILURE","POSSIBLE_FILTERING"}: counts["local"] += 1
         else: counts["unknown"] += 1
         g = groups.setdefault(r["group_name"], {"total":0,"ok":0,"degraded":0,"down":0,"local":0,"unknown":0})
         g["total"] += 1

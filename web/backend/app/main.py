@@ -1,48 +1,4 @@
-from __future__ import annotations
-
-import asyncio
-import base64
-import hashlib
-import hmac
-import json
-import subprocess
-import time
-from contextlib import asynccontextmanager
-from urllib.parse import urlparse
-
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
-from fastapi.responses import FileResponse, JSONResponse, Response
-from fastapi.staticfiles import StaticFiles
-
-from .config import (
-    ALERT_WEBHOOK_URL, ALLOW_PRIVATE_TARGETS, API_TOKEN, APP_VERSION, AUTH_REQUIRED, DEFAULT_INTERVAL,
-    DEVICE_CODE_TTL_SECONDS, DEVICE_POLL_INTERVAL_SECONDS, DEVICE_TOKEN_MAX_AGE_SECONDS,
-    DEVICE_AUTH_START_LIMIT, DEVICE_AUTH_START_WINDOW_SECONDS,
-    DIAGNOSTIC_COOLDOWN_SECONDS, DIAGNOSTIC_MAX_POLL_ATTEMPTS, DIAGNOSTIC_POLL_SECONDS,
-    DIAGNOSTIC_RESERVE_PERCENT, FRONTEND_DIR, GLOBALPING_BASE_URL, GLOBALPING_ENABLED,
-    GLOBALPING_HOURLY_LIMIT, GLOBALPING_TOKEN, INTELLIGENCE_CACHE_SECONDS, IODA_BASE_URL,
-    IODA_COUNTRY, IODA_ENABLED, KNOWN_GROUPS, OONI_BASE_URL, OONI_ENABLED, OONI_PROBE_COUNTRY,
-    PUBLIC_ADD_LIMIT, PUBLIC_ADD_WINDOW_SECONDS, RUSSIA_CHECK_INTERVAL_SECONDS, RUSSIA_PROBE_COUNT, RUSSIA_PROBE_KEY,
-    ResourceCreate, ResourcePatch, ClientProbeResult, ClientProbeRegistration, CatalogAddRequest, GroupCreate, GroupPatch,
-    DeviceAuthorizationApprove, DeviceAuthorizationPoll, DeviceAuthorizationStart, OwnerLogin,
-    SCHEDULER_ENABLED, SESSION_MAX_AGE, STARTED_AT, UI_PASSWORD,
-    normalize_group, normalize_target,
-)
-from .database import (
-    db, dual_summary, get_incidents, init_db, latest_resources, probe_statuses,
-    register_probe, resource_groups, resource_matrix, seed_defaults, summary,
-)
-from .incidents import write_check
-from .monitor import discover_target_metadata, perform_check, traceroute_to_resource
-from .resource_catalog import CATALOG_BY_KEY, catalog_match, catalog_payload
-from .availability import is_reachable
-from .diagnostics import DiagnosticCoordinator, DiagnosticPriority, PersistentQuotaManager
-from .providers import GlobalpingProvider
-from .device_auth import (
-    DeviceIdentity, approve_authorization, authenticate_device, list_devices,
-    poll_authorization, revoke_device, start_authorization,
-)
-from .intelligence import IodaProvider, OoniProvider, StatuspageProvider
+YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×5N‹Z–‹­¦ëeŠw¬Õ™É½´}}™ÕÑÕÉ•}|¥µÁ½ÉĞ…¹¹½Ñ…Ñ¥½¹Ì()¥µÁ½ÉĞ…Íå¹¥¼)¥µÁ½ÉĞ‰…Í”ØĞ)¥µÁ½ÉĞ¡…Í¡±¥ˆ)¥µÁ½ÉĞ¡µ…Œ)¥µÁ½ÉĞ©Í½¸)¥µÁ½ÉĞÍÕ‰ÁÉ½•ÍÌ)¥µÁ½ÉĞÑ¥µ”)™É½´½¹Ñ•áÑ±¥ˆ¥µÁ½ÉĞ…Íå¹½¹Ñ•áÑµ…¹…•È)™É½´ÕÉ±±¥ˆ¹Á…ÉÍ”¥µÁ½ÉĞÕÉ±Á…ÉÍ”()™É½´™…ÍÑ…Á¤¥µÁ½ÉĞ•Á•¹‘Ì°…ÍÑA$°!•…‘•È°!QQAá•ÁÑ¥½¸°EÕ•Éä°I•ÅÕ•ÍĞ)™É½´™…ÍÑ…Á¤¹É•ÍÁ½¹Í•Ì¥µÁ½ÉĞ¥±•I•ÍÁ½¹Í”°)M=9I•ÍÁ½¹Í”°I•ÍÁ½¹Í”)™É½´™…ÍÑ…Á¤¹ÍÑ…Ñ¥™¥±•Ì¥µÁ½ÉĞMÑ…Ñ¥¥±•Ì()™É½´€¹½¹™¥œ¥µÁ½ÉĞ€ (€€€1IQ}]	!==-}UI0°11=]}AI%YQ}QIQL°A%}Q=-8°AA}YIM%=8°UQ!}IEU%I°U1Q}%9QIY0°(€€€Y%}=}QQ1}M=9L°Y%}A=11}%9QIY1}M=9L°Y%}Q=-9}5a}}M=9L°(€€€Y%}UQ!}MQIQ}1%5%P°Y%}UQ!}MQIQ}]%9=]}M=9L°(€€€%9=MQ%}==1=]9}M=9L°%9=MQ%}5a}A=11}QQ5AQL°%9=MQ%}A=11}M=9L°(€€€%9=MQ%}IMIY}AI9P°I=9Q9}%H°1=	1A%9}	M}UI0°1=	1A%9}9	1°(€€€1=	1A%9}!=UI1e}1%5%P°1=	1A%9}Q=-8°%9Q11%9}!}M=9L°%=}	M}UI0°(€€€%=}=U9QId°%=}9	1°-9=]9}I=UAL°==9%}	M}UI0°==9%}9	1°==9%}AI=	}=U9QId°(€€€AU	1%}}1%5%P°AU	1%}}]%9=]}M=9L°IUMM%}!-}%9QIY1}M=9L°IUMM%}AI=	}=U9P°IUMM%}AI=	}-d°(€€€I•Í½ÕÉ•É•…Ñ”°I•Í½ÕÉ•A…Ñ °±¥•¹ÑAÉ½‰•I•ÍÕ±Ğ°±¥•¹ÑAÉ½‰•I•¥ÍÑÉ…Ñ¥½¸°…Ñ…±½‘‘I•ÅÕ•ÍĞ°É½ÕÁÉ•…Ñ”°É½ÕÁA…Ñ °(€€€•Ù¥•ÕÑ¡½É¥é…Ñ¥½¹ÁÁÉ½Ù”°•Ù¥•ÕÑ¡½É¥é…Ñ¥½¹A½±°°•Ù¥•ÕÑ¡½É¥é…Ñ¥½¹MÑ…ÉĞ°=İ¹•É1½¥¸°(€€€M!U1I}9	1°MMM%=9}5a}°MQIQ}P°U%}AMM]=I°(€€€¹½Éµ…±¥é•}É½ÕÀ°¹½Éµ…±¥é•}Ñ…É•Ğ°(¤)™É½´€¹‘…Ñ…‰…Í”¥µÁ½ÉĞ€ (€€€‘ˆ°‘Õ…±}ÍÕµµ…Éä°•Ñ}¥¹¥‘•¹ÑÌ°¥¹¥Ñ}‘ˆ°±…Ñ•ÍÑ}É•Í½ÕÉ•Ì°ÁÉ½‰•}ÍÑ…ÑÕÍ•Ì°(€€€É•¥ÍÑ•É}ÁÉ½‰”°É•Í½ÕÉ•}É½ÕÁÌ°É•Í½ÕÉ•}µ…ÑÉ¥à°Í••‘}‘•™…Õ±ÑÌ°ÍÕµµ…Éä°(¤)™É½´€¹¥¹¥‘•¹ÑÌ¥µÁ½ÉĞİÉ¥Ñ•}¡•¬)™É½´€¹µ½¹¥Ñ½È¥µÁ½ÉĞ‘¥Í½Ù•É}Ñ…É•Ñ}µ•Ñ…‘…Ñ„°Á•É™½Éµ}¡•¬°ÑÉ…•É½ÕÑ•}Ñ½}É•Í½ÕÉ”)™É½´€¹É•Í½ÕÉ•}…Ñ…±½œ¥µÁ½ÉĞQ1=}	e}-d°…Ñ…±½}µ…Ñ °…Ñ…±½}Á…å±½…)™É½´€¹…Ù…¥±…‰¥±¥Ñä¥µÁ½ÉĞ¥Í}É•…¡…‰±”)™É½´€¹‘¥…¹½ÍÑ¥Ì¥µÁ½ÉĞ¥…¹½ÍÑ¥½½É‘¥¹…Ñ½È°¥…¹½ÍÑ¥AÉ¥½É¥Ñä°A•ÉÍ¥ÍÑ•¹ÑEÕ½Ñ…5…¹…•È)™É½´€¹ÁÉ½Ù¥‘•ÉÌ¥µÁ½ÉĞ±½‰…±Á¥¹AÉ½Ù¥‘•È)™É½´€¹‘•Ù¥•}…ÕÑ ¥µÁ½ÉĞ€ (€€€•Ù¥•%‘•¹Ñ¥Ñä°…ÁÁÉ½Ù•}…ÕÑ¡½É¥é…Ñ¥½¸°…ÕÑ¡•¹Ñ¥…Ñ•}‘•Ù¥”°±¥ÍÑ}‘•Ù¥•Ì°(€€€Á½±±}…ÕÑ¡½É¥é…Ñ¥½¸°É•Ù½­•}‘•Ù¥”°ÍÑ…ÉÑ}…ÕÑ¡½É¥é…Ñ¥½¸°(¤)™É½´€¹¥¹Ñ•±±¥•¹”¥µÁ½ÉĞ%½‘…AÉ½Ù¥‘•È°=½¹¥AÉ½Ù¥‘—[h‘éì¶»§q«^v, StatuspageProvider
 from .capabilities import capability_registry
 
 
@@ -100,54 +56,7 @@ def _limit_public_add(request: Request, authorization: str | None) -> bool:
     """Return True for owner requests; rate-limit anonymous custom targets."""
     owner = not AUTH_REQUIRED or _is_owner(request, authorization)
     if owner:
-        return True
-    address = request.headers.get("x-real-ip") or (request.client.host if request.client else "unknown")
-    now = time.monotonic()
-    attempts = [stamp for stamp in _public_add_attempts.get(address, []) if now - stamp < PUBLIC_ADD_WINDOW_SECONDS]
-    if len(attempts) >= PUBLIC_ADD_LIMIT:
-        raise HTTPException(429, f"ĞœĞ¾Ğ¶Ğ½Ğ¾ Ğ´Ğ¾Ğ±Ğ°Ğ²Ğ¸Ñ‚ÑŒ Ğ½Ğµ Ğ±Ğ¾Ğ»ĞµĞµ {PUBLIC_ADD_LIMIT} Ğ½Ğ¾Ğ²Ñ‹Ñ… Ñ€ĞµÑÑƒÑ€ÑĞ¾Ğ² Ğ² Ñ‡Ğ°Ñ")
-    attempts.append(now)
-    _public_add_attempts[address] = attempts
-    return False
-
-
-def _limit_device_auth_start(request: Request) -> None:
-    address = request.headers.get("x-real-ip") or (request.client.host if request.client else "unknown")
-    now = time.monotonic()
-    attempts = [stamp for stamp in _device_auth_attempts.get(address, [])
-                if now - stamp < DEVICE_AUTH_START_WINDOW_SECONDS]
-    if len(attempts) >= max(1, DEVICE_AUTH_START_LIMIT):
-        raise HTTPException(429, "Ğ¡Ğ»Ğ¸ÑˆĞºĞ¾Ğ¼ Ğ¼Ğ½Ğ¾Ğ³Ğ¾ Ğ·Ğ°Ğ¿Ñ€Ğ¾ÑĞ¾Ğ² ĞºĞ¾Ğ´Ğ° Ğ¿Ğ¾Ğ´ĞºĞ»ÑÑ‡ĞµĞ½Ğ¸Ñ. ĞŸĞ¾Ğ²Ñ‚Ğ¾Ñ€Ğ¸Ñ‚Ğµ Ğ¿Ğ¾Ğ·Ğ¶Ğµ.")
-    attempts.append(now)
-    _device_auth_attempts[address] = attempts
-
-
-async def check_resource(resource_id: int):
-    with db() as conn:
-        resource = conn.execute("SELECT * FROM resources WHERE id=?", (resource_id,)).fetchone()
-    if not resource:
-        raise HTTPException(404, "Resource not found")
-    payload = await perform_check(resource)
-    write_check(resource_id, payload)
-    return payload
-
-
-async def run_scheduled(row) -> None:
-    try:
-        payload = await perform_check(row)
-        notices = write_check(row["id"], payload)
-    except Exception as exc:
-        notices = write_check(row["id"], {
-            "status":"UNKNOWN_ERROR","response_time_ms":0,"dns_ms":None,"tcp_ms":None,"tls_ms":None,
-            "http_ms":None,"http_status":None,"resolved_ip":None,"tls_days_left":None,"final_url":row["target"],
-            "location":None,"message":str(exc),
-        })
-    opened = next((notice for notice in notices if notice["event"] == "incident_opened"), None)
-    if not opened:
-        return
-    if GLOBALPING_ENABLED:
-        priority = DiagnosticPriority.NEW_DOWN if opened["kind"] == "DOWN" else DiagnosticPriority.DEGRADED
-        await request_external_diagnostic(row["id"], priority)
+      YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×5N‹Z–‹­¦ëeŠw¬Ô€É•ÑÕÉ¸QÉÕ”(€€€…‘‘É•ÍÌ€ôÉ•ÅÕ•ÍĞ¹¡•…‘•ÉÌ¹•Ğ ‰àµÉ•…°µ¥Àˆ¤½È€¡É•ÅÕ•ÍĞ¹±¥•¹Ğ¹¡½ÍĞ¥˜É•ÅÕ•ÍĞ¹±¥•¹Ğ•±Í”€‰Õ¹­¹½İ¸ˆ¤(€€€¹½Ü€ôÑ¥µ”¹µ½¹½Ñ½¹¥Œ ¤(€€€…ÑÑ•µÁÑÌ€ômÍÑ…µÀ™½ÈÍÑ…µÀ¥¸}ÁÕ‰±¥}…‘‘}…ÑÑ•µÁÑÌ¹•Ğ¡…‘‘É•ÍÌ°mt¤¥˜¹½Ü€´ÍÑ…µÀ€ğAU	1%}}]%9=]}M=9Mt(€€€¥˜±•¸¡…ÑÑ•µÁÑÌ¤€øôAU	1%}}1%5%Pè(€€€€€€€É…¥Í”!QQAá•ÁÑ¥½¸ ĞÈä°˜‹BsBûBÛB÷BøƒBÓBûBÇBÃBËBãFF0ƒB÷BÔƒBÇBûBïB×BÔíAU	1%}}1%5%QôƒB÷BûBËF/FƒFB×FFFFBûBÈƒBÈƒFBÃFˆ¤(€€€…ÑÑ•µÁÑÌ¹…ÁÁ•¹¡¹½Ü¤(€€€}ÁÕ‰±¥}…‘‘}…ÑÑ•µÁÑÍm…‘‘É•ÍÍt€ô…ÑÑ•µÁÑÌ(€€€É•ÑÕÉ¸…±Í”(()‘•˜}±¥µ¥Ñ}‘•Ù¥•}…ÕÑ¡}ÍÑ…ÉĞ¡É•ÅÕ•ÍĞèI•ÅÕ•ÍĞ¤€´ø9½¹”è(€€€…‘‘É•ÍÌ€ôÉ•ÅÕ•ÍĞ¹¡•…‘•ÉÌ¹•Ğ ‰àµÉ•…°µ¥Àˆ¤½È€¡É•ÅÕ•ÍĞ¹±¥•¹Ğ¹¡½ÍĞ¥˜É•ÅÕ•ÍĞ¹±¥•¹Ğ•±Í”€‰Õ¹­¹½İ¸ˆ¤(€€€¹½Ü€ôÑ¥µ”¹µ½¹½Ñ½¹¥Œ ¤(€€€…ÑÑ•µÁÑÌ€ômÍÑ…µÀ™½ÈÍÑ…µÀ¥¸}‘•Ù¥•}…ÕÑ¡}…ÑÑ•µÁÑÌ¹•Ğ¡…‘‘É•ÍÌ°mt¤(€€€€€€€€€€€€€€€¥˜¹½Ü€´ÍÑ…µÀ€ğY%}UQ!}MQIQ}]%9=]}M=9Mt(€€€¥˜±•¸¡…ÑÑ•µÁÑÌ¤€øôµ…à Ä°Y%}UQ!}MQIQ}1%5%P¤è(€€€€€€€É…¥Í”!QQAá•ÁÑ¥½¸ ĞÈä°€‹B‡BïBãF#BëBûBğƒBóB÷BûBÏBøƒBßBÃBÿFBûFBûBÈƒBëBûBÓBÀƒBÿBûBÓBëBïF;FB×B÷BãF<¸ƒBBûBËFBûFBãFBÔƒBÿBûBßBÛBÔ¸ˆ¤(€€€…ÑÑ•µÁÑÌ¹…ÁÁ•¹¡¹½Ü¤(€€€}‘•Ù¥•}…ÕÑ¡}…ÑÑ•µÁÑÍm…‘‘É•ÍÍt€ô…ÑÑ•µÁÑÌ(()…Íå¹Œ‘•˜¡•­}É•Í½ÕÉ”¡É•Í½ÕÉ•}¥è¥¹Ğ¤è(€€€İ¥Ñ ‘ˆ ¤…Ì½¹¸è(€€€€€€€É•Í½ÕÉ”€ô½¹¸¹•á•ÕÑ” ‰M1P€¨I=4É•Í½ÕÉ•Ì]!I¥ôüˆ°€¡É•Í½ÕÉ•}¥°¤¤¹™•Ñ¡½¹” ¤(€€€¥˜¹½ĞÉ•Í½ÕÉ”è(€€€€€€€É…¥Í”!QQAá•ÁÑ¥½¸ ĞÀĞ°€‰I•Í½ÕÉ”¹½Ğ™½Õ¹ˆ¤(€€€Á…å±½…€ô…İ…¥ĞÁ•É™½Éµ}¡•¬¡É•Í½ÕÉ”¤(€€€İÉ¥Ñ•}¡•¬¡É•Í½ÕÉ•}¥°Á…å±½…¤(€€€É•ÑÕÉ¸Á…å±½…(()…Íå¹Œ‘•˜ÉÕ¹}Í¡•‘Õ±•¡É½Ü¤€´ø9½¹”è(€€€ÑÉäè(€€€€€€€Á…å±½…€ô…İ…¥ĞÁ•É™½Éµ}¡•¬¡É½Ü¤(€€€€€€€¹½Ñ¥•Ì€ôİÉ¥Ñ•}¡•¬¡É½İl‰¥‰t°Á…å±½…¤(€€€•á•ÁĞá•ÁÑ¥½¸…Ì•áŒè(€€€€€€€¹½Ñ¥•Ì€ôİÉ¥Ñ•}¡•¬¡É½İl‰¥‰t°ì(€€€€€€€€€€€€‰ÍÑ…ÑÕÌˆè‰U9-9=]9}II=Hˆ°‰É•ÍÁ½¹Í•}Ñ¥µ•}µÌˆèÀ°‰‘¹Í}µÌˆé9½¹”°‰ÑÁ}µÌˆé9½¹”°‰Ñ±Í}µÌˆé9½¹”°(€€€€€€€€€€€€‰¡ÑÑÁ}µÌˆé9½¹”°‰¡ÑÑÁ}ÍÑ…ÑÕÌˆé9½¹”°‰É•Í½±Ù•‘}¥Àˆé9½¹”°‰Ñ±Í}‘…åÍ}±•™Ğˆé9½¹”°‰™¥¹…±}ÕÉ°ˆéÉ½İl‰Ñ…É•Ğ‰t°(€€€€€€€€€€€€‰±½…Ñ¥½¸ˆé9½¹”°‰µ•ÍÍ…”ˆéÍÑÈ¡•áŒ¤°(€€€€€€€ô¤(€€€½Á•¹•€ô¹•áĞ ¡¹½Ñ¥”™½È¹½Ñ¥”¥¸¹½Ñ¥•Ì¥˜¹½Ñ¥•l‰•Ù•¹Ğ‰t€ôô€‰¥¹¥‘•¹Ñ}½Á•¹•ˆ¤°9½¹”¤(€€€¥˜¹½Ğ½Á•¹•è(€€€€€€€É•ÑÕÉ¸(€€€¥˜1=	1A%9}9	1è(€€€€€€€ÁÉ¥½É¥Ñä€ô¥…¹½ÍÑ¥AÉ¥½É¥Ñä¹9]}=]8¥˜½Á•¹•‘l‰­¥¹‰t€ôô€‰=]8ˆ•±Í”¥…¹½ÍÑ¥AÉ¥½É¥Ñä¹I(€€€€€€€…İ…¥ĞÉ•ÅÕ•ÍÑ}—[h‘éì¶»§q«^tternal_diagnostic(row["id"], priority)
     await refresh_external_intelligence(row["id"])
 
 
@@ -186,13 +95,10 @@ async def run_russia_check(row) -> None:
             independent_failures = int(summary.get("failed") or 0) - int(summary.get("internal_failures") or 0)
             valid = int(summary.get("valid") or 0)
             global_is_fresh = bool(global_check and now - int(global_check["checked_at"]) <= max(180, 3 * DEFAULT_INTERVAL))
-            if global_is_fresh and is_reachable(global_check["status"]) and valid >= 2 and independent_failures >= 2:
-                status = "HTTP_ERROR"
-        write_check(int(row["id"]), {
-            "status": status, "response_time_ms": int(summary.get("median_latency_ms") or 0),
-            "dns_ms": None, "tcp_ms": None, "tls_ms": None, "http_ms": None, "http_status": None,
+            if globalYªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×5N‹Z–‹­¦ëeŠw¬Õ}¥Í}™É•Í …¹¥Í}É•…¡…‰±”¡±½‰…±}¡•­l‰ÍÑ…ÑÕÌ‰t¤…¹Ù…±¥€øô€È…¹¥¹‘•Á•¹‘•¹Ñ}™…¥±ÕÉ•Ì€øô€Èè(€€€€€€€€€€€€€€€ÍÑ…ÑÕÌ€ô€‰!QQA}II=Hˆ(€€€€€€€¥˜É•ÍÕ±Ğ¥Ì9½¹”è(€€€€€€€€€€€ÁÉ½‰•}µ•ÍÍ…”€ô€‹BFBûBËB×FBëBÀƒBƒBè±½‰…±Á¥¹œƒB÷BÔƒBËB×FB÷FBìƒFB×BßFBïF3FBÃFƒBãBßBóB×FB×B÷BãF<¸ˆ(€€€€€€€•±¥˜É•ÍÕ±Ğ¹ÍÑ…ÑÕÌ€„ô€‰™¥¹¥Í¡•ˆè(€€€€€€€€€€€ÁÉ½Ù¥‘•É}•ÉÉ½È€ôÉ•ÍÕ±Ğ¹É…Ü¹•Ğ ‰•ÉÉ½Èˆ¤¥˜¥Í¥¹ÍÑ…¹”¡É•ÍÕ±Ğ¹É…Ü°‘¥Ğ¤•±Í”9½¹”(€€€€€€€€€€€ÁÉ½‰•}µ•ÍÍ…”€ô€‹BFBûBËB×FBëBÀƒBƒBè±½‰…±Á¥¹œƒBßBÃBËB×FF#BãBìƒBãBßBóB×FB×B÷BãBÔƒFBøƒFFBÃFFFBûBğ€ˆ€¬É•ÍÕ±Ğ¹ÍÑ…ÑÕÌ(€€€€€€€€€€€¥˜ÁÉ½Ù¥‘•É}•ÉÉ½Èè(€€€€€€€€€€€€€€€ÁÉ½‰•}µ•ÍÍ…”€¬ô€ˆƒ
+Ü€ˆ€¬ÍÑÈ¡ÁÉ½Ù¥‘•É}•ÉÉ½È¥lèÄàÁt(€€€€€€€•±¥˜±…ÍÍ¥™¥…Ñ¥½¸€ôô€‰=,ˆè(€€€€€€€€€€€ÁÉ½‰•}µ•ÍÍ…”€ô˜‹BFBûBËB×FBëBÀƒBƒBèƒBûFBËB×FF,ƒBÿBûBïFFB×B÷F,ƒFíÍÕµµ…Éä¹•Ğ É•…¡…‰±”œ°€À¥ôƒBãBÜíÍÕµµ…Éä¹•Ğ Ñ½Ñ…°œ°€À¥ôƒFBûFB×Bè±½‰…±Á¥¹œ¸ˆ(€€€€€€€•±¥˜±…ÍÍ¥™¥…Ñ¥½¸€ôô€‰9M}%1UIˆè(€€€€€€€€€€€ÁÉ½‰•}µ•ÍÍ…”€ô˜‹BFBûBËB×FBëBÀƒBƒBè9LƒB÷BÔƒFBÃBßFB×F#BãBìƒBÃBÓFB×FƒB÷BÀíÍÕµµ…Éä¹•Ğ É•Í½±Ù•É}™…¥±ÕÉ•Ìœ°€À¥ôƒFBûFBëBÃFƒBãBÜíÍÕµµ…Éä¹•Ğ Ù…±¥œ°€À¥ô¸ˆ(€€€€€€€•±¥˜±…ÍÍ¥™¥…Ñ¥½¸€ôô€‰U9-9=]8ˆè(€€€€€€€€€€€Ù…±¥€ô¥¹Ğ¡ÍÕµµ…Éä¹•Ğ ‰Ù…±¥ˆ¤½È€À¤(€€€€€€€€€€€¥¹Ñ•É¹…°€ô¥¹Ğ¡ÍÕµµ…Éä¹•Ğ ‰¥¹Ñ•É¹…±}™…¥±ÕÉ•Ìˆ¤½È€À¤(€€€€€€€€€€€¥˜Ù…±¥€ôô€À½È¥¹Ñ•É¹…°è(€€€€€€€€€€€€€€€ÁÉ½‰•}µ•ÍÍ…”€ô˜‹BFBûBËB×FBëBÀƒBƒBè±½‰…±Á¥¹œƒB÷BÔƒBÿBûBïFFBãBìƒBÿFBãBÏBûBÓB÷F/BäƒBûFBËB×F€¡í¥¹Ñ•É¹…±ôƒBËB÷FFFB×B÷B÷BãFƒFBÇBûB×BÈƒFBûFB×BèƒBãBÜíÍÕµµ…Éä¹•Ğ Ñ½Ñ…°œ°€À¥ô¤¸ƒBSBûFFFBÿB÷BûFFF0ƒFB×FFFFBÀƒF7FBãBğƒBãBßBóB×FB×B÷BãB×BğƒB÷BÔƒBÿBûBÓFBËB×FBÛBÓB×B÷BÀ¸ˆ(€€€€€€€€€€€•±Í”è(€€€€€€€€€€€€€€€ÁÉ½‰•}µ•ÍÍ…”€ô˜‹BFBûBËB×FBëBÀƒBƒBèƒB÷B×BûBÓB÷BûBßB÷BÃFB÷F/BäƒFB×BßFBïF3FBÃFƒŠPƒBûFBËB×FBãBïBàíÍÕµµ…Éä¹•Ğ É•…¡…‰±”œ°€À¥ôƒBãBÜíÙ…±¥‘ôƒFBûFB×BèìƒBûF#BãBÇBëBàƒB÷BÀíÍÕµµ…Éä¹•Ğ ™…¥±•œ°€À¥ô¸ˆ(€€€€€€€•±Í”è(€€€€€€€€€€€ÁÉ½‰•}µ•ÍÍ…”€ô˜‹BFBûBËB×FBëBÀƒBƒBèí±…ÍÍ¥™¥…Ñ¥½¹ôìƒFFBÿB×F#B÷F/FƒBûFBËB×FBûBÈíÍÕµµ…Éä¹•Ğ É•…¡…‰±”œ°€À¥ôƒBãBÜíÍÕµµ…Éä¹•Ğ Ù…±¥œ°€À¥ô°ƒBûF#BãBÇBûBèíÍÕµµ…Éä¹•Ğ ™…¥±•œ°€À¥ô¸ˆ(€€€€€€€İÉ¥Ñ•}¡•¬¡¥¹Ğ¡É½İl‰¥‰t¤°ì(€€€€€€€€€€€€‰ÍÑ…ÑÕÌˆèÍÑ…ÑÕÌ°€‰É•ÍÁ½¹Í•}Ñ¥µ•}µÌˆè¥¹Ğ¡ÍÕµµ…Éä¹•Ğ ‰µ•‘¥…¹}±…Ñ•¹å}µÌˆ¤½È€À¤°(€€€€€€€€€€€€‰‘¹Í}µÌˆè9½¹”°€‰ÑÁ}µÌˆè9½¹”°€‰Ñ±Í}µÌˆè9½¹—[h‘éì¶»§q«^t "http_ms": None, "http_status": None,
             "resolved_ip": None, "tls_days_left": None, "final_url": row["target"], "location": "RU",
-            "message": "Ğ Ğ¤: Ğ¿ÑƒĞ±Ğ»Ğ¸Ñ‡Ğ½Ñ‹Ğµ Ñ‚Ğ¾Ñ‡ĞºĞ¸ Globalping Â· " + (classification or (result.status if result else "Ğ½ĞµÑ‚ Ñ€ĞµĞ·ÑƒĞ»ÑŒÑ‚Ğ°Ñ‚Ğ°")),
+            "message": probe_message,
         }, probe_key=RUSSIA_PROBE_KEY, probe_scope="RUSSIA")
     except Exception as exc:
         write_check(int(row["id"]), {
@@ -231,44 +137,7 @@ def _store_evidence(resource_id: int | None, provider: str, scope_key: str, evid
 async def refresh_external_intelligence(resource_id: int, force: bool = False) -> dict:
     with db() as conn:
         resource = conn.execute("SELECT id,target FROM resources WHERE id=?", (resource_id,)).fetchone()
-    if not resource:
-        raise HTTPException(404, "Resource not found")
-    domain = (urlparse(resource["target"]).hostname or "").lower()
-    now = int(time.time())
-    result = {}
-    if OONI_ENABLED and domain:
-        with db() as conn:
-            cached = conn.execute("""SELECT status,classification,confidence,summary_json,fetched_at,expires_at
-              FROM external_evidence WHERE provider='ooni' AND scope_key=?
-              ORDER BY fetched_at DESC,id DESC LIMIT 1""", (domain,)).fetchone()
-        if cached and int(cached["expires_at"]) > now and not force:
-            result["ooni"] = {**dict(cached), "summary": json.loads(cached["summary_json"] or "{}"), "cached": True}
-        else:
-            try:
-                evidence = await _ooni.fetch(domain)
-                _store_evidence(resource_id, "ooni", domain, evidence, now)
-                result["ooni"] = {**evidence.summary, "status": evidence.status,
-                                  "classification": evidence.classification, "confidence": evidence.confidence}
-            except Exception as exc:
-                result["ooni"] = {"status": "ERROR", "classification": "UNKNOWN", "error": str(exc)[:300]}
-    if IODA_ENABLED:
-        scope_key = f"country:{IODA_COUNTRY}"
-        with db() as conn:
-            cached = conn.execute("""SELECT status,classification,confidence,summary_json,fetched_at,expires_at
-              FROM external_evidence WHERE provider='ioda' AND scope_key=?
-              ORDER BY fetched_at DESC,id DESC LIMIT 1""", (scope_key,)).fetchone()
-        if cached and int(cached["expires_at"]) > now and not force:
-            result["ioda"] = {**dict(cached), "summary": json.loads(cached["summary_json"] or "{}"), "cached": True}
-        else:
-            try:
-                evidence = await _ioda.fetch()
-                _store_evidence(None, "ioda", scope_key, evidence, now)
-                result["ioda"] = {**evidence.summary, "status": evidence.status,
-                                  "classification": evidence.classification, "confidence": evidence.confidence}
-            except Exception as exc:
-                result["ioda"] = {"status": "ERROR", "classification": "UNKNOWN", "error": str(exc)[:300]}
-    try:
-        with db() as conn:
+    if not resouYªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×5N‹Z–‹­¦ëeŠw¬ÕÉ”è(€€€€€€€É…¥Í”!QQAá•ÁÑ¥½¸ ĞÀĞ°€‰I•Í½ÕÉ”¹½Ğ™½Õ¹ˆ¤(€€€‘½µ…¥¸€ô€¡ÕÉ±Á…ÉÍ”¡É•Í½ÕÉ•l‰Ñ…É•Ğ‰t¤¹¡½ÍÑ¹…µ”½È€ˆˆ¤¹±½İ•È ¤(€€€¹½Ü€ô¥¹Ğ¡Ñ¥µ”¹Ñ¥µ” ¤¤(€€€É•ÍÕ±Ğ€ôíô(€€€¥˜==9%}9	1…¹‘½µ…¥¸è(€€€€€€€İ¥Ñ ‘ˆ ¤…Ì½¹¸è(€€€€€€€€€€€…¡•€ô½¹¸¹•á•ÕÑ” ˆˆ‰M1PÍÑ…ÑÕÌ±±…ÍÍ¥™¥…Ñ¥½¸±½¹™¥‘•¹”±ÍÕµµ…Éå}©Í½¸±™•Ñ¡•‘}…Ğ±•áÁ¥É•Í}…Ğ(€€€€€€€€€€€€€I=4•áÑ•É¹…±}•Ù¥‘•¹”]!IÁÉ½Ù¥‘•Èô½½¹¤œ9Í½Á•}­•äôü(€€€€€€€€€€€€€=IH	d™•Ñ¡•‘}…ĞM±¥M1%5%P€Äˆˆˆ°€¡‘½µ…¥¸°¤¤¹™•Ñ¡½¹” ¤(€€€€€€€¥˜…¡•…¹¥¹Ğ¡…¡•‘l‰•áÁ¥É•Í}…Ğ‰t¤€ø¹½Ü…¹¹½Ğ™½É”è(€€€€€€€€€€€É•ÍÕ±Ñl‰½½¹¤‰t€ôì¨©‘¥Ğ¡…¡•¤°€‰ÍÕµµ…Éäˆè©Í½¸¹±½…‘Ì¡…¡•‘l‰ÍÕµµ…Éå}©Í½¸‰t½È€‰íôˆ¤°€‰…¡•ˆèQÉÕ•ô(€€€€€€€•±Í”è(€€€€€€€€€€€ÑÉäè(€€€€€€€€€€€€€€€•Ù¥‘•¹”€ô…İ…¥Ğ}½½¹¤¹™•Ñ ¡‘½µ…¥¸¤(€€€€€€€€€€€€€€€}ÍÑ½É•}•Ù¥‘•¹”¡É•Í½ÕÉ•}¥°€‰½½¹¤ˆ°‘½µ…¥¸°•Ù¥‘•¹”°¹½Ü¤(€€€€€€€€€€€€€€€É•ÍÕ±Ñl‰½½¹¤‰t€ôì¨©•Ù¥‘•¹”¹ÍÕµµ…Éä°€‰ÍÑ…ÑÕÌˆè•Ù¥‘•¹”¹ÍÑ…ÑÕÌ°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€‰±…ÍÍ¥™¥…Ñ¥½¸ˆè•Ù¥‘•¹”¹±…ÍÍ¥™¥…Ñ¥½¸°€‰½¹™¥‘•¹”ˆè•Ù¥‘•¹”¹½¹™¥‘•¹•ô(€€€€€€€€€€€•á•ÁĞá•ÁÑ¥½¸…Ì•áŒè(€€€€€€€€€€€€€€€É•ÍÕ±Ñl‰½½¹¤‰t€ôì‰ÍÑ…ÑÕÌˆè€‰II=Hˆ°€‰±…ÍÍ¥™¥…Ñ¥½¸ˆè€‰U9-9=]8ˆ°€‰•ÉÉ½ÈˆèÍÑÈ¡•áŒ¥lèÌÀÁuô(€€€¥˜%=}9	1è(€€€€€€€Í½Á•}­•ä€ô˜‰½Õ¹ÑÉäéí%=}=U9QIeôˆ(€€€€€€€İ¥Ñ ‘ˆ ¤…Ì½¹¸è(€€€€€€€€€€€…¡•€ô½¹¸¹•á•ÕÑ” ˆˆ‰M1PÍÑ…ÑÕÌ±±…ÍÍ¥™¥…Ñ¥½¸±½¹™¥‘•¹”±ÍÕµµ…Éå}©Í½¸±™•Ñ¡•‘}…Ğ±•áÁ¥É•Í}…Ğ(€€€€€€€€€€€€€I=4•áÑ•É¹…±}•Ù¥‘•¹”]!IÁÉ½Ù¥‘•Èô¥½‘„œ9Í½Á•}­•äôü(€€€€€€€€€€€€€=IH	d™•Ñ¡•‘}…ĞM±¥M1%5%P€Äˆˆˆ°€¡Í½Á•}­•ä°¤¤¹™•Ñ¡½¹” ¤(€€€€€€€¥˜…¡•…¹¥¹Ğ¡…¡•‘l‰•áÁ¥É•Í}…Ğ‰t¤€ø¹½Ü…¹¹½Ğ™½É”è(€€€€€€€€€€€É•ÍÕ±Ñl‰¥½‘„‰t€ôì¨©‘¥Ğ¡…¡•¤°€‰ÍÕµµ…Éäˆè©Í½¸¹±½…‘Ì¡…¡•‘l‰ÍÕµµ…Éå}©Í½¸‰t½È€‰íôˆ¤°€‰…¡•ˆèQÉÕ•ô(€€€€€€€•±Í”è(€€€€€€€€€€€ÑÉäè(€€€€€€€€€€€€€€€•Ù¥‘•¹”€ô…İ…¥Ğ}¥½‘„¹™•Ñ  ¤(€€€€€€€€€€€€€€€}ÍÑ½É•}•Ù¥‘•¹”¡9½¹”°€‰¥½‘„ˆ°Í½Á•}­•ä°•Ù¥‘•¹”°¹½Ü¤(€€€€€€€€€€€€€€€É•ÍÕ±Ñl‰¥½‘„‰t€ôì¨©•Ù¥‘•¹”¹ÍÕµµ…Éä°€‰ÍÑ…ÑÕÌˆè•Ù¥‘•¹”¹ÍÑ…ÑÕÌ°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€‰±…ÍÍ¥™¥…Ñ¥½¸ˆè•Ù¥‘•¹”¹±…ÍÍ¥™¥…Ñ¥½¸°€‰½¹™¥‘•¹”ˆè•Ù¥‘•¹”¹½¹™¥‘•¹•ô(€€€€€€€€€€€•á•ÁĞá•ÁÑ¥½¸…Ì•áŒè(€€€€€€€€€€€€€€€É•ÍÕ±Ñl‰¥½‘„‰t€ôì‰ÍÑ…ÑÕÌˆè€‰II=Hˆ°€‰±…ÍÍ¥™¥…Ñ¥½¸ˆè€‰U9-9=]8ˆ°€‰•ÉÉ½ÈˆèÍÑÈ¡•áŒ¥lèÌÀÁuô(€€€ÑÉäè(€€€€€€€İ¥Ñ ‘ˆ ¤…Ì¿[h‘éì¶»§q«^vn:
             cached = conn.execute("""SELECT status,classification,confidence,summary_json,fetched_at,expires_at
               FROM external_evidence WHERE provider='statuspage' AND scope_key=?
               ORDER BY fetched_at DESC,id DESC LIMIT 1""", (domain,)).fetchone()
@@ -305,65 +174,7 @@ async def poll_external_diagnostics_once() -> int:
                   WHERE id=?""", (
                     result.status, result.classification, result.confidence,
                     json.dumps(result.summary, ensure_ascii=False, separators=(",", ":")),
-                    attempts, None if terminal else now + max(3, DIAGNOSTIC_POLL_SECONDS),
-                    now if terminal else None, now, job["id"],
-                ))
-            completed += int(terminal)
-        except Exception as exc:
-            terminal = attempts >= max(1, DIAGNOSTIC_MAX_POLL_ATTEMPTS)
-            with db() as conn:
-                conn.execute("""UPDATE diagnostic_jobs SET status=?,poll_attempts=?,next_poll_at=?,updated_at=?,error=?
-                  WHERE id=?""", (
-                    "failed" if terminal else "in-progress", attempts,
-                    None if terminal else now + max(3, DIAGNOSTIC_POLL_SECONDS), now, str(exc)[:500], job["id"],
-                ))
-    return completed
-
-
-async def diagnostic_poller() -> None:
-    while True:
-        await poll_external_diagnostics_once()
-        await asyncio.sleep(max(3, DIAGNOSTIC_POLL_SECONDS))
-
-
-async def scheduler() -> None:
-    while True:
-        now = int(time.time())
-        with db() as conn:
-            due = conn.execute(
-                "SELECT * FROM resources WHERE enabled=1 AND (? - last_checked_at)>=interval_seconds ORDER BY last_checked_at ASC LIMIT 25",
-                (now,),
-            ).fetchall()
-        if due:
-            await asyncio.gather(*(run_scheduled(row) for row in due))
-        await asyncio.sleep(5)
-
-
-@asynccontextmanager
-async def lifespan(_app: FastAPI):
-    if AUTH_REQUIRED and not _owner_secret():
-        raise RuntimeError("Owner authentication secret is required")
-    init_db()
-    seed_defaults()
-    task = asyncio.create_task(scheduler()) if SCHEDULER_ENABLED else None
-    diagnostic_task = asyncio.create_task(diagnostic_poller()) if SCHEDULER_ENABLED and GLOBALPING_ENABLED else None
-    russia_task = asyncio.create_task(russia_scheduler()) if SCHEDULER_ENABLED and GLOBALPING_ENABLED else None
-    yield
-    for active_task in (task, diagnostic_task, russia_task):
-        if active_task:
-            active_task.cancel()
-            try:
-                await active_task
-            except asyncio.CancelledError:
-                pass
-
-
-app = FastAPI(title="NetWeather API", version=APP_VERSION, lifespan=lifespan)
-
-
-@app.get("/api/health")
-def health():
-    return {"status":"ok","version":APP_VERSION,"time":int(time.time()),"uptime_seconds":int(time.time())-STARTED_AT}
+                    attemptsYªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×5N‹Z–‹­¦ëeŠw¬Ô°9½¹”¥˜Ñ•Éµ¥¹…°•±Í”¹½Ü€¬µ…à Ì°%9=MQ%}A=11}M=9L¤°(€€€€€€€€€€€€€€€€€€€¹½Ü¥˜Ñ•Éµ¥¹…°•±Í”9½¹”°¹½Ü°©½‰l‰¥‰t°(€€€€€€€€€€€€€€€€¤¤(€€€€€€€€€€€½µÁ±•Ñ•€¬ô¥¹Ğ¡Ñ•Éµ¥¹…°¤(€€€€€€€•á•ÁĞá•ÁÑ¥½¸…Ì•áŒè(€€€€€€€€€€€Ñ•Éµ¥¹…°€ô…ÑÑ•µÁÑÌ€øôµ…à Ä°%9=MQ%}5a}A=11}QQ5AQL¤(€€€€€€€€€€€İ¥Ñ ‘ˆ ¤…Ì½¹¸è(€€€€€€€€€€€€€€€½¹¸¹•á•ÕÑ” ˆˆ‰UAQ‘¥…¹½ÍÑ¥}©½‰ÌMPÍÑ…ÑÕÌôü±Á½±±}…ÑÑ•µÁÑÌôü±¹•áÑ}Á½±±}…Ğôü±ÕÁ‘…Ñ•‘}…Ğôü±•ÉÉ½Èôü(€€€€€€€€€€€€€€€€€]!I¥ôüˆˆˆ°€ (€€€€€€€€€€€€€€€€€€€€‰™…¥±•ˆ¥˜Ñ•Éµ¥¹…°•±Í”€‰¥¸µÁÉ½É•ÍÌˆ°…ÑÑ•µÁÑÌ°(€€€€€€€€€€€€€€€€€€€9½¹”¥˜Ñ•Éµ¥¹…°•±Í”¹½Ü€¬µ…à Ì°%9=MQ%}A=11}M=9L¤°¹½Ü°ÍÑÈ¡•áŒ¥lèÔÀÁt°©½‰l‰¥‰t°(€€€€€€€€€€€€€€€€¤¤(€€€É•ÑÕÉ¸½µÁ±•Ñ•(()…Íå¹Œ‘•˜‘¥…¹½ÍÑ¥}Á½±±•È ¤€´ø9½¹”è(€€€İ¡¥±”QÉÕ”è(€€€€€€€…İ…¥ĞÁ½±±}•áÑ•É¹…±}‘¥…¹½ÍÑ¥Í}½¹” ¤(€€€€€€€…İ…¥Ğ…Íå¹¥¼¹Í±••À¡µ…à Ì°%9=MQ%}A=11}M=9L¤¤(()…Íå¹Œ‘•˜Í¡•‘Õ±•È ¤€´ø9½¹”è(€€€İ¡¥±”QÉÕ”è(€€€€€€€¹½Ü€ô¥¹Ğ¡Ñ¥µ”¹Ñ¥µ” ¤¤(€€€€€€€İ¥Ñ ‘ˆ ¤…Ì½¹¸è(€€€€€€€€€€€‘Õ”€ô½¹¸¹•á•ÕÑ” (€€€€€€€€€€€€€€€€‰M1P€¨I=4É•Í½ÕÉ•Ì]!I•¹…‰±•ôÄ9€ ü€´±…ÍÑ}¡•­•‘}…Ğ¤øõ¥¹Ñ•ÉÙ…±}Í•½¹‘Ì=IH	d±…ÍÑ}¡•­•‘}…ĞM1%5%P€ÈÔˆ°(€€€€€€€€€€€€€€€€¡¹½Ü°¤°(€€€€€€€€€€€€¤¹™•Ñ¡…±° ¤(€€€€€€€¥˜‘Õ”è(€€€€€€€€€€€…İ…¥Ğ…Íå¹¥¼¹…Ñ¡•È ¨¡ÉÕ¹}Í¡•‘Õ±•¡É½Ü¤™½ÈÉ½Ü¥¸‘Õ”¤¤(€€€€€€€…İ…¥Ğ…Íå¹¥¼¹Í±••À Ô¤(()…Íå¹½¹Ñ•áÑµ…¹…•È)…Íå¹Œ‘•˜±¥™•ÍÁ…¸¡}…ÁÀè…ÍÑA$¤è(€€€¥˜UQ!}IEU%I…¹¹½Ğ}½İ¹•É}Í•É•Ğ ¤è(€€€€€€€É…¥Í”IÕ¹Ñ¥µ•ÉÉ½È ‰=İ¹•È…ÕÑ¡•¹Ñ¥…Ñ¥½¸Í•É•Ğ¥ÌÉ•ÅÕ¥É•ˆ¤(€€€¥¹¥Ñ}‘ˆ ¤(€€€Í••‘}‘•™…Õ±ÑÌ ¤(€€€Ñ…Í¬€ô…Íå¹¥¼¹É•…Ñ•}Ñ…Í¬¡Í¡•‘Õ±•È ¤¤¥˜M!U1I}9	1•±Í”9½¹”(€€€‘¥…¹½ÍÑ¥}Ñ…Í¬€ô…Íå¹¥¼¹É•…Ñ•}Ñ…Í¬¡‘¥…¹½ÍÑ¥}Á½±±•È ¤¤¥˜M!U1I}9	1…¹1=	1A%9}9	1•±Í”9½¹”(€€€ÉÕÍÍ¥…}Ñ…Í¬€ô…Íå¹¥¼¹É•…Ñ•}Ñ…Í¬¡ÉÕÍÍ¥…}Í¡•‘Õ±•È ¤¤¥˜M!U1I}9	1…¹1=	1A%9}9	1•±Í”9½¹”(€€€å¥•±(€€€™½È…Ñ¥Ù•}Ñ…Í¬¥¸€¡Ñ…Í¬°‘¥…¹½ÍÑ¥}Ñ…Í¬°ÉÕÍÍ¥…}Ñ…Í¬¤è(€€€€€€€¥˜…Ñ¥Ù•}Ñ…Í¬è(€€€€€€€€€€€…Ñ¥Ù•}Ñ…Í¬¹…¹•° ¤(€€€€€€€€€€€ÑÉäè(€€€€€€€€€€€€€€€…İ…¥Ğ…Ñ¥Ù•}Ñ…Í¬(€€€€€€€€€€€•á•ÁĞ…Íå¹¥¼¹…¹•±±•‘ÉÉ½Èè(€€€€€€€€€€€€€€€Á…ÍÌ(()…ÁÀ€ô…ÍÑA$¡Ñ¥Ñ±”ô‰9•Ñ]•…Ñ¡•ÈA$ˆ°Ù•ÉÍ¥½¸õAA}YIM%=8°±¥™•ÍÁ…¸õ±¥™•ÍÁ…¸¤(()…ÁÀ¹•Ğ ˆ½…Á¤½¡•…±Ñ ˆ¤)‘•˜¡•…±Ñ  ¤è(€€€É•ÑÕÉ¸ì‰ÍÑ…ÑÕÌˆè‰½¬ˆ°‰Ù•ÉÍ¥½¸ˆéAA}YIM%=8°‰Ñ¥µ”ˆé¥¹Ğ¡Ñ¥µ”»[h‘éì¶»§q«^time()),"uptime_seconds":int(time.time())-STARTED_AT}
 
 
 @app.get("/api/system")
@@ -410,75 +221,7 @@ def session_login(payload: OwnerLogin, response: Response):
         raise HTTPException(503, "Owner authentication is not configured")
     if not hmac.compare_digest(payload.password, secret):
         raise HTTPException(401, "ĞĞµĞ²ĞµÑ€Ğ½Ñ‹Ğ¹ Ğ¿Ğ°Ñ€Ğ¾Ğ»ÑŒ Ğ²Ğ»Ğ°Ğ´ĞµĞ»ÑŒÑ†Ğ°")
-    response.set_cookie(
-        SESSION_COOKIE,
-        _owner_cookie(),
-        max_age=SESSION_MAX_AGE,
-        httponly=True,
-        secure=True,
-        samesite="strict",
-        path="/",
-    )
-    return {"ok":True,"expires_in":SESSION_MAX_AGE}
-
-
-@app.post("/api/session/logout")
-def session_logout(response: Response):
-    response.delete_cookie(SESSION_COOKIE, path="/")
-    return {"ok":True}
-
-
-@app.post("/api/v1/device-auth/start")
-def device_auth_start(payload: DeviceAuthorizationStart, request: Request):
-    if not _owner_secret():
-        raise HTTPException(503, "Device authorization is not configured")
-    _limit_device_auth_start(request)
-    return start_authorization(
-        device_id=payload.device_id, device_name=payload.device_name,
-        app_version=payload.app_version, server_secret=_owner_secret(),
-        ttl_seconds=DEVICE_CODE_TTL_SECONDS, poll_interval_seconds=DEVICE_POLL_INTERVAL_SECONDS,
-    )
-
-
-@app.post("/api/v1/device-auth/poll")
-def device_auth_poll(payload: DeviceAuthorizationPoll):
-    if not _owner_secret():
-        raise HTTPException(503, "Device authorization is not configured")
-    result = poll_authorization(
-        payload.session_id, payload.poll_secret, _owner_secret(), DEVICE_TOKEN_MAX_AGE_SECONDS,
-    )
-    if result["status"] == "invalid":
-        raise HTTPException(404, "Authorization session not found")
-    return result
-
-
-@app.post("/api/device-auth/approve", dependencies=[Depends(require_token)])
-def device_auth_approve(payload: DeviceAuthorizationApprove):
-    approved = approve_authorization(payload.user_code, _owner_secret())
-    if not approved:
-        raise HTTPException(404, "ĞšĞ¾Ğ´ Ğ½Ğµ Ğ½Ğ°Ğ¹Ğ´ĞµĞ½ Ğ¸Ğ»Ğ¸ Ğ¸ÑÑ‚Ñ‘Ğº")
-    return {"ok": True, **approved}
-
-
-@app.get("/api/devices", dependencies=[Depends(require_token)])
-def devices_list():
-    return list_devices()
-
-
-@app.delete("/api/devices/{device_id}", dependencies=[Depends(require_token)])
-def device_revoke(device_id: str):
-    if not revoke_device(device_id):
-        raise HTTPException(404, "Device not found")
-    return {"ok": True}
-
-
-@app.get("/api/dashboard")
-def dashboard():
-    return {
-        "summary": dual_summary(),
-        "legacy_summary": summary(),
-        "resources": resource_matrix(),
-        "incidents": get_incidents(True,20),
+    response.sYªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×5N‹Z–‹­¦ëeŠw¬Õ•Ñ}½½­¥” (€€€€€€€MMM%=9}==-%°(€€€€€€€}½İ¹•É}½½­¥” ¤°(€€€€€€€µ…á}…”õMMM%=9}5a}°(€€€€€€€¡ÑÑÁ½¹±äõQÉÕ”°(€€€€€€€Í•ÕÉ”õQÉÕ”°(€€€€€€€Í…µ•Í¥Ñ”ô‰ÍÑÉ¥Ğˆ°(€€€€€€€Á…Ñ ôˆ¼ˆ°(€€€€¤(€€€É•ÑÕÉ¸ì‰½¬ˆéQÉÕ”°‰•áÁ¥É•Í}¥¸ˆéMMM%=9}5a}ô(()…ÁÀ¹Á½ÍĞ ˆ½…Á¤½Í•ÍÍ¥½¸½±½½ÕĞˆ¤)‘•˜Í•ÍÍ¥½¹}±½½ÕĞ¡É•ÍÁ½¹Í”èI•ÍÁ½¹Í”¤è(€€€É•ÍÁ½¹Í”¹‘•±•Ñ•}½½­¥”¡MMM%=9}==-%°Á…Ñ ôˆ¼ˆ¤(€€€É•ÑÕÉ¸ì‰½¬ˆéQÉÕ•ô(()…ÁÀ¹Á½ÍĞ ˆ½…Á¤½ØÄ½‘•Ù¥”µ…ÕÑ ½ÍÑ…ÉĞˆ¤)‘•˜‘•Ù¥•}…ÕÑ¡}ÍÑ…ÉĞ¡Á…å±½…è•Ù¥•ÕÑ¡½É¥é…Ñ¥½¹MÑ…ÉĞ°É•ÅÕ•ÍĞèI•ÅÕ•ÍĞ¤è(€€€¥˜¹½Ğ}½İ¹•É}Í•É•Ğ ¤è(€€€€€€€É…¥Í”!QQAá•ÁÑ¥½¸ ÔÀÌ°€‰•Ù¥”…ÕÑ¡½É¥é…Ñ¥½¸¥Ì¹½Ğ½¹™¥ÕÉ•ˆ¤(€€€}±¥µ¥Ñ}‘•Ù¥•}…ÕÑ¡}ÍÑ…ÉĞ¡É•ÅÕ•ÍĞ¤(€€€É•ÑÕÉ¸ÍÑ…ÉÑ}…ÕÑ¡½É¥é…Ñ¥½¸ (€€€€€€€‘•Ù¥•}¥õÁ…å±½…¹‘•Ù¥•}¥°‘•Ù¥•}¹…µ”õÁ…å±½…¹‘•Ù¥•}¹…µ”°(€€€€€€€…ÁÁ}Ù•ÉÍ¥½¸õÁ…å±½…¹…ÁÁ}Ù•ÉÍ¥½¸°Í•ÉÙ•É}Í•É•Ğõ}½İ¹•É}Í•É•Ğ ¤°(€€€€€€€ÑÑ±}Í•½¹‘ÌõY%}=}QQ1}M=9L°Á½±±}¥¹Ñ•ÉÙ…±}Í•½¹‘ÌõY%}A=11}%9QIY1}M=9L°(€€€€¤(()…ÁÀ¹Á½ÍĞ ˆ½…Á¤½ØÄ½‘•Ù¥”µ…ÕÑ ½Á½±°ˆ¤)‘•˜‘•Ù¥•}…ÕÑ¡}Á½±°¡Á…å±½…è•Ù¥•ÕÑ¡½É¥é…Ñ¥½¹A½±°¤è(€€€¥˜¹½Ğ}½İ¹•É}Í•É•Ğ ¤è(€€€€€€€É…¥Í”!QQAá•ÁÑ¥½¸ ÔÀÌ°€‰•Ù¥”…ÕÑ¡½É¥é…Ñ¥½¸¥Ì¹½Ğ½¹™¥ÕÉ•ˆ¤(€€€É•ÍÕ±Ğ€ôÁ½±±}…ÕÑ¡½É¥é…Ñ¥½¸ (€€€€€€€Á…å±½…¹Í•ÍÍ¥½¹}¥°Á…å±½…¹Á½±±}Í•É•Ğ°}½İ¹•É}Í•É•Ğ ¤°Y%}Q=-9}5a}}M=9L°(€€€€¤(€€€¥˜É•ÍÕ±Ñl‰ÍÑ…ÑÕÌ‰t€ôô€‰¥¹Ù…±¥ˆè(€€€€€€€É…¥Í”!QQAá•ÁÑ¥½¸ ĞÀĞ°€‰ÕÑ¡½É¥é…Ñ¥½¸Í•ÍÍ¥½¸¹½Ğ™½Õ¹ˆ¤(€€€É•ÑÕÉ¸É•ÍÕ±Ğ(()…ÁÀ¹Á½ÍĞ ˆ½…Á¤½‘•Ù¥”µ…ÕÑ ½…ÁÁÉ½Ù”ˆ°‘•Á•¹‘•¹¥•Ìõm•Á•¹‘Ì¡É•ÅÕ¥É•}Ñ½­•¸¥t¤)‘•˜‘•Ù¥•}…ÕÑ¡}…ÁÁÉ½Ù”¡Á…å±½…è•Ù¥•ÕÑ¡½É¥é…Ñ¥½¹ÁÁÉ½Ù”¤è(€€€…ÁÁÉ½Ù•€ô…ÁÁÉ½Ù•}…ÕÑ¡½É¥é…Ñ¥½¸¡Á…å±½…¹ÕÍ•É}½‘”°}½İ¹•É}Í•É•Ğ ¤¤(€€€¥˜¹½Ğ…ÁÁÉ½Ù•è(€€€€€€€É…¥Í”!QQAá•ÁÑ¥½¸ ĞÀĞ°€‹BkBûBĞƒB÷BÔƒB÷BÃBçBÓB×BôƒBãBïBàƒBãFFFGBèˆ¤(€€€É•ÑÕÉ¸ì‰½¬ˆèQÉÕ”°€¨©…ÁÁÉ½Ù•‘ô(()…ÁÀ¹•Ğ ˆ½…Á¤½‘•Ù¥•Ìˆ°‘•Á•¹‘•¹¥•Ìõm•Á•¹‘Ì¡É•ÅÕ¥É•}Ñ½­•¸¥t¤)‘•˜‘•Ù¥•Í}±¥ÍĞ ¤è(€€€É•ÑÕÉ¸±¥ÍÑ}‘•Ù¥•Ì ¤(()…ÁÀ¹‘•±•Ñ” ˆ½…Á¤½‘•Ù¥•Ì½í‘•Ù¥•}¥‘ôˆ°‘•Á•¹‘•¹¥•Ìõm•Á•¹‘Ì¡É•ÅÕ¥É•}Ñ½­•¸¥t¤)‘•˜‘•Ù¥•}É•Ù½­”¡‘•Ù¥•}¥èÍÑÈ¤è(€€€¥˜¹½ĞÉ•Ù½­•}‘•Ù¥”¡‘•Ù¥•}¥¤è(€€€€€€€É…¥Í”!QQAá•ÁÑ¥½¸ ĞÀĞ°€‰•Ù¥”¹½Ğ™½Õ¹ˆ¤(€€€É•ÑÕÉ¸ì‰½¬ˆèQÉÕ•ô(()…ÁÀ¹•Ğ ˆ½…Á¤½‘…Í¡‰½…Éˆ¤)‘•˜‘…Í¡‰½…É ¤è(€€€É•ÑÕÉ¸ì(€€€€€€€€‰ÍÕµµ…Éäˆè‘Õ…±}ÍÕµµ…Éä ¤°(€€€€€€€€‰±•…å}ÍÕµµ…ÉäˆèÍÕµµ…Éä ¤°(€€€€€€€€‰É•Í½ÕÉ•ÌˆèÉ•Í½ÕÉ•}µ…ÑÉ¥à ¤°(€€ƒ[h‘éì¶»§q«^t    "incidents": get_incidents(True,20),
         "probes": probe_statuses(),
     }
 
@@ -530,54 +273,7 @@ def delete_group(group_key: str):
         cur = conn.execute("DELETE FROM resource_groups WHERE group_key=?", (group_key,))
     if cur.rowcount == 0:
         raise HTTPException(404, "Ğ“Ñ€ÑƒĞ¿Ğ¿Ğ° Ğ½Ğµ Ğ½Ğ°Ğ¹Ğ´ĞµĞ½Ğ°")
-    return {"ok":True,"reassigned_to":"CUSTOM"}
-
-
-@app.get("/api/target-meta")
-async def target_metadata(target:str=Query(min_length=1,max_length=2048)):
-    return await discover_target_metadata(target)
-
-
-def _ensure_resource_group(conn, group_name:str, now:int) -> None:
-    conn.execute("""INSERT INTO resource_groups(group_key,title,color,sort_order,created_at,updated_at)
-      VALUES(?,?,?,?,?,?) ON CONFLICT(group_key) DO NOTHING""",
-      (group_name,KNOWN_GROUPS.get(group_name,group_name),"#8A96A3",100,now,now))
-
-
-def _insert_catalog_resource(conn, item, now:int, *, interval_seconds:int=DEFAULT_INTERVAL,
-                             expected_status_min:int=200, expected_status_max:int=399,
-                             slow_threshold_ms:int=1500, failure_threshold:int=2,
-                             alerts_enabled:bool=True, enabled:bool=True) -> tuple[int,bool]:
-    existing=conn.execute("SELECT id FROM resources WHERE catalog_key=? LIMIT 1",(item.key,)).fetchone()
-    if existing:
-        return int(existing["id"]),False
-    _ensure_resource_group(conn,item.group_key,now)
-    cur=conn.execute("""INSERT INTO resources(
-      name,target,group_name,interval_seconds,enabled,created_at,updated_at,last_checked_at,
-      expected_status_min,expected_status_max,slow_threshold_ms,failure_threshold,alerts_enabled,
-      last_success_at,last_failure_at,catalog_key,allow_http_rejected
-    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-    (item.name,normalize_target(item.target),item.group_key,interval_seconds,int(enabled),now,now,0,
-     expected_status_min,expected_status_max,slow_threshold_ms,failure_threshold,int(alerts_enabled),0,0,item.key,1))
-    return int(cur.lastrowid),True
-
-
-def _target_key(value:str) -> str:
-    from urllib.parse import urlparse
-    target=normalize_target(value)
-    parsed=urlparse(target)
-    host=(parsed.hostname or "").lower().rstrip(".")
-    port=f":{parsed.port}" if parsed.port else ""
-    path=(parsed.path or "/").rstrip("/") or "/"
-    query=f"?{parsed.query}" if parsed.query else ""
-    return f"{parsed.scheme.lower()}://{host}{port}{path}{query}"
-
-
-@app.get("/api/resource-catalog")
-def resource_catalog():
-    with db() as conn:
-        existing={row["catalog_key"] for row in conn.execute(
-            "SELECT catalog_key FROM resources WHERE catalog_key IS NOT NULL AND catalog_key<>''"
+    return {"ok":True,"reassigned_to":"CYªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×5N‹Z–‹­¦ëeŠw¬ÕUMQ=4‰ô(()…ÁÀ¹•Ğ ˆ½…Á¤½Ñ…É•Ğµµ•Ñ„ˆ¤)…Íå¹Œ‘•˜Ñ…É•Ñ}µ•Ñ…‘…Ñ„¡Ñ…É•ĞéÍÑÈõEÕ•Éä¡µ¥¹}±•¹Ñ ôÄ±µ…á}±•¹Ñ ôÈÀĞà¤¤è(€€€É•ÑÕÉ¸…İ…¥Ğ‘¥Í½Ù•É}Ñ…É•Ñ}µ•Ñ…‘…Ñ„¡Ñ…É•Ğ¤(()‘•˜}•¹ÍÕÉ•}É•Í½ÕÉ•}É½ÕÀ¡½¹¸°É½ÕÁ}¹…µ”éÍÑÈ°¹½Üé¥¹Ğ¤€´ø9½¹”è(€€€½¹¸¹•á•ÕÑ” ˆˆ‰%9MIP%9Q<É•Í½ÕÉ•}É½ÕÁÌ¡É½ÕÁ}­•ä±Ñ¥Ñ±”±½±½È±Í½ÉÑ}½É‘•È±É•…Ñ•‘}…Ğ±ÕÁ‘…Ñ•‘}…Ğ¤(€€€€€Y1UL ü°ü°ü°ü°ü°ü¤=8=91%P¡É½ÕÁ}­•ä¤<9=Q!%9ˆˆˆ°(€€€€€€¡É½ÕÁ}¹…µ”±-9=]9}I=UAL¹•Ğ¡É½ÕÁ}¹…µ”±É½ÕÁ}¹…µ”¤°ˆŒáäÙÌˆ°ÄÀÀ±¹½Ü±¹½Ü¤¤(()‘•˜}¥¹Í•ÉÑ}…Ñ…±½}É•Í½ÕÉ”¡½¹¸°¥Ñ•´°¹½Üé¥¹Ğ°€¨°¥¹Ñ•ÉÙ…±}Í•½¹‘Ìé¥¹ĞõU1Q}%9QIY0°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€•áÁ•Ñ•‘}ÍÑ…ÑÕÍ}µ¥¸é¥¹ĞôÈÀÀ°•áÁ•Ñ•‘}ÍÑ…ÑÕÍ}µ…àé¥¹ĞôÌää°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€Í±½İ}Ñ¡É•Í¡½±‘}µÌé¥¹ĞôÄÔÀÀ°™…¥±ÕÉ•}Ñ¡É•Í¡½±é¥¹ĞôÈ°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€…±•ÉÑÍ}•¹…‰±•é‰½½°õ…±Í”°•¹…‰±•é‰½½°õQÉÕ”¤€´øÑÕÁ±•m¥¹Ğ±‰½½±tè(€€€•á¥ÍÑ¥¹œõ½¹¸¹•á•ÕÑ” ‰M1P¥I=4É•Í½ÕÉ•Ì]!I…Ñ…±½}­•äôü1%5%P€Äˆ°¡¥Ñ•´¹­•ä°¤¤¹™•Ñ¡½¹” ¤(€€€¥˜•á¥ÍÑ¥¹œè(€€€€€€€É•ÑÕÉ¸¥¹Ğ¡•á¥ÍÑ¥¹l‰¥‰t¤±…±Í”(€€€}•¹ÍÕÉ•}É•Í½ÕÉ•}É½ÕÀ¡½¹¸±¥Ñ•´¹É½ÕÁ}­•ä±¹½Ü¤(€€€ÕÈõ½¹¸¹•á•ÕÑ” ˆˆ‰%9MIP%9Q<É•Í½ÕÉ•Ì (€€€€€¹…µ”±Ñ…É•Ğ±É½ÕÁ}¹…µ”±¥¹Ñ•ÉÙ…±}Í•½¹‘Ì±•¹…‰±•±É•…Ñ•‘}…Ğ±ÕÁ‘…Ñ•‘}…Ğ±±…ÍÑ}¡•­•‘}…Ğ°(€€€€€•áÁ•Ñ•‘}ÍÑ…ÑÕÍ}µ¥¸±•áÁ•Ñ•‘}ÍÑ…ÑÕÍ}µ…à±Í±½İ}Ñ¡É•Í¡½±‘}µÌ±™…¥±ÕÉ•}Ñ¡É•Í¡½±±…±•ÉÑÍ}•¹…‰±•°(€€€€€±…ÍÑ}ÍÕ•ÍÍ}…Ğ±±…ÍÑ}™…¥±ÕÉ•}…Ğ±…Ñ…±½}­•ä±…±±½İ}¡ÑÑÁ}É•©•Ñ•(€€€€¤Y1UL ü°ü°ü°ü°ü°ü°ü°ü°ü°ü°ü°ü°ü°ü°ü°ü°ü¤ˆˆˆ°(€€€€¡¥Ñ•´¹¹…µ”±¹½Éµ…±¥é•}Ñ…É•Ğ¡¥Ñ•´¹Ñ…É•Ğ¤±¥Ñ•´¹É½ÕÁ}­•ä±¥¹Ñ•ÉÙ…±}Í•½¹‘Ì±¥¹Ğ¡•¹…‰±•¤±¹½Ü±¹½Ü°À°(€€€€•áÁ•Ñ•‘}ÍÑ…ÑÕÍ}µ¥¸±•áÁ•Ñ•‘}ÍÑ…ÑÕÍ}µ…à±Í±½İ}Ñ¡É•Í¡½±‘}µÌ±™…¥±ÕÉ•}Ñ¡É•Í¡½±±¥¹Ğ¡…±•ÉÑÍ}•¹…‰±•¤°À°À±¥Ñ•´¹­•ä°Ä¤¤(€€€É•ÑÕÉ¸¥¹Ğ¡ÕÈ¹±…ÍÑÉ½İ¥¤±QÉÕ”(()‘•˜}Ñ…É•Ñ}­•ä¡Ù…±Õ”éÍÑÈ¤€´øÍÑÈè(€€€™É½´ÕÉ±±¥ˆ¹Á…ÉÍ”¥µÁ½ÉĞÕÉ±Á…ÉÍ”(€€€Ñ…É•Ğõ¹½Éµ…±¥é•}Ñ…É•Ğ¡Ù…±Õ”¤(€€€Á…ÉÍ•õÕÉ±Á…ÉÍ”¡Ñ…É•Ğ¤(€€€¡½ÍĞô¡Á…ÉÍ•¹¡½ÍÑ¹…µ”½È€ˆˆ¤¹±½İ•È ¤¹ÉÍÑÉ¥À ˆ¸ˆ¤(€€€Á½ÉĞõ˜ˆéíÁ…ÉÍ•¹Á½ÉÑôˆ¥˜Á…ÉÍ•¹Á½ÉĞ•±Í”€ˆˆ(€€€Á…Ñ ô¡Á…ÉÍ•¹Á…Ñ ½È€ˆ¼ˆ¤¹ÉÍÑÉ¥À ˆ¼ˆ¤½È€ˆ¼ˆ(€€€ÅÕ•Éäõ˜ˆıíÁ…ÉÍ•¹ÅÕ•Éåôˆ¥˜Á…ÉÍ•¹ÅÕ•Éä•±Í”€ˆˆ(€€€É•ÑÕÉ¸˜‰íÁ…ÉÍ•¹Í¡•µ”¹±½İ•È ¥ôè¼½í¡½ÍÑõíÁ½ÉÑõíÁ…Ñ¡õíÅÕ•Éåôˆ(()…ÁÀ¹•Ğ ˆ½…Á¤½É•Í½ÕÉ”µ…Ñ…±½œˆ¤)‘•˜É•Í½ÕÉ•}…Ñ…±½œ ¤è(€€€İ¥Ñ ‘ˆ ¤…Ì½¹¸è(€€€€€€€•á¥ÍÑ¥¹œõíÉ½İl‰…Ñ…±½}­•ä‰t™½ÈÉ½Ü¥¸½¹¸¹•á•ÕÑ” (€€€€€€€€€€€€‰M1P…Ñ…±¿[h‘éì¶»§q«^w_key FROM resources WHERE catalog_key IS NOT NULL AND catalog_key<>''"
         ).fetchall()}
     return catalog_payload(existing)
 
@@ -631,32 +327,7 @@ def resource_details(resource_id:int):
         for row in conn.execute("""SELECT id,provider,status,classification,confidence,result_summary_json,created_at,completed_at
           FROM diagnostic_jobs WHERE resource_id=? AND COALESCE(completed_at,created_at)>=?
           ORDER BY COALESCE(completed_at,created_at) DESC,id DESC LIMIT 120""", (resource_id, cutoff)):
-            timeline.append({"id":f"diagnostic:{row['id']}","type":"diagnostic","time":row["completed_at"] or row["created_at"],
-              "source":row["provider"],"status":row["status"],"classification":row["classification"],
-              "confidence":row["confidence"],"summary":json.loads(row["result_summary_json"] or "{}")})
-        for row in conn.execute("""SELECT id,provider,status,classification,confidence,summary_json,fetched_at
-          FROM external_evidence WHERE (resource_id=? OR resource_id IS NULL) AND fetched_at>=?
-          ORDER BY fetched_at DESC,id DESC LIMIT 120""", (resource_id, cutoff)):
-            timeline.append({"id":f"evidence:{row['id']}","type":"evidence","time":row["fetched_at"],
-              "source":row["provider"],"status":row["status"],"classification":row["classification"],
-              "confidence":row["confidence"],"summary":json.loads(row["summary_json"] or "{}")})
-        for row in conn.execute("""SELECT id,kind,severity,opened_at,closed_at,message FROM incidents
-          WHERE resource_id=? AND (opened_at>=? OR closed_at>=?) ORDER BY opened_at DESC,id DESC LIMIT 120""",
-          (resource_id, cutoff, cutoff)):
-            timeline.append({"id":f"incident:{row['id']}:opened","type":"incident_opened","time":row["opened_at"],
-              "source":"incident","status":"OPENED","classification":row["kind"],"confidence":None,
-              "summary":{"severity":row["severity"],"message":row["message"]}})
-            if row["closed_at"] and row["closed_at"] >= cutoff:
-                timeline.append({"id":f"incident:{row['id']}:closed","type":"incident_closed","time":row["closed_at"],
-                  "source":"incident","status":"CLOSED","classification":row["kind"],"confidence":None,
-                  "summary":{"severity":row["severity"],"message":row["message"]}})
-        status_rows = conn.execute("""SELECT checked_at,status,probe_scope,message FROM checks
-          WHERE resource_id=? AND checked_at>=? ORDER BY checked_at,id LIMIT 1000""", (resource_id, cutoff)).fetchall()
-        previous = {}
-        for row in status_rows:
-            scope = row["probe_scope"]
-            old = previous.get(scope)
-            if old and old["status"] != row["status"] and is_reachable(old["status"]) != is_reachable(row["status"]):
+            timeline.aYªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×5N‹Z–‹­¦ëeŠw¬ÕÁÁ•¹¡ì‰¥ˆé˜‰‘¥…¹½ÍÑ¥ŒéíÉ½İl¥uôˆ°‰ÑåÁ”ˆè‰‘¥…¹½ÍÑ¥Œˆ°‰Ñ¥µ”ˆéÉ½İl‰½µÁ±•Ñ•‘}…Ğ‰t½ÈÉ½İl‰É•…Ñ•‘}…Ğ‰t°(€€€€€€€€€€€€€€‰Í½ÕÉ”ˆéÉ½İl‰ÁÉ½Ù¥‘•È‰t°‰ÍÑ…ÑÕÌˆéÉ½İl‰ÍÑ…ÑÕÌ‰t°‰±…ÍÍ¥™¥…Ñ¥½¸ˆéÉ½İl‰±…ÍÍ¥™¥…Ñ¥½¸‰t°(€€€€€€€€€€€€€€‰½¹™¥‘•¹”ˆéÉ½İl‰½¹™¥‘•¹”‰t°‰ÍÕµµ…Éäˆé©Í½¸¹±½…‘Ì¡É½İl‰É•ÍÕ±Ñ}ÍÕµµ…Éå}©Í½¸‰t½È€‰íôˆ¥ô¤(€€€€€€€™½ÈÉ½Ü¥¸½¹¸¹•á•ÕÑ” ˆˆ‰M1P¥±ÁÉ½Ù¥‘•È±ÍÑ…ÑÕÌ±±…ÍÍ¥™¥…Ñ¥½¸±½¹™¥‘•¹”±ÍÕµµ…Éå}©Í½¸±™•Ñ¡•‘}…Ğ(€€€€€€€€€I=4•áÑ•É¹…±}•Ù¥‘•¹”]!I€¡É•Í½ÕÉ•}¥ôü=HÉ•Í½ÕÉ•}¥%L9U10¤9™•Ñ¡•‘}…Ğøôü(€€€€€€€€€=IH	d™•Ñ¡•‘}…ĞM±¥M1%5%P€ÄÈÀˆˆˆ°€¡É•Í½ÕÉ•}¥°ÕÑ½™˜¤¤è(€€€€€€€€€€€Ñ¥µ•±¥¹”¹…ÁÁ•¹¡ì‰¥ˆé˜‰•Ù¥‘•¹”éíÉ½İl¥uôˆ°‰ÑåÁ”ˆè‰•Ù¥‘•¹”ˆ°‰Ñ¥µ”ˆéÉ½İl‰™•Ñ¡•‘}…Ğ‰t°(€€€€€€€€€€€€€€‰Í½ÕÉ”ˆéÉ½İl‰ÁÉ½Ù¥‘•È‰t°‰ÍÑ…ÑÕÌˆéÉ½İl‰ÍÑ…ÑÕÌ‰t°‰±…ÍÍ¥™¥…Ñ¥½¸ˆéÉ½İl‰±…ÍÍ¥™¥…Ñ¥½¸‰t°(€€€€€€€€€€€€€€‰½¹™¥‘•¹”ˆéÉ½İl‰½¹™¥‘•¹”‰t°‰ÍÕµµ…Éäˆé©Í½¸¹±½…‘Ì¡É½İl‰ÍÕµµ…Éå}©Í½¸‰t½È€‰íôˆ¥ô¤(€€€€€€€™½ÈÉ½Ü¥¸½¹¸¹•á•ÕÑ” ˆˆ‰M1P¥±­¥¹±Í•Ù•É¥Ñä±½Á•¹•‘}…Ğ±±½Í•‘}…Ğ±µ•ÍÍ…”I=4¥¹¥‘•¹ÑÌ(€€€€€€€€€]!IÉ•Í½ÕÉ•}¥ôü9€¡½Á•¹•‘}…Ğøôü=H±½Í•‘}…Ğøôü¤=IH	d½Á•¹•‘}…ĞM±¥M1%5%P€ÄÈÀˆˆˆ°(€€€€€€€€€€¡É•Í½ÕÉ•}¥°ÕÑ½™˜°ÕÑ½™˜¤¤è(€€€€€€€€€€€Ñ¥µ•±¥¹”¹…ÁÁ•¹¡ì‰¥ˆé˜‰¥¹¥‘•¹ĞéíÉ½İl¥uôé½Á•¹•ˆ°‰ÑåÁ”ˆè‰¥¹¥‘•¹Ñ}½Á•¹•ˆ°‰Ñ¥µ”ˆéÉ½İl‰½Á•¹•‘}…Ğ‰t°(€€€€€€€€€€€€€€‰Í½ÕÉ”ˆè‰¥¹¥‘•¹Ğˆ°‰ÍÑ…ÑÕÌˆè‰=A9ˆ°‰±…ÍÍ¥™¥…Ñ¥½¸ˆéÉ½İl‰­¥¹‰t°‰½¹™¥‘•¹”ˆé9½¹”°(€€€€€€€€€€€€€€‰ÍÕµµ…Éäˆéì‰Í•Ù•É¥ÑäˆéÉ½İl‰Í•Ù•É¥Ñä‰t°‰µ•ÍÍ…”ˆéÉ½İl‰µ•ÍÍ…”‰uõô¤(€€€€€€€€€€€¥˜É½İl‰±½Í•‘}…Ğ‰t…¹É½İl‰±½Í•‘}…Ğ‰t€øôÕÑ½™˜è(€€€€€€€€€€€€€€€Ñ¥µ•±¥¹”¹…ÁÁ•¹¡ì‰¥ˆé˜‰¥¹¥‘•¹ĞéíÉ½İl¥uôé±½Í•ˆ°‰ÑåÁ”ˆè‰¥¹¥‘•¹Ñ}±½Í•ˆ°‰Ñ¥µ”ˆéÉ½İl‰±½Í•‘}…Ğ‰t°(€€€€€€€€€€€€€€€€€€‰Í½ÕÉ”ˆè‰¥¹¥‘•¹Ğˆ°‰ÍÑ…ÑÕÌˆè‰1=Mˆ°‰±…ÍÍ¥™¥…Ñ¥½¸ˆéÉ½İl‰­¥¹‰t°‰½¹™¥‘•¹”ˆé9½¹”°(€€€€€€€€€€€€€€€€€€‰ÍÕµµ…Éäˆéì‰Í•Ù•É¥ÑäˆéÉ½İl‰Í•Ù•É¥Ñä‰t°‰µ•ÍÍ…”ˆéÉ½İl‰µ•ÍÍ…”‰uõô¤(€€€€€€€ÍÑ…ÑÕÍ}É½İÌ€ô½¹¸¹•á•ÕÑ” ˆˆ‰M1P¡•­•‘}…Ğ±ÍÑ…ÑÕÌ±ÁÉ½‰•}Í½Á”±µ•ÍÍ…”I=4¡•­Ì(€€€€€€€€€]!IÉ•Í½ÕÉ•}¥ôü9¡•­•‘}…Ğøôü=IH	d¡•­•‘}…Ğ±¥1%5%P€ÄÀÀÀˆˆˆ°€¡É•Í½ÕÉ•}¥°ÕÑ½™˜¤¤¹™•Ñ¡…±° ¤(€€€€€€€ÁÉ•Ù¥½ÕÌ€ôíô(€€€€€€€™½ÈÉ½Ü¥¸ÍÑ…ÑÕÍ}É½İÌè(€€€€€€€€€€€Í½Á”€ôÉ½İl‰ÁÉ½‰•}Í½Á”‰t(€€€€€€€€€€€½±€ôÁÉ•Ù¥½ÕÌ¹•Ğ¡Í½Á”¤(€€€€€€€€€€€¥˜½±…¹½±‘l‰ÍÑ…ÑÕÌ‰t€„ôÉ½İl‰ÍÑ…ÑÕÌ‰t…¹¥Í}É•…¡…‰±”¡½±‘l‰ÍÑ…Ñ×[h‘éì¶»§q«^w"]) != is_reachable(row["status"]):
                 timeline.append({"id":f"check:{resource_id}:{row['checked_at']}:{scope}","type":"status_change",
                   "time":row["checked_at"],"source":scope,"status":row["status"],"classification":row["status"],
                   "confidence":None,"summary":{"previous_status":old["status"],"message":row["message"]}})
@@ -671,17 +342,18 @@ def resource_details(resource_id:int):
 def create_resource(payload:ResourceCreate, request:Request, authorization:str|None=Header(default=None)):
     target=normalize_target(payload.target)
     owner = not AUTH_REQUIRED or _is_owner(request, authorization)
+    match=catalog_match(target)
+    group_name=normalize_group(payload.group_name)
     interval_seconds = payload.interval_seconds if owner else DEFAULT_INTERVAL
     expected_status_min = payload.expected_status_min if owner else 200
     expected_status_max = payload.expected_status_max if owner else 399
     slow_threshold_ms = payload.slow_threshold_ms if owner else 1500
     failure_threshold = payload.failure_threshold if owner else 2
-    alerts_enabled = payload.alerts_enabled if owner else False
+    alerts_enabled = (payload.alerts_enabled if payload.alerts_enabled is not None else (False if match or group_name!="CUSTOM" else True)) if owner else False
     enabled = payload.enabled if owner else True
     if expected_status_min>expected_status_max:
         raise HTTPException(400,"Expected status min must be <= max")
     now=int(time.time())
-    match=catalog_match(target)
     with db() as conn:
         if match:
             existing=conn.execute("SELECT id FROM resources WHERE catalog_key=? LIMIT 1",(match.key,)).fetchone()
@@ -692,53 +364,7 @@ def create_resource(payload:ResourceCreate, request:Request, authorization:str|N
                 interval_seconds=interval_seconds,
                 expected_status_min=expected_status_min,
                 expected_status_max=expected_status_max,
-                slow_threshold_ms=slow_threshold_ms,
-                failure_threshold=failure_threshold,
-                alerts_enabled=alerts_enabled,
-                enabled=enabled,
-            )
-            return {
-                "id":resource_id,
-                "created":created,
-                "used_catalog":True,
-                "catalog_match":match.public(),
-                "already_exists":not created,
-            }
-        target_key=_target_key(target)
-        for row in conn.execute("SELECT id,target FROM resources").fetchall():
-            try:
-                if _target_key(row["target"])==target_key:
-                    return {"id":int(row["id"]),"created":False,"used_catalog":False,"already_exists":True}
-            except HTTPException:
-                continue
-        group_name=normalize_group(payload.group_name)
-        if not owner and group_name not in KNOWN_GROUPS:
-            group_name="CUSTOM"
-        if not owner:
-            _limit_public_add(request, authorization)
-        _ensure_resource_group(conn,group_name,now)
-        cur=conn.execute("""INSERT INTO resources(
-          name,target,group_name,interval_seconds,enabled,created_at,updated_at,last_checked_at,
-          expected_status_min,expected_status_max,slow_threshold_ms,failure_threshold,alerts_enabled,
-          last_success_at,last_failure_at,catalog_key,allow_http_rejected
-        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,0)""",
-        (payload.name,target,group_name,interval_seconds,int(enabled),now,now,0,
-         expected_status_min,expected_status_max,slow_threshold_ms,failure_threshold,
-         int(alerts_enabled),0,0))
-    return {"id":int(cur.lastrowid),"created":True,"used_catalog":False,"already_exists":False}
-
-
-@app.patch("/api/resources/{resource_id}", dependencies=[Depends(require_token)])
-def patch_resource(resource_id:int,payload:ResourcePatch):
-    values=payload.model_dump(exclude_none=True)
-    if "target" in values:
-        values["target"]=normalize_target(values["target"])
-        match=catalog_match(values["target"])
-        if match:
-            with db() as conn:
-                existing=conn.execute("SELECT id FROM resources WHERE catalog_key=? AND id<>? LIMIT 1",(match.key,resource_id)).fetchone()
-            if existing:
-                raise HTTPException(409,f"Ğ­Ñ‚Ğ¾Ñ‚ Ñ€ĞµÑÑƒÑ€Ñ ÑƒĞ¶Ğµ Ğ´Ğ¾Ğ±Ğ°Ğ²Ğ»ĞµĞ½ Ğ¸Ğ· ĞºĞ°Ñ‚Ğ°Ğ»Ğ¾Ğ³Ğ°: {match.name}")
+   YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×5N‹Z–‹­¦ëeŠw¬Ô€€€€€€€€€€€€Í±½İ}Ñ¡É•Í¡½±‘}µÌõÍ±½İ}Ñ¡É•Í¡½±‘}µÌ°(€€€€€€€€€€€€€€€™…¥±ÕÉ•}Ñ¡É•Í¡½±õ™…¥±ÕÉ•}Ñ¡É•Í¡½±°(€€€€€€€€€€€€€€€…±•ÉÑÍ}•¹…‰±•õ…±•ÉÑÍ}•¹…‰±•°(€€€€€€€€€€€€€€€•¹…‰±•õ•¹…‰±•°(€€€€€€€€€€€€¤(€€€€€€€€€€€É•ÑÕÉ¸ì(€€€€€€€€€€€€€€€€‰¥ˆéÉ•Í½ÕÉ•}¥°(€€€€€€€€€€€€€€€€‰É•…Ñ•ˆéÉ•…Ñ•°(€€€€€€€€€€€€€€€€‰ÕÍ•‘}…Ñ…±½œˆéQÉÕ”°(€€€€€€€€€€€€€€€€‰…Ñ…±½}µ…Ñ ˆéµ…Ñ ¹ÁÕ‰±¥Œ ¤°(€€€€€€€€€€€€€€€€‰…±É•…‘å}•á¥ÍÑÌˆé¹½ĞÉ•…Ñ•°(€€€€€€€€€€€ô(€€€€€€€Ñ…É•Ñ}­•äõ}Ñ…É•Ñ}­•ä¡Ñ…É•Ğ¤(€€€€€€€™½ÈÉ½Ü¥¸½¹¸¹•á•ÕÑ” ‰M1P¥±Ñ…É•ĞI=4É•Í½ÕÉ•Ìˆ¤¹™•Ñ¡…±° ¤è(€€€€€€€€€€€ÑÉäè(€€€€€€€€€€€€€€€¥˜}Ñ…É•Ñ}­•ä¡É½İl‰Ñ…É•Ğ‰t¤ôõÑ…É•Ñ}­•äè(€€€€€€€€€€€€€€€€€€€É•ÑÕÉ¸ì‰¥ˆé¥¹Ğ¡É½İl‰¥‰t¤°‰É•…Ñ•ˆé…±Í”°‰ÕÍ•‘}…Ñ…±½œˆé…±Í”°‰…±É•…‘å}•á¥ÍÑÌˆéQÉÕ•ô(€€€€€€€€€€€•á•ÁĞ!QQAá•ÁÑ¥½¸è(€€€€€€€€€€€€€€€½¹Ñ¥¹Õ”(€€€€€€€¥˜¹½Ğ½İ¹•È…¹É½ÕÁ}¹…µ”¹½Ğ¥¸-9=]9}I=UALè(€€€€€€€€€€€É½ÕÁ}¹…µ”ô‰UMQ=4ˆ(€€€€€€€¥˜¹½Ğ½İ¹•Èè(€€€€€€€€€€€}±¥µ¥Ñ}ÁÕ‰±¥}…‘¡É•ÅÕ•ÍĞ°…ÕÑ¡½É¥é…Ñ¥½¸¤(€€€€€€€}•¹ÍÕÉ•}É•Í½ÕÉ•}É½ÕÀ¡½¹¸±É½ÕÁ}¹…µ”±¹½Ü¤(€€€€€€€ÕÈõ½¹¸¹•á•ÕÑ” ˆˆ‰%9MIP%9Q<É•Í½ÕÉ•Ì (€€€€€€€€€¹…µ”±Ñ…É•Ğ±É½ÕÁ}¹…µ”±¥¹Ñ•ÉÙ…±}Í•½¹‘Ì±•¹…‰±•±É•…Ñ•‘}…Ğ±ÕÁ‘…Ñ•‘}…Ğ±±…ÍÑ}¡•­•‘}…Ğ°(€€€€€€€€€•áÁ•Ñ•‘}ÍÑ…ÑÕÍ}µ¥¸±•áÁ•Ñ•‘}ÍÑ…ÑÕÍ}µ…à±Í±½İ}Ñ¡É•Í¡½±‘}µÌ±™…¥±ÕÉ•}Ñ¡É•Í¡½±±…±•ÉÑÍ}•¹…‰±•°(€€€€€€€€€±…ÍÑ}ÍÕ•ÍÍ}…Ğ±±…ÍÑ}™…¥±ÕÉ•}…Ğ±…Ñ…±½}­•ä±…±±½İ}¡ÑÑÁ}É•©•Ñ•(€€€€€€€€¤Y1UL ü°ü°ü°ü°ü°ü°ü°ü°ü°ü°ü°ü°ü°ü°ü±9U10°À¤ˆˆˆ°(€€€€€€€€¡Á…å±½…¹¹…µ”±Ñ…É•Ğ±É½ÕÁ}¹…µ”±¥¹Ñ•ÉÙ…±}Í•½¹‘Ì±¥¹Ğ¡•¹…‰±•¤±¹½Ü±¹½Ü°À°(€€€€€€€€•áÁ•Ñ•‘}ÍÑ…ÑÕÍ}µ¥¸±•áÁ•Ñ•‘}ÍÑ…ÑÕÍ}µ…à±Í±½İ}Ñ¡É•Í¡½±‘}µÌ±™…¥±ÕÉ•}Ñ¡É•Í¡½±°(€€€€€€€€¥¹Ğ¡…±•ÉÑÍ}•¹…‰±•¤°À°À¤¤(€€€É•ÑÕÉ¸ì‰¥ˆé¥¹Ğ¡ÕÈ¹±…ÍÑÉ½İ¥¤°‰É•…Ñ•ˆéQÉÕ”°‰ÕÍ•‘}…Ñ…±½œˆé…±Í”°‰…±É•…‘å}•á¥ÍÑÌˆé…±Í•ô(()…ÁÀ¹Á…Ñ  ˆ½…Á¤½É•Í½ÕÉ•Ì½íÉ•Í½ÕÉ•}¥‘ôˆ°‘•Á•¹‘•¹¥•Ìõm•Á•¹‘Ì¡É•ÅÕ¥É•}Ñ½­•¸¥t¤)‘•˜Á…Ñ¡}É•Í½ÕÉ”¡É•Í½ÕÉ•}¥é¥¹Ğ±Á…å±½…éI•Í½ÕÉ•A…Ñ ¤è(€€€Ù…±Õ•ÌõÁ…å±½…¹µ½‘•±}‘ÕµÀ¡•á±Õ‘•}¹½¹”õQÉÕ”¤(€€€¥˜€‰Ñ…É•Ğˆ¥¸Ù…±Õ•Ìè(€€€€€€€Ù…±Õ•Íl‰Ñ…É•Ğ‰tõ¹½Éµ…±¥é•}Ñ…É•Ğ¡Ù…±Õ•Íl‰Ñ…É•Ğ‰t¤(€€€€€€€µ…Ñ õ…Ñ…±½}µ…Ñ ¡Ù…±Õ•Íl‰Ñ…É•Ğ‰t¤(€€€€€€€¥˜µ…Ñ è(€€€€€€€€€€€İ¥Ñ ‘ˆ ¤…Ì½¹¸è(€€€€€€€€€€€€€€€•á¥ÍÑ¥¹œõ½¹¸¹•á•ÕÑ” ‰M1P¥I=4É•Í½ÕÉ•Ì]!I…Ñ…±½}­•äôü9¥ğøü1%5%P€Äˆ°¡µ…Ñ ¹­•ä±É•Í½ÕÉ•}¥¤¤¹™•Ñ¡½¹” ¤(€€€€€€€€€€€¥˜•á¥ÍÑ¥¹œè(€€€€€€€€€€€€€€€É…¥Í—[h‘éì¶»§q«^tHTTPException(409,f"Ğ­Ñ‚Ğ¾Ñ‚ Ñ€ĞµÑÑƒÑ€Ñ ÑƒĞ¶Ğµ Ğ´Ğ¾Ğ±Ğ°Ğ²Ğ»ĞµĞ½ Ğ¸Ğ· ĞºĞ°Ñ‚Ğ°Ğ»Ğ¾Ğ³Ğ°: {match.name}")
             values["target"]=normalize_target(match.target)
             values["name"]=match.name
             values["group_name"]=match.group_key
@@ -776,50 +402,7 @@ def delete_resource(resource_id:int):
 
 
 @app.post("/api/resources/{resource_id}/check", dependencies=[Depends(require_token)])
-async def manual_check(resource_id:int):
-    payload = await check_resource(resource_id)
-    payload["external_diagnostic"] = None
-    if GLOBALPING_ENABLED and not is_reachable(payload["status"]):
-        payload["external_diagnostic"] = await request_external_diagnostic(resource_id, DiagnosticPriority.MANUAL)
-    return payload
-
-
-@app.post("/api/resources/{resource_id}/trace", dependencies=[Depends(require_token)])
-async def trace_resource(resource_id:int): return await traceroute_to_resource(resource_id)
-
-
-@app.get("/api/v1/client-probe/resources")
-def client_probe_resources(device: DeviceIdentity = Depends(require_device)):
-    with db() as conn:
-        rows = conn.execute("""SELECT id,name,target,group_name,expected_status_min,expected_status_max
-          FROM resources WHERE enabled=1 ORDER BY group_name,name""").fetchall()
-    return [dict(row) for row in rows]
-
-
-@app.post("/api/v1/client-probe/result")
-def client_probe_result(payload: ClientProbeResult, probe: ClientProbeRegistration,
-                        device: DeviceIdentity = Depends(require_device)):
-    probe_key = probe.probe_key if device.device_id == "LOCAL_DEVELOPMENT" else device.device_id
-    probe_name = probe.name if device.device_id == "LOCAL_DEVELOPMENT" else device.name
-    register_probe(probe_key, probe_name, "USER", probe.app_version, "dns,tcp,tls,http")
-    with db() as conn:
-        exists = conn.execute("SELECT 1 FROM resources WHERE id=?", (payload.resource_id,)).fetchone()
-    if not exists:
-        raise HTTPException(404, "Resource not found")
-    data = payload.model_dump()
-    data.update({"tls_days_left":None,"final_url":None,"location":None})
-    write_check(payload.resource_id, data, probe_key=probe_key, probe_scope="USER")
-    return {"ok":True}
-
-
-async def request_external_diagnostic(resource_id: int, priority: DiagnosticPriority):
-    async with _diagnostic_request_lock:
-        with db() as conn:
-            resource = conn.execute("SELECT id,target FROM resources WHERE id=?", (resource_id,)).fetchone()
-            if not resource:
-                raise HTTPException(404, "Resource not found")
-            now = int(time.time())
-            recent = conn.execute("""SELECT id,external_id,status,error FROM diagnostic_jobs
+asYªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×5N‹Z–‹­¦ëeŠw¬Õå¹Œ‘•˜µ…¹Õ…±}¡•¬¡É•Í½ÕÉ•}¥é¥¹Ğ¤è(€€€Á…å±½…€ô…İ…¥Ğ¡•­}É•Í½ÕÉ”¡É•Í½ÕÉ•}¥¤(€€€Á…å±½…‘l‰•áÑ•É¹…±}‘¥…¹½ÍÑ¥Œ‰t€ô9½¹”(€€€¥˜1=	1A%9}9	1…¹¹½Ğ¥Í}É•…¡…‰±”¡Á…å±½…‘l‰ÍÑ…ÑÕÌ‰t¤è(€€€€€€€Á…å±½…‘l‰•áÑ•É¹…±}‘¥…¹½ÍÑ¥Œ‰t€ô…İ…¥ĞÉ•ÅÕ•ÍÑ}•áÑ•É¹…±}‘¥…¹½ÍÑ¥Œ¡É•Í½ÕÉ•}¥°¥…¹½ÍÑ¥AÉ¥½É¥Ñä¹59U0¤(€€€É•ÑÕÉ¸Á…å±½…(()…ÁÀ¹Á½ÍĞ ˆ½…Á¤½É•Í½ÕÉ•Ì½íÉ•Í½ÕÉ•}¥‘ô½ÑÉ…”ˆ°‘•Á•¹‘•¹¥•Ìõm•Á•¹‘Ì¡É•ÅÕ¥É•}Ñ½­•¸¥t¤)…Íå¹Œ‘•˜ÑÉ…•}É•Í½ÕÉ”¡É•Í½ÕÉ•}¥é¥¹Ğ¤èÉ•ÑÕÉ¸…İ…¥ĞÑÉ…•É½ÕÑ•}Ñ½}É•Í½ÕÉ”¡É•Í½ÕÉ•}¥¤(()…ÁÀ¹•Ğ ˆ½…Á¤½ØÄ½±¥•¹ĞµÁÉ½‰”½É•Í½ÕÉ•Ìˆ¤)‘•˜±¥•¹Ñ}ÁÉ½‰•}É•Í½ÕÉ•Ì¡‘•Ù¥”è•Ù¥•%‘•¹Ñ¥Ñä€ô•Á•¹‘Ì¡É•ÅÕ¥É•}‘•Ù¥”¤¤è(€€€İ¥Ñ ‘ˆ ¤…Ì½¹¸è(€€€€€€€É½İÌ€ô½¹¸¹•á•ÕÑ” ˆˆ‰M1P¥±¹…µ”±Ñ…É•Ğ±É½ÕÁ}¹…µ”±•áÁ•Ñ•‘}ÍÑ…ÑÕÍ}µ¥¸±•áÁ•Ñ•‘}ÍÑ…ÑÕÍ}µ…à(€€€€€€€€€I=4É•Í½ÕÉ•Ì]!I•¹…‰±•ôÄ=IH	dÉ½ÕÁ}¹…µ”±¹…µ”ˆˆˆ¤¹™•Ñ¡…±° ¤(€€€É•ÑÕÉ¸m‘¥Ğ¡É½Ü¤™½ÈÉ½Ü¥¸É½İÍt(()…ÁÀ¹Á½ÍĞ ˆ½…Á¤½ØÄ½±¥•¹ĞµÁÉ½‰”½É•ÍÕ±Ğˆ¤)‘•˜±¥•¹Ñ}ÁÉ½‰•}É•ÍÕ±Ğ¡Á…å±½…è±¥•¹ÑAÉ½‰•I•ÍÕ±Ğ°ÁÉ½‰”è±¥•¹ÑAÉ½‰•I•¥ÍÑÉ…Ñ¥½¸°(€€€€€€€€€€€€€€€€€€€€€€€‘•Ù¥”è•Ù¥•%‘•¹Ñ¥Ñä€ô•Á•¹‘Ì¡É•ÅÕ¥É•}‘•Ù¥”¤¤è(€€€ÁÉ½‰•}­•ä€ôÁÉ½‰”¹ÁÉ½‰•}­•ä¥˜‘•Ù¥”¹‘•Ù¥•}¥€ôô€‰1=1}Y1=A59Pˆ•±Í”‘•Ù¥”¹‘•Ù¥•}¥(€€€ÁÉ½‰•}¹…µ”€ôÁÉ½‰”¹¹…µ”¥˜‘•Ù¥”¹‘•Ù¥•}¥€ôô€‰1=1}Y1=A59Pˆ•±Í”‘•Ù¥”¹¹…µ”(€€€É•¥ÍÑ•É}ÁÉ½‰”¡ÁÉ½‰•}­•ä°ÁÉ½‰•}¹…µ”°€‰UMHˆ°ÁÉ½‰”¹…ÁÁ}Ù•ÉÍ¥½¸°€‰‘¹Ì±ÑÀ±Ñ±Ì±¡ÑÑÀˆ¤(€€€İ¥Ñ ‘ˆ ¤…Ì½¹¸è(€€€€€€€•á¥ÍÑÌ€ô½¹¸¹•á•ÕÑ” ‰M1P€ÄI=4É•Í½ÕÉ•Ì]!I¥ôüˆ°€¡Á…å±½…¹É•Í½ÕÉ•}¥°¤¤¹™•Ñ¡½¹” ¤(€€€¥˜¹½Ğ•á¥ÍÑÌè(€€€€€€€É…¥Í”!QQAá•ÁÑ¥½¸ ĞÀĞ°€‰I•Í½ÕÉ”¹½Ğ™½Õ¹ˆ¤(€€€‘…Ñ„€ôÁ…å±½…¹µ½‘•±}‘ÕµÀ ¤(€€€‘…Ñ„¹ÕÁ‘…Ñ”¡ì‰Ñ±Í}‘…åÍ}±•™Ğˆé9½¹”°‰™¥¹…±}ÕÉ°ˆé9½¹”°‰±½…Ñ¥½¸ˆé9½¹•ô¤(€€€İÉ¥Ñ•}¡•¬¡Á…å±½…¹É•Í½ÕÉ•}¥°‘…Ñ„°ÁÉ½‰•}­•äõÁÉ½‰•}­•ä°ÁÉ½‰•}Í½Á”ô‰UMHˆ¤(€€€É•ÑÕÉ¸ì‰½¬ˆéQÉÕ•ô(()…Íå¹Œ‘•˜É•ÅÕ•ÍÑ}•áÑ•É¹…±}‘¥…¹½ÍÑ¥Œ¡É•Í½ÕÉ•}¥è¥¹Ğ°ÁÉ¥½É¥Ñäè¥…¹½ÍÑ¥AÉ¥½É¥Ñä¤è(€€€…Íå¹Œİ¥Ñ }‘¥…¹½ÍÑ¥}É•ÅÕ•ÍÑ}±½¬è(€€€€€€€İ¥Ñ ‘ˆ ¤…Ì½¹¸è(€€€€€€€€€€€É•Í½ÕÉ”€ô½¹¸¹•á•ÕÑ” ‰M1P¥±Ñ…É•ĞI=4É•Í½ÕÉ•Ì]!I¥ôüˆ°€¡É•Í½ÕÉ•}¥°¤¤¹™•Ñ¡½¹” ¤(€€€€€€€€€€€¥˜¹½ĞÉ•Í½ÕÉ”è(€€€€€€€€€€€€€€€É…¥Í”!QQAá•ÁÑ¥½¸ ĞÀĞ°€‰I•Í½ÕÉ”¹½Ğ™½Õ¹ˆ¤(€€€€€€€€€€€¹½Ü€ô¥¹Ğ¡Ñ¥µ”¹Ñ¥µ” ¤¤(€€€€€€€€€€€É••¹Ğ€ô½¹¸¹•á•ÕÑ” ˆˆ‰M1P¥±•áÑ•É¹…±}¥±ÍÑ…ÑÕÌ±•ÉÉ½ÈI=4‘¥…¹½ÍÑ¥[h‘éì¶»§q«^vobs
               WHERE resource_id=? AND provider='globalping' AND (
                 status IN ('queued','in-progress','submitting') OR created_at>?
               ) ORDER BY created_at DESC,id DESC LIMIT 1""", (
@@ -858,58 +441,7 @@ async def diagnose_resource(resource_id:int):
     return diagnostic
 
 
-@app.post("/api/resources/{resource_id}/intelligence", dependencies=[Depends(require_token)])
-async def refresh_resource_intelligence(resource_id: int):
-    return await refresh_external_intelligence(resource_id, force=True)
-
-
-@app.get("/api/resources/{resource_id}/diagnostics")
-def resource_diagnostics(resource_id:int):
-    with db() as conn:
-        rows = conn.execute("SELECT * FROM diagnostic_jobs WHERE resource_id=? ORDER BY created_at DESC LIMIT 20", (resource_id,)).fetchall()
-    return [dict(row) for row in rows]
-
-
-@app.get("/api/trace-tasks/{task_id}")
-def trace_task(task_id:int):
-    with db() as conn:
-        row = conn.execute("SELECT * FROM diagnostic_jobs WHERE id=?", (task_id,)).fetchone()
-    if not row:
-        raise HTTPException(404, "Diagnostic task not found")
-    return dict(row)
-
-
-@app.post("/api/check-all", dependencies=[Depends(require_token)])
-async def check_all():
-    with db() as conn: rows=conn.execute("SELECT * FROM resources WHERE enabled=1").fetchall()
-    results=await asyncio.gather(*(perform_check(row) for row in rows))
-    for row,result in zip(rows,results): write_check(row["id"],result)
-    return {"checked":len(rows),"ok":sum(1 for r in results if is_reachable(r["status"])),"failed":sum(1 for r in results if not is_reachable(r["status"]))}
-
-
-@app.get("/api/incidents")
-def incidents(active:bool=Query(default=False),limit:int=Query(default=100,ge=1,le=500)):
-    return get_incidents(active,limit)
-
-
-@app.post("/api/incidents/{incident_id}/ack", dependencies=[Depends(require_token)])
-def acknowledge_incident(incident_id:int):
-    with db() as conn: cur=conn.execute("UPDATE incidents SET acknowledged_at=? WHERE id=?",(int(time.time()),incident_id))
-    if cur.rowcount==0: raise HTTPException(404,"Incident not found")
-    return {"ok":True}
-
-
-@app.post("/api/incidents/ack-all", dependencies=[Depends(require_token)])
-def acknowledge_all_incidents():
-    now=int(time.time())
-    with db() as conn:
-        cur=conn.execute("UPDATE incidents SET acknowledged_at=? WHERE acknowledged_at IS NULL",(now,))
-    return {"ok":True,"acknowledged":cur.rowcount,"acknowledged_at":now}
-
-
-@app.get("/api/realtime")
-def realtime(minutes:int=Query(default=60,ge=5,le=10080), scope:str=Query(default="EXTERNAL")):
-    scope=scope.upper()
+@app.post("/api/resources/{resoYªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×5N‹Z–‹­¦ëeŠw¬ÕÕÉ•}¥‘ô½¥¹Ñ•±±¥•¹”ˆ°‘•Á•¹‘•¹¥•Ìõm•Á•¹‘Ì¡É•ÅÕ¥É•}Ñ½­•¸¥t¤)…Íå¹Œ‘•˜É•™É•Í¡}É•Í½ÕÉ•}¥¹Ñ•±±¥•¹”¡É•Í½ÕÉ•}¥è¥¹Ğ¤è(€€€É•ÑÕÉ¸…İ…¥ĞÉ•™É•Í¡}•áÑ•É¹…±}¥¹Ñ•±±¥•¹”¡É•Í½ÕÉ•}¥°™½É”õQÉÕ”¤(()…ÁÀ¹•Ğ ˆ½…Á¤½É•Í½ÕÉ•Ì½íÉ•Í½ÕÉ•}¥‘ô½‘¥…¹½ÍÑ¥Ìˆ¤)‘•˜É•Í½ÕÉ•}‘¥…¹½ÍÑ¥Ì¡É•Í½ÕÉ•}¥é¥¹Ğ¤è(€€€İ¥Ñ ‘ˆ ¤…Ì½¹¸è(€€€€€€€É½İÌ€ô½¹¸¹•á•ÕÑ” ‰M1P€¨I=4‘¥…¹½ÍÑ¥}©½‰Ì]!IÉ•Í½ÕÉ•}¥ôü=IH	dÉ•…Ñ•‘}…ĞM1%5%P€ÈÀˆ°€¡É•Í½ÕÉ•}¥°¤¤¹™•Ñ¡…±° ¤(€€€É•ÑÕÉ¸m‘¥Ğ¡É½Ü¤™½ÈÉ½Ü¥¸É½İÍt(()…ÁÀ¹•Ğ ˆ½…Á¤½ÑÉ…”µÑ…Í­Ì½íÑ…Í­}¥‘ôˆ¤)‘•˜ÑÉ…•}Ñ…Í¬¡Ñ…Í­}¥é¥¹Ğ¤è(€€€İ¥Ñ ‘ˆ ¤…Ì½¹¸è(€€€€€€€É½Ü€ô½¹¸¹•á•ÕÑ” ‰M1P€¨I=4‘¥…¹½ÍÑ¥}©½‰Ì]!I¥ôüˆ°€¡Ñ…Í­}¥°¤¤¹™•Ñ¡½¹” ¤(€€€¥˜¹½ĞÉ½Üè(€€€€€€€É…¥Í”!QQAá•ÁÑ¥½¸ ĞÀĞ°€‰¥…¹½ÍÑ¥ŒÑ…Í¬¹½Ğ™½Õ¹ˆ¤(€€€É•ÑÕÉ¸‘¥Ğ¡É½Ü¤(()…ÁÀ¹Á½ÍĞ ˆ½…Á¤½¡•¬µ…±°ˆ°‘•Á•¹‘•¹¥•Ìõm•Á•¹‘Ì¡É•ÅÕ¥É•}Ñ½­•¸¥t¤)…Íå¹Œ‘•˜¡•­}…±° ¤è(€€€İ¥Ñ ‘ˆ ¤…Ì½¹¸èÉ½İÌõ½¹¸¹•á•ÕÑ” ‰M1P€¨I=4É•Í½ÕÉ•Ì]!I•¹…‰±•ôÄˆ¤¹™•Ñ¡…±° ¤(€€€É•ÍÕ±ÑÌõ…İ…¥Ğ…Íå¹¥¼¹…Ñ¡•È ¨¡Á•É™½Éµ}¡•¬¡É½Ü¤™½ÈÉ½Ü¥¸É½İÌ¤¤(€€€™½ÈÉ½Ü±É•ÍÕ±Ğ¥¸é¥À¡É½İÌ±É•ÍÕ±ÑÌ¤èİÉ¥Ñ•}¡•¬¡É½İl‰¥‰t±É•ÍÕ±Ğ¤(€€€É•ÑÕÉ¸ì‰¡•­•ˆé±•¸¡É½İÌ¤°‰½¬ˆéÍÕ´ Ä™½ÈÈ¥¸É•ÍÕ±ÑÌ¥˜¥Í}É•…¡…‰±”¡Él‰ÍÑ…ÑÕÌ‰t¤¤°‰™…¥±•ˆéÍÕ´ Ä™½ÈÈ¥¸É•ÍÕ±ÑÌ¥˜¹½Ğ¥Í}É•…¡…‰±”¡Él‰ÍÑ…ÑÕÌ‰t¤¥ô(()…ÁÀ¹•Ğ ˆ½…Á¤½¥¹¥‘•¹ÑÌˆ¤)‘•˜¥¹¥‘•¹ÑÌ¡…Ñ¥Ù”é‰½½°õEÕ•Éä¡‘•™…Õ±Ğõ…±Í”¤±±¥µ¥Ğé¥¹ĞõEÕ•Éä¡‘•™…Õ±ĞôÄÀÀ±”ôÄ±±”ôÔÀÀ¤¤è(€€€É•ÑÕÉ¸•Ñ}¥¹¥‘•¹ÑÌ¡…Ñ¥Ù”±±¥µ¥Ğ¤(()…ÁÀ¹Á½ÍĞ ˆ½…Á¤½¥¹¥‘•¹ÑÌ½í¥¹¥‘•¹Ñ}¥‘ô½…¬ˆ°‘•Á•¹‘•¹¥•Ìõm•Á•¹‘Ì¡É•ÅÕ¥É•}Ñ½­•¸¥t¤)‘•˜…­¹½İ±•‘•}¥¹¥‘•¹Ğ¡¥¹¥‘•¹Ñ}¥é¥¹Ğ¤è(€€€İ¥Ñ ‘ˆ ¤…Ì½¹¸èÕÈõ½¹¸¹•á•ÕÑ” ‰UAQ¥¹¥‘•¹ÑÌMP…­¹½İ±•‘•‘}…Ğôü]!I¥ôüˆ°¡¥¹Ğ¡Ñ¥µ”¹Ñ¥µ” ¤¤±¥¹¥‘•¹Ñ}¥¤¤(€€€¥˜ÕÈ¹É½İ½Õ¹ĞôôÀèÉ…¥Í”!QQAá•ÁÑ¥½¸ ĞÀĞ°‰%¹¥‘•¹Ğ¹½Ğ™½Õ¹ˆ¤(€€€É•ÑÕÉ¸ì‰½¬ˆéQÉÕ•ô(()…ÁÀ¹Á½ÍĞ ˆ½…Á¤½¥¹¥‘•¹ÑÌ½…¬µ…±°ˆ°‘•Á•¹‘•¹¥•Ìõm•Á•¹‘Ì¡É•ÅÕ¥É•}Ñ½­•¸¥t¤)‘•˜…­¹½İ±•‘•}…±±}¥¹¥‘•¹ÑÌ ¤è(€€€¹½Üõ¥¹Ğ¡Ñ¥µ”¹Ñ¥µ” ¤¤(€€€İ¥Ñ ‘ˆ ¤…Ì½¹¸è(€€€€€€€ÕÈõ½¹¸¹•á•ÕÑ” ‰UAQ¥¹¥‘•¹ÑÌMP…­¹½İ±•‘•‘}…Ğôü]!I…­¹½İ±•‘•‘}…Ğ%L9U10ˆ°¡¹½Ü°¤¤(€€€É•ÑÕÉ¸ì‰½¬ˆéQÉÕ”°‰…­¹½İ±•‘•ˆéÕÈ¹É½İ½Õ¹Ğ°‰…­¹½İ±•‘•‘}…Ğˆé¹½İô(()…ÁÀ¹•Ğ ˆ½…Á¤½É•…±Ñ¥µ”ˆ¤)‘•˜É•…±Ñ¥µ”¡µ¥¹ÕÑ•Ìé¥¹ĞõEÕ•Éä¡‘•™…Õ±ĞôØÀ±”ôÔ±±”ôÄÀÀàÀ¤°Í½Á”éÍÑÈõEÕ•Éä¡‘•™…Õ±Ğô‰aQI90ˆ¤¤è(€€€Í½Á”õÍ½Á”¹×[h‘éì¶»§q«^tper()
     scope_key={"EXTERNAL":"GLOBAL","DOMESTIC":"RUSSIA"}.get(scope,scope)
     if scope_key not in {"GLOBAL","RUSSIA","USER"}:
         raise HTTPException(400,"scope must be EXTERNAL, DOMESTIC or USER")
@@ -919,7 +451,7 @@ def realtime(minutes:int=Query(default=60,ge=5,le=10080), scope:str=Query(defaul
         resources=[dict(r) for r in conn.execute(
             "SELECT id,name,target,group_name,alerts_enabled FROM resources WHERE enabled=1 ORDER BY name"
         ).fetchall()]
-        rows=conn.execute("""SELECT resource_id,checked_at,status,response_time_ms,dns_ms,tcp_ms,tls_ms,http_ms,http_status
+        rows=conn.execute("""SELECT resource_id,checked_at,status,response_time_ms,dns_ms,tcp_ms,tls_ms,http_ms,http_status,message
           FROM checks WHERE checked_at>=? AND probe_scope=? ORDER BY checked_at ASC,id ASC""",
           (since,scope_key)).fetchall()
     by_resource={}
@@ -934,6 +466,7 @@ def realtime(minutes:int=Query(default=60,ge=5,le=10080), scope:str=Query(defaul
             "status":row["status"],
             "latency_ms":row["response_time_ms"],
             "http_status":row["http_status"],
+            "message":row["message"],
             "checks":1,
         })
     result=[]
@@ -960,38 +493,7 @@ def realtime_combined(minutes:int=Query(default=60,ge=5,le=10080)):
     with db() as conn:
         resources=[dict(r) for r in conn.execute(
             "SELECT id,name,target,group_name,alerts_enabled FROM resources WHERE enabled=1 ORDER BY name"
-        ).fetchall()]
-        rows=conn.execute("""SELECT resource_id,probe_scope,checked_at,status,response_time_ms,dns_ms,tcp_ms,tls_ms,http_ms,http_status
-          FROM checks WHERE checked_at>=? AND probe_scope IN (?,?) ORDER BY probe_scope,checked_at ASC,id ASC""",
-          (since,*scopes)).fetchall()
-    by_scope={scope:{} for scope in scopes}
-    known_statuses={"OK","HTTP_REJECTED","DNS_ERROR","TCP_ERROR","TLS_ERROR","HTTP_ERROR","TIMEOUT","BLOCKED_TARGET"}
-    for row in rows:
-        rid=int(row["resource_id"])
-        points=by_scope[row["probe_scope"]].setdefault(rid,[])
-        state="UP" if is_reachable(row["status"]) else "DOWN" if row["status"] in known_statuses else "UNKNOWN"
-        points.append({"timestamp":int(row["checked_at"]),"state":state,"status":row["status"],
-                       "latency_ms":row["response_time_ms"],"http_status":row["http_status"],"checks":1})
-    result={}
-    for scope in scopes:
-        scope_resources=[]
-        for resource in resources:
-            points=by_scope[scope].get(int(resource["id"]),[])
-            scope_resources.append({**resource,"last_checked_at":points[-1]["timestamp"] if points else None,"points":points})
-        result[scope.lower()]={"scope":scope,"minutes":minutes,"scale_seconds":10,"from":since,"to":now,"resources":scope_resources}
-    return {"scope":"BOTH","minutes":minutes,"scale_seconds":10,"from":since,"to":now,
-            "global":result["global"],"russia":result["russia"]}
-
-
-@app.get("/api/events")
-def recent_events(limit:int=Query(default=30,ge=1,le=100)):
-    with db() as conn:
-        incidents=[dict(r) for r in conn.execute("""SELECT i.id,i.resource_id,i.kind,i.severity,i.opened_at,i.closed_at,i.acknowledged_at,i.message,
-          r.name resource_name FROM incidents i JOIN resources r ON r.id=i.resource_id
-          ORDER BY COALESCE(i.closed_at,i.opened_at) DESC LIMIT ?""",(limit,)).fetchall()]
-        checks=[dict(r) for r in conn.execute("""SELECT c.id,c.resource_id,c.checked_at,c.status,c.response_time_ms,c.http_status,c.message,c.probe_scope,
-          r.name resource_name FROM checks c JOIN resources r ON r.id=c.resource_id
-          ORDER BY c.checked_at DESC,c.id DESC LIMIT ?""",(max(limit*8,80),)).fetchall()]
+        ).feYªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×5N‹Z–‹­¦ëeŠw¬ÕÑ¡…±° ¥t(€€€€€€€É½İÌõ½¹¸¹•á•ÕÑ” ˆˆ‰M1PÉ•Í½ÕÉ•}¥±ÁÉ½‰•}Í½Á”±¡•­•‘}…Ğ±ÍÑ…ÑÕÌ±É•ÍÁ½¹Í•}Ñ¥µ•}µÌ±‘¹Í}µÌ±ÑÁ}µÌ±Ñ±Í}µÌ±¡ÑÑÁ}µÌ±¡ÑÑÁ}ÍÑ…ÑÕÌ±µ•ÍÍ…”(€€€€€€€€€I=4¡•­Ì]!I¡•­•‘}…Ğøôü9ÁÉ½‰•}Í½Á”%8€ ü°ü¤=IH	dÁÉ½‰•}Í½Á”±¡•­•‘}…ĞM±¥Mˆˆˆ°(€€€€€€€€€€¡Í¥¹”°©Í½Á•Ì¤¤¹™•Ñ¡…±° ¤(€€€‰å}Í½Á”õíÍ½Á”éíô™½ÈÍ½Á”¥¸Í½Á•Íô(€€€­¹½İ¹}ÍÑ…ÑÕÍ•Ìõì‰=,ˆ°‰!QQA}I)Qˆ°‰9M}II=Hˆ°‰QA}II=Hˆ°‰Q1M}II=Hˆ°‰!QQA}II=Hˆ°‰Q%5=UPˆ°‰	1=-}QIP‰ô(€€€™½ÈÉ½Ü¥¸É½İÌè(€€€€€€€É¥õ¥¹Ğ¡É½İl‰É•Í½ÕÉ•}¥‰t¤(€€€€€€€Á½¥¹ÑÌõ‰å}Í½Á•mÉ½İl‰ÁÉ½‰•}Í½Á”‰ut¹Í•Ñ‘•™…Õ±Ğ¡É¥±mt¤(€€€€€€€ÍÑ…Ñ”ô‰U@ˆ¥˜¥Í}É•…¡…‰±”¡É½İl‰ÍÑ…ÑÕÌ‰t¤•±Í”€‰=]8ˆ¥˜É½İl‰ÍÑ…ÑÕÌ‰t¥¸­¹½İ¹}ÍÑ…ÑÕÍ•Ì•±Í”€‰U9-9=]8ˆ(€€€€€€€Á½¥¹ÑÌ¹…ÁÁ•¹¡ì‰Ñ¥µ•ÍÑ…µÀˆé¥¹Ğ¡É½İl‰¡•­•‘}…Ğ‰t¤°‰ÍÑ…Ñ”ˆéÍÑ…Ñ”°‰ÍÑ…ÑÕÌˆéÉ½İl‰ÍÑ…ÑÕÌ‰t°(€€€€€€€€€€€€€€€€€€€€€€€‰±…Ñ•¹å}µÌˆéÉ½İl‰É•ÍÁ½¹Í•}Ñ¥µ•}µÌ‰t°‰¡ÑÑÁ}ÍÑ…ÑÕÌˆéÉ½İl‰¡ÑÑÁ}ÍÑ…ÑÕÌ‰t°(€€€€€€€€€€€€€€€€€€€€€€€‰µ•ÍÍ…”ˆéÉ½İl‰µ•ÍÍ…”‰t°‰¡•­ÌˆèÅô¤(€€€É•ÍÕ±Ğõíô(€€€™½ÈÍ½Á”¥¸Í½Á•Ìè(€€€€€€€Í½Á•}É•Í½ÕÉ•Ìõmt(€€€€€€€™½ÈÉ•Í½ÕÉ”¥¸É•Í½ÕÉ•Ìè(€€€€€€€€€€€Á½¥¹ÑÌõ‰å}Í½Á•mÍ½Á•t¹•Ğ¡¥¹Ğ¡É•Í½ÕÉ•l‰¥‰t¤±mt¤(€€€€€€€€€€€Í½Á•}É•Í½ÕÉ•Ì¹…ÁÁ•¹¡ì¨©É•Í½ÕÉ”°‰±…ÍÑ}¡•­•‘}…ĞˆéÁ½¥¹ÑÍl´Åul‰Ñ¥µ•ÍÑ…µÀ‰t¥˜Á½¥¹ÑÌ•±Í”9½¹”°‰Á½¥¹ÑÌˆéÁ½¥¹ÑÍô¤(€€€€€€€É•ÍÕ±ÑmÍ½Á”¹±½İ•È ¥tõì‰Í½Á”ˆéÍ½Á”°‰µ¥¹ÕÑ•Ìˆéµ¥¹ÕÑ•Ì°‰Í…±•}Í•½¹‘ÌˆèÄÀ°‰™É½´ˆéÍ¥¹”°‰Ñ¼ˆé¹½Ü°‰É•Í½ÕÉ•ÌˆéÍ½Á•}É•Í½ÕÉ•Íô(€€€É•ÑÕÉ¸ì‰Í½Á”ˆè‰	=Q ˆ°‰µ¥¹ÕÑ•Ìˆéµ¥¹ÕÑ•Ì°‰Í…±•}Í•½¹‘ÌˆèÄÀ°‰™É½´ˆéÍ¥¹”°‰Ñ¼ˆé¹½Ü°(€€€€€€€€€€€€‰±½‰…°ˆéÉ•ÍÕ±Ñl‰±½‰…°‰t°‰ÉÕÍÍ¥„ˆéÉ•ÍÕ±Ñl‰ÉÕÍÍ¥„‰uô(()…ÁÀ¹•Ğ ˆ½…Á¤½•Ù•¹ÑÌˆ¤)‘•˜É••¹Ñ}•Ù•¹ÑÌ¡±¥µ¥Ğé¥¹ĞõEÕ•Éä¡‘•™…Õ±ĞôÌÀ±”ôÄ±±”ôÄÀÀ¤¤è(€€€İ¥Ñ ‘ˆ ¤…Ì½¹¸è(€€€€€€€¥¹¥‘•¹ÑÌõm‘¥Ğ¡È¤™½ÈÈ¥¸½¹¸¹•á•ÕÑ” ˆˆ‰M1P¤¹¥±¤¹É•Í½ÕÉ•}¥±¤¹­¥¹±¤¹Í•Ù•É¥Ñä±¤¹½Á•¹•‘}…Ğ±¤¹±½Í•‘}…Ğ±¤¹…­¹½İ±•‘•‘}…Ğ±¤¹µ•ÍÍ…”°(€€€€€€€€€È¹¹…µ”É•Í½ÕÉ•}¹…µ”I=4¥¹¥‘•¹ÑÌ¤)=%8É•Í½ÕÉ•ÌÈ=8È¹¥õ¤¹É•Í½ÕÉ•}¥(€€€€€€€€€=IH	d=1M¡¤¹±½Í•‘}…Ğ±¤¹½Á•¹•‘}…Ğ¤M1%5%P€üˆˆˆ°¡±¥µ¥Ğ°¤¤¹™•Ñ¡…±° ¥t(€€€€€€€¡•­Ìõm‘¥Ğ¡È¤™½ÈÈ¥¸½¹¸¹•á•ÕÑ” ˆˆ‰M1PŒ¹¥±Œ¹É•Í½ÕÉ•}¥±Œ¹¡•­•‘}…Ğ±Œ¹ÍÑ…ÑÕÌ±Œ¹É•ÍÁ½¹Í•}Ñ¥µ•}µÌ±Œ¹¡ÑÑÁ}ÍÑ…ÑÕÌ±Œ¹µ•ÍÍ…”±Œ¹ÁÉ½‰•}Í½Á”°(€€€€€€€€€È¹¹…µ”É•Í½ÕÉ•}¹…µ”I=4¡•­ÌŒ)=%8É•Í½ÕÉ•ÌÈ=8È¹¥õŒ¹É•Í½ÕÉ•}¥(€€€€€€€€€=IH	dŒ¹¡•­•‘}…ĞM±Œ¹¥M3[h‘éì¶»§q«^uMIT ?""",(max(limit*8,80),)).fetchall()]
     events=[]
     for inc in incidents:
         events.append({

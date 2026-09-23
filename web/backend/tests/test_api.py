@@ -1,59 +1,4 @@
-import importlib
-import os
-import tempfile
-import time
-import unittest
-import asyncio
-from pathlib import Path
-from unittest.mock import AsyncMock, patch
-
-from fastapi.testclient import TestClient
-from app.providers import ProviderSubmission
-from app.diagnostics import DiagnosticPriority
-from app.intelligence import IntelligenceEvidence
-
-
-class NetWeatherApiTest(unittest.TestCase):
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        os.environ["NETWEATHER_DB"] = str(Path(self.tmp.name) / "test.db")
-        os.environ["NETWEATHER_API_TOKEN"] = "test-token"
-        os.environ["NETWEATHER_UI_PASSWORD"] = "owner-pass"
-        os.environ["NETWEATHER_SEED_DEFAULTS"] = "true"
-        os.environ["NETWEATHER_SCHEDULER_ENABLED"] = "false"
-        os.environ["NETWEATHER_ALLOW_OPEN_ACCESS"] = "true"
-        os.environ["NETWEATHER_GLOBALPING_ENABLED"] = "false"
-        os.environ["NETWEATHER_OONI_ENABLED"] = "false"
-        os.environ["NETWEATHER_IODA_ENABLED"] = "false"
-        os.environ["FRONTEND_DIR"] = str(Path(__file__).resolve().parents[2] / "frontend")
-        import app.config as config
-        import app.database as database
-        import app.incidents as incidents
-        import app.monitor as monitor
-        import app.main as main
-        importlib.reload(config)
-        importlib.reload(database)
-        importlib.reload(incidents)
-        importlib.reload(monitor)
-        self.main = importlib.reload(main)
-        self.database = database
-        self.client_ctx = TestClient(self.main.app, base_url="https://testserver")
-        self.client = self.client_ctx.__enter__()
-        self.auth = {"Authorization": "Bearer test-token"}
-
-    def tearDown(self):
-        self.client_ctx.__exit__(None, None, None)
-        self.tmp.cleanup()
-
-    def test_seed_dashboard_and_head(self):
-        dash = self.client.get("/api/dashboard")
-        self.assertEqual(dash.status_code, 200)
-        payload = dash.json()
-        self.assertEqual(len(payload["resources"]), 8)
-        self.assertIn("RUSSIAN", payload["summary"]["groups"])
-        vk = next(r for r in payload["resources"] if r["name"] == "VK")
-        self.assertEqual(vk["group_name"], "MESSENGERS")
-        self.assertEqual(vk["catalog_key"], "msg-vk")
+YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×5N‹Z–‹­¦ëeŠw¬Õ¥µÁ½ÉĞ¥µÁ½ÉÑ±¥ˆ)¥µÁ½ÉĞ½Ì)¥µÁ½ÉĞÑ•µÁ™¥±”)¥µÁ½ÉĞÑ¥µ”)¥µÁ½ÉĞÕ¹¥ÑÑ•ÍĞ)¥µÁ½ÉĞ…Íå¹¥¼)™É½´Á…Ñ¡±¥ˆ¥µÁ½ÉĞA…Ñ )™É½´Õ¹¥ÑÑ•ÍĞ¹µ½¬¥µÁ½ÉĞÍå¹5½¬°Á…Ñ ()™É½´™…ÍÑ…Á¤¹Ñ•ÍÑ±¥•¹Ğ¥µÁ½ÉĞQ•ÍÑ±¥•¹Ğ)™É½´…ÁÀ¹ÁÉ½Ù¥‘•ÉÌ¥µÁ½ÉĞAÉ½Ù¥‘•ÉMÕ‰µ¥ÍÍ¥½¸)™É½´…ÁÀ¹‘¥…¹½ÍÑ¥Ì¥µÁ½ÉĞ¥…¹½ÍÑ¥AÉ¥½É¥Ñä)™É½´…ÁÀ¹¥¹Ñ•±±¥•¹”¥µÁ½ÉĞ%¹Ñ•±±¥•¹•Ù¥‘•¹”(()±…ÍÌ9•Ñ]•…Ñ¡•ÉÁ¥Q•ÍĞ¡Õ¹¥ÑÑ•ÍĞ¹Q•ÍÑ…Í”¤è(€€€‘•˜Í•ÑUÀ¡Í•±˜¤è(€€€€€€€Í•±˜¹ÑµÀ€ôÑ•µÁ™¥±”¹Q•µÁ½É…Éå¥É•Ñ½Éä ¤(€€€€€€€½Ì¹•¹Ù¥É½¹l‰9Q]Q!I}‰t€ôÍÑÈ¡A…Ñ ¡Í•±˜¹ÑµÀ¹¹…µ”¤€¼€‰Ñ•ÍĞ¹‘ˆˆ¤(€€€€€€€½Ì¹•¹Ù¥É½¹l‰9Q]Q!I}A%}Q=-8‰t€ô€‰Ñ•ÍĞµÑ½­•¸ˆ(€€€€€€€½Ì¹•¹Ù¥É½¹l‰9Q]Q!I}U%}AMM]=I‰t€ô€‰½İ¹•ÈµÁ…ÍÌˆ(€€€€€€€½Ì¹•¹Ù¥É½¹l‰9Q]Q!I}M}U1QL‰t€ô€‰ÑÉÕ”ˆ(€€€€€€€½Ì¹•¹Ù¥É½¹l‰9Q]Q!I}M!U1I}9	1‰t€ô€‰™…±Í”ˆ(€€€€€€€½Ì¹•¹Ù¥É½¹l‰9Q]Q!I}11=]}=A9}ML‰t€ô€‰ÑÉÕ”ˆ(€€€€€€€½Ì¹•¹Ù¥É½¹l‰9Q]Q!I}1=	1A%9}9	1‰t€ô€‰™…±Í”ˆ(€€€€€€€½Ì¹•¹Ù¥É½¹l‰9Q]Q!I}==9%}9	1‰t€ô€‰™…±Í”ˆ(€€€€€€€½Ì¹•¹Ù¥É½¹l‰9Q]Q!I}%=}9	1‰t€ô€‰™…±Í”ˆ(€€€€€€€½Ì¹•¹Ù¥É½¹l‰I=9Q9}%H‰t€ôÍÑÈ¡A…Ñ ¡}}™¥±•}|¤¹É•Í½±Ù” ¤¹Á…É•¹ÑÍlÉt€¼€‰™É½¹Ñ•¹ˆ¤(€€€€€€€¥µÁ½ÉĞ…ÁÀ¹½¹™¥œ…Ì½¹™¥œ(€€€€€€€¥µÁ½ÉĞ…ÁÀ¹‘…Ñ…‰…Í”…Ì‘…Ñ…‰…Í”(€€€€€€€¥µÁ½ÉĞ…ÁÀ¹¥¹¥‘•¹ÑÌ…Ì¥¹¥‘•¹ÑÌ(€€€€€€€¥µÁ½ÉĞ…ÁÀ¹µ½¹¥Ñ½È…Ìµ½¹¥Ñ½È(€€€€€€€¥µÁ½ÉĞ…ÁÀ¹µ…¥¸…Ìµ…¥¸(€€€€€€€¥µÁ½ÉÑ±¥ˆ¹É•±½…¡½¹™¥œ¤(€€€€€€€¥µÁ½ÉÑ±¥ˆ¹É•±½…¡‘…Ñ…‰…Í”¤(€€€€€€€¥µÁ½ÉÑ±¥ˆ¹É•±½…¡¥¹¥‘•¹ÑÌ¤(€€€€€€€¥µÁ½ÉÑ±¥ˆ¹É•±½…¡µ½¹¥Ñ½È¤(€€€€€€€Í•±˜¹µ…¥¸€ô¥µÁ½ÉÑ±¥ˆ¹É•±½…¡µ…¥¸¤(€€€€€€€Í•±˜¹‘…Ñ…‰…Í”€ô‘…Ñ…‰…Í”(€€€€€€€Í•±˜¹±¥•¹Ñ}Ñà€ôQ•ÍÑ±¥•¹Ğ¡Í•±˜¹µ…¥¸¹…ÁÀ°‰…Í•}ÕÉ°ô‰¡ÑÑÁÌè¼½Ñ•ÍÑÍ•ÉÙ•Èˆ¤(€€€€€€€Í•±˜¹±¥•¹Ğ€ôÍ•±˜¹±¥•¹Ñ}Ñà¹}}•¹Ñ•É}| ¤(€€€€€€€Í•±˜¹…ÕÑ €ôì‰ÕÑ¡½É¥é…Ñ¥½¸ˆè€‰	•…É•ÈÑ•ÍĞµÑ½­•¸‰ô((€€€‘•˜Ñ•…É½İ¸¡Í•±˜¤è(€€€€€€€Í•±˜¹±¥•¹Ñ}Ñà¹}}•á¥Ñ}|¡9½¹”°9½¹”°9½¹”¤(€€€€€€€Í•±˜¹ÑµÀ¹±•…¹ÕÀ ¤((€€€‘•˜Ñ•ÍÑ}Í••‘}‘…Í¡‰½…É‘}…¹‘}¡•…¡Í•±˜¤è(€€€€€€€‘…Í €ôÍ•±˜¹±¥•¹Ğ¹•Ğ ˆ½…Á¤½‘…Í¡‰½…Éˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡‘…Í ¹ÍÑ…ÑÕÍ}½‘”°€ÈÀÀ¤(€€€€€€€Á…å±½…€ô‘…Í ¹©Í½¸ ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡±•¸¡Á…å±½…‘l‰É•Í½ÕÉ•Ì‰t¤°€à¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ%¸ ‰IUMM%8ˆ°Á…å±½…‘l‰ÍÕµµ…Éä‰ul‰É½ÕÁÌ‰t¤(€€€€€€€Ù¬€ô¹•áĞ¡È™½ÈÈ¥¸Á…å±½…‘l‰É•Í½ÕÉ•Ì‰t¥˜Él‰¹…µ”‰t€ôô€‰Y,ˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡Ù­l‰É½ÕÁ}¹…µ”‰t°€‰5MM9ILˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡Ù­l‰…Ñ…±½}­•ä‰t°ƒ[h‘éì¶»§q«^vmsg-vk")
         self.assertEqual(vk["target"], "https://vk.ru")
         self.assertEqual(payload["summary"]["mode"], "NORMAL")
         self.assertFalse(payload["summary"]["your_network_available"])
@@ -96,46 +41,7 @@ class NetWeatherApiTest(unittest.TestCase):
         })
         self.assertEqual(public_resource.status_code, 200)
         detail = self.client.get(f"/api/resources/{public_resource.json()['id']}").json()["resource"]
-        self.assertEqual(detail["group_name"], "CUSTOM")
-        self.assertEqual(detail["interval_seconds"], self.main.DEFAULT_INTERVAL)
-        self.assertEqual(detail["expected_status_min"], 200)
-        self.assertEqual(detail["expected_status_max"], 399)
-        self.assertEqual(detail["slow_threshold_ms"], 1500)
-        self.assertEqual(detail["failure_threshold"], 2)
-        self.assertEqual(detail["enabled"], 1)
-        self.assertEqual(detail["alerts_enabled"], 0)
-        blocked_edit = self.client.patch(f"/api/resources/{public_resource.json()['id']}", json={"name":"Blocked"})
-        self.assertEqual(blocked_edit.status_code, 401)
-        login = self.client.post("/api/session/login", json={"password":"owner-pass"})
-        self.assertEqual(login.status_code, 200)
-        self.assertTrue(self.client.get("/api/session").json()["authenticated"])
-        created = self.client.post("/api/groups", json={"title":"Owner group","key":"OWNER"})
-        self.assertEqual(created.status_code, 200)
-
-    def test_public_custom_add_is_rate_limited(self):
-        self.main.AUTH_REQUIRED = True
-        self.main.PUBLIC_ADD_LIMIT = 2
-        self.main._public_add_attempts.clear()
-        for index in range(2):
-            added = self.client.post("/api/resources", json={
-                "name":f"Public {index}",
-                "target":f"https://public-{index}.example",
-            })
-            self.assertEqual(added.status_code, 200)
-        limited = self.client.post("/api/resources", json={
-            "name":"Public limited",
-            "target":"https://public-limited.example",
-        })
-        self.assertEqual(limited.status_code, 429)
-
-    def test_catalog_http_rejection_is_reachable_not_an_incident(self):
-        added = self.client.post("/api/resource-catalog/add", json={"resource_keys":["int-chatgpt"]}).json()
-        rid = added["added"][0]["id"]
-        detail = self.client.get("/api/resources/%d" % rid).json()["resource"]
-        self.assertEqual(detail["allow_http_rejected"], 1)
-        rejected = {"status":"HTTP_REJECTED","response_time_ms":220,"dns_ms":10,"tcp_ms":20,"tls_ms":30,
-                    "http_ms":160,"http_status":403,"resolved_ip":"93.184.216.34","tls_days_left":90,
-                    "final_url":"https://chatgpt.com","location":None,"message":"probe rejected"}
+        self.assertEqual(detail["group_namYªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×5N‹Z–‹­¦ëeŠw¬Õ”‰t°€‰UMQ=4ˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡‘•Ñ…¥±l‰¥¹Ñ•ÉÙ…±}Í•½¹‘Ì‰t°Í•±˜¹µ…¥¸¹U1Q}%9QIY0¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡‘•Ñ…¥±l‰•áÁ•Ñ•‘}ÍÑ…ÑÕÍ}µ¥¸‰t°€ÈÀÀ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡‘•Ñ…¥±l‰•áÁ•Ñ•‘}ÍÑ…ÑÕÍ}µ…à‰t°€Ìää¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡‘•Ñ…¥±l‰Í±½İ}Ñ¡É•Í¡½±‘}µÌ‰t°€ÄÔÀÀ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡‘•Ñ…¥±l‰™…¥±ÕÉ•}Ñ¡É•Í¡½±‰t°€È¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡‘•Ñ…¥±l‰•¹…‰±•‰t°€Ä¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡‘•Ñ…¥±l‰…±•ÉÑÍ}•¹…‰±•‰t°€À¤(€€€€€€€‰±½­•‘}•‘¥Ğ€ôÍ•±˜¹±¥•¹Ğ¹Á…Ñ ¡˜ˆ½…Á¤½É•Í½ÕÉ•Ì½íÁÕ‰±¥}É•Í½ÕÉ”¹©Í½¸ ¥l¥uôˆ°©Í½¸õì‰¹…µ”ˆè‰	±½­•‰ô¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡‰±½­•‘}•‘¥Ğ¹ÍÑ…ÑÕÍ}½‘”°€ĞÀÄ¤(€€€€€€€±½¥¸€ôÍ•±˜¹±¥•¹Ğ¹Á½ÍĞ ˆ½…Á¤½Í•ÍÍ¥½¸½±½¥¸ˆ°©Í½¸õì‰Á…ÍÍİ½Éˆè‰½İ¹•ÈµÁ…ÍÌ‰ô¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡±½¥¸¹ÍÑ…ÑÕÍ}½‘”°€ÈÀÀ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑQÉÕ”¡Í•±˜¹±¥•¹Ğ¹•Ğ ˆ½…Á¤½Í•ÍÍ¥½¸ˆ¤¹©Í½¸ ¥l‰…ÕÑ¡•¹Ñ¥…Ñ•‰t¤(€€€€€€€É•…Ñ•€ôÍ•±˜¹±¥•¹Ğ¹Á½ÍĞ ˆ½…Á¤½É½ÕÁÌˆ°©Í½¸õì‰Ñ¥Ñ±”ˆè‰=İ¹•ÈÉ½ÕÀˆ°‰­•äˆè‰=]9H‰ô¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡É•…Ñ•¹ÍÑ…ÑÕÍ}½‘”°€ÈÀÀ¤((€€€‘•˜Ñ•ÍÑ}ÁÕ‰±¥}ÕÍÑ½µ}…‘‘}¥Í}É…Ñ•}±¥µ¥Ñ•¡Í•±˜¤è(€€€€€€€Í•±˜¹µ…¥¸¹UQ!}IEU%I€ôQÉÕ”(€€€€€€€Í•±˜¹µ…¥¸¹AU	1%}}1%5%P€ô€È(€€€€€€€Í•±˜¹µ…¥¸¹}ÁÕ‰±¥}…‘‘}…ÑÑ•µÁÑÌ¹±•…È ¤(€€€€€€€™½È¥¹‘•à¥¸É…¹” È¤è(€€€€€€€€€€€…‘‘•€ôÍ•±˜¹±¥•¹Ğ¹Á½ÍĞ ˆ½…Á¤½É•Í½ÕÉ•Ìˆ°©Í½¸õì(€€€€€€€€€€€€€€€€‰¹…µ”ˆé˜‰AÕ‰±¥Œí¥¹‘•áôˆ°(€€€€€€€€€€€€€€€€‰Ñ…É•Ğˆé˜‰¡ÑÑÁÌè¼½ÁÕ‰±¥Œµí¥¹‘•áô¹•á…µÁ±”ˆ°(€€€€€€€€€€€ô¤(€€€€€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡…‘‘•¹ÍÑ…ÑÕÍ}½‘”°€ÈÀÀ¤(€€€€€€€±¥µ¥Ñ•€ôÍ•±˜¹±¥•¹Ğ¹Á½ÍĞ ˆ½…Á¤½É•Í½ÕÉ•Ìˆ°©Í½¸õì(€€€€€€€€€€€€‰¹…µ”ˆè‰AÕ‰±¥Œ±¥µ¥Ñ•ˆ°(€€€€€€€€€€€€‰Ñ…É•Ğˆè‰¡ÑÑÁÌè¼½ÁÕ‰±¥Œµ±¥µ¥Ñ•¹•á…µÁ±”ˆ°(€€€€€€€ô¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡±¥µ¥Ñ•¹ÍÑ…ÑÕÍ}½‘”°€ĞÈä¤((€€€‘•˜Ñ•ÍÑ}…Ñ…±½}¡ÑÑÁ}É•©•Ñ¥½¹}¥Í}É•…¡…‰±•}¹½Ñ}…¹}¥¹¥‘•¹Ğ¡Í•±˜¤è(€€€€€€€…‘‘•€ôÍ•±˜¹±¥•¹Ğ¹Á½ÍĞ ˆ½…Á¤½É•Í½ÕÉ”µ…Ñ…±½œ½…‘ˆ°©Í½¸õì‰É•Í½ÕÉ•}­•åÌˆél‰¥¹Ğµ¡…ÑÁĞ‰uô¤¹©Í½¸ ¤(€€€€€€€É¥€ô…‘‘•‘l‰…‘‘•‰ulÁul‰¥‰t(€€€€€€€‘•Ñ…¥°€ôÍ•±˜¹±¥•¹Ğ¹•Ğ ˆ½…Á¤½É•Í½ÕÉ•Ì¼•ˆ€”É¥¤¹©Í½¸ ¥l‰É•Í½ÕÉ”‰t(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡‘•Ñ…¥±l‰…±±½İ}¡ÑÑÁ}É•©•Ñ•‰t°€Ä¤(€€€€€€€É•©•Ñ•€ôì‰ÍÑ…ÑÕÌˆè‰!QQA}I)Qˆ°‰É•ÍÁ½¹Í•}Ñ¥µ•}µÌˆèÈÈÀ°‰‘¹Í}µÌˆèÄÀ°‰ÑÁ}µÌˆèÈÀ°‰Ñ±Í}µÌˆèÌÀ°(€€€€€€€€€€€€€€€€€€€€‰¡ÑÑÁ}µÌˆèÄØÀ°‰¡ÑÑÁ}ÍÑ…ÑÕÌˆèĞÀÌ°‰É•Í½±Ù•‘}¥ÀˆèˆäÌ¸ÄàĞ¸ÈÄØ¸ÌĞˆ°‰Ñ±Í}‘…åÍ}±•™ĞˆèäÀ°(€€€€€€€€€€€€€€€€€€€€‰™¥¹…±}ÕÉ°ˆè‰¡ÑÑÁÌè¼½¡…ÑÁĞ¹½´ˆ°‰±½[h‘éì¶»§q«^ution":None,"message":"probe rejected"}
         self.main.write_check(rid, rejected)
         self.main.write_check(rid, rejected)
         active = self.client.get("/api/incidents?active=true").json()
@@ -181,50 +87,7 @@ class NetWeatherApiTest(unittest.TestCase):
                 "SELECT allow_http_rejected FROM resources WHERE id=?", (rid,)
             ).fetchone()
             latest = conn.execute(
-                "SELECT status FROM checks WHERE resource_id=? ORDER BY id DESC LIMIT 1", (rid,)
-            ).fetchone()
-            false_incidents = conn.execute(
-                "SELECT COUNT(*) FROM incidents WHERE resource_id=? AND kind='DOWN'", (rid,)
-            ).fetchone()[0]
-        self.assertEqual(repaired["allow_http_rejected"], 1)
-        self.assertEqual(latest["status"], "HTTP_REJECTED")
-        self.assertEqual(false_incidents, 0)
-
-        created = self.client.post("/api/groups", json={"title":"Ğ Ğ°Ğ±Ğ¾Ñ‡Ğ¸Ğµ ÑĞµÑ€Ğ²Ğ¸ÑÑ‹","key":"WORK","color":"#3A8DFF"})
-        self.assertEqual(created.status_code, 200)
-        groups = self.client.get("/api/groups").json()
-        self.assertTrue(any(g["id"] == "WORK" and g["title"] == "Ğ Ğ°Ğ±Ğ¾Ñ‡Ğ¸Ğµ ÑĞµÑ€Ğ²Ğ¸ÑÑ‹" for g in groups))
-
-        patched = self.client.patch("/api/groups/WORK", json={"title":"Ğ Ğ°Ğ±Ğ¾Ñ‚Ğ°","color":"#2ECC71"})
-        self.assertEqual(patched.status_code, 200)
-
-        resource = self.client.post("/api/resources", json={"name":"Work test","target":"https://example.com","group_name":"WORK"})
-        self.assertEqual(resource.status_code, 200)
-
-        deleted = self.client.delete("/api/groups/WORK")
-        self.assertEqual(deleted.status_code, 200)
-        detail = self.client.get("/api/resources/%d" % resource.json()["id"]).json()
-        self.assertEqual(detail["resource"]["group_name"], "CUSTOM")
-
-        logout = self.client.post("/api/session/logout")
-        self.assertEqual(logout.status_code, 200)
-        self.assertTrue(self.client.get("/api/session").json()["authenticated"])
-
-    def test_realtime_and_event_feed(self):
-        rt = self.client.get("/api/realtime?minutes=60&scope=GLOBAL")
-        self.assertEqual(rt.status_code, 200)
-        payload = rt.json()
-        self.assertEqual(payload["scope"], "GLOBAL")
-        self.assertIn("resources", payload)
-        self.assertEqual(len(payload["resources"]), 8)
-        events = self.client.get("/api/events?limit=10")
-        self.assertEqual(events.status_code, 200)
-        self.assertIsInstance(events.json(), list)
-
-    def test_realtime_combined_returns_both_scopes_from_one_snapshot(self):
-        response = self.client.get("/api/realtime/combined?minutes=60")
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
+                "SELECT status FROM checks WHERE resource_YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×5N‹Z–‹­¦ëeŠw¬Õ¥ôü=IH	d¥M1%5%P€Äˆ°€¡É¥°¤(€€€€€€€€€€€€¤¹™•Ñ¡½¹” ¤(€€€€€€€€€€€™…±Í•}¥¹¥‘•¹ÑÌ€ô½¹¸¹•á•ÕÑ” (€€€€€€€€€€€€€€€€‰M1P=U9P ¨¤I=4¥¹¥‘•¹ÑÌ]!IÉ•Í½ÕÉ•}¥ôü9­¥¹ô=]8œˆ°€¡É¥°¤(€€€€€€€€€€€€¤¹™•Ñ¡½¹” ¥lÁt(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡É•Á…¥É•‘l‰…±±½İ}¡ÑÑÁ}É•©•Ñ•‰t°€Ä¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡±…Ñ•ÍÑl‰ÍÑ…ÑÕÌ‰t°€‰!QQA}I)Qˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡™…±Í•}¥¹¥‘•¹ÑÌ°€À¤((€€€€€€€É•…Ñ•€ôÍ•±˜¹±¥•¹Ğ¹Á½ÍĞ ˆ½…Á¤½É½ÕÁÌˆ°©Í½¸õì‰Ñ¥Ñ±”ˆè‹BƒBÃBÇBûFBãBÔƒFB×FBËBãFF,ˆ°‰­•äˆè‰]=I,ˆ°‰½±½ÈˆèˆŒÍá‰ô¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡É•…Ñ•¹ÍÑ…ÑÕÍ}½‘”°€ÈÀÀ¤(€€€€€€€É½ÕÁÌ€ôÍ•±˜¹±¥•¹Ğ¹•Ğ ˆ½…Á¤½É½ÕÁÌˆ¤¹©Í½¸ ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑQÉÕ”¡…¹ä¡l‰¥‰t€ôô€‰]=I,ˆ…¹l‰Ñ¥Ñ±”‰t€ôô€‹BƒBÃBÇBûFBãBÔƒFB×FBËBãFF,ˆ™½Èœ¥¸É½ÕÁÌ¤¤((€€€€€€€Á…Ñ¡•€ôÍ•±˜¹±¥•¹Ğ¹Á…Ñ  ˆ½…Á¤½É½ÕÁÌ½]=I,ˆ°©Í½¸õì‰Ñ¥Ñ±”ˆè‹BƒBÃBÇBûFBÀˆ°‰½±½ÈˆèˆŒÉÜÄ‰ô¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡Á…Ñ¡•¹ÍÑ…ÑÕÍ}½‘”°€ÈÀÀ¤((€€€€€€€É•Í½ÕÉ”€ôÍ•±˜¹±¥•¹Ğ¹Á½ÍĞ ˆ½…Á¤½É•Í½ÕÉ•Ìˆ°©Í½¸õì‰¹…µ”ˆè‰]½É¬Ñ•ÍĞˆ°‰Ñ…É•Ğˆè‰¡ÑÑÁÌè¼½•á…µÁ±”¹½´ˆ°‰É½ÕÁ}¹…µ”ˆè‰]=I,‰ô¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡É•Í½ÕÉ”¹ÍÑ…ÑÕÍ}½‘”°€ÈÀÀ¤((€€€€€€€‘•±•Ñ•€ôÍ•±˜¹±¥•¹Ğ¹‘•±•Ñ” ˆ½…Á¤½É½ÕÁÌ½]=I,ˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡‘•±•Ñ•¹ÍÑ…ÑÕÍ}½‘”°€ÈÀÀ¤(€€€€€€€‘•Ñ…¥°€ôÍ•±˜¹±¥•¹Ğ¹•Ğ ˆ½…Á¤½É•Í½ÕÉ•Ì¼•ˆ€”É•Í½ÕÉ”¹©Í½¸ ¥l‰¥‰t¤¹©Í½¸ ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡‘•Ñ…¥±l‰É•Í½ÕÉ”‰ul‰É½ÕÁ}¹…µ”‰t°€‰UMQ=4ˆ¤((€€€€€€€±½½ÕĞ€ôÍ•±˜¹±¥•¹Ğ¹Á½ÍĞ ˆ½…Á¤½Í•ÍÍ¥½¸½±½½ÕĞˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡±½½ÕĞ¹ÍÑ…ÑÕÍ}½‘”°€ÈÀÀ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑQÉÕ”¡Í•±˜¹±¥•¹Ğ¹•Ğ ˆ½…Á¤½Í•ÍÍ¥½¸ˆ¤¹©Í½¸ ¥l‰…ÕÑ¡•¹Ñ¥…Ñ•‰t¤((€€€‘•˜Ñ•ÍÑ}É•…±Ñ¥µ•}…¹‘}•Ù•¹Ñ}™••¡Í•±˜¤è(€€€€€€€ÉĞ€ôÍ•±˜¹±¥•¹Ğ¹•Ğ ˆ½…Á¤½É•…±Ñ¥µ”ıµ¥¹ÕÑ•ÌôØÀ™Í½Á”õ1=	0ˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡ÉĞ¹ÍÑ…ÑÕÍ}½‘”°€ÈÀÀ¤(€€€€€€€Á…å±½…€ôÉĞ¹©Í½¸ ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡Á…å±½…‘l‰Í½Á”‰t°€‰1=	0ˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ%¸ ‰É•Í½ÕÉ•Ìˆ°Á…å±½…¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡±•¸¡Á…å±½…‘l‰É•Í½ÕÉ•Ì‰t¤°€à¤(€€€€€€€•Ù•¹ÑÌ€ôÍ•±˜¹±¥•¹Ğ¹•Ğ ˆ½…Á¤½•Ù•¹ÑÌı±¥µ¥ĞôÄÀˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡•Ù•¹ÑÌ¹ÍÑ…ÑÕÍ}½‘”°€ÈÀÀ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ%Í%¹ÍÑ…¹”¡•Ù•¹ÑÌ¹©Í½¸ ¤°±¥ÍĞ¤((€€€‘•˜Ñ•ÍÑ}É•…±Ñ¥µ•}½µ‰¥¹•‘}É•ÑÕÉ¹Í}‰½Ñ¡}Í½Á•Í}™É½µ}½¹•}Í¹…ÁÍ¡½Ğ¡Í•±˜¤è(€€€€€€€É•ÍÁ½¹Í”€ôÍ•±˜¹±¥•¹Ğ¹•Ğ ˆ½…Á¤½É•…±Ñ¥µ”½½µ‰¥¹•ıµ¥¹ÕÑ•ÌôØÀˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡É•ÍÁ½¹Í”¹ÍÑ…ÑÕÍ}½‘”°€ÈÀÀ¤(€€€€€€€Á…ç[h‘éì¶»§q«^toad = response.json()
         self.assertEqual(payload["scope"], "BOTH")
         self.assertEqual(payload["global"]["scope"], "GLOBAL")
         self.assertEqual(payload["russia"]["scope"], "RUSSIA")
@@ -266,51 +129,7 @@ class NetWeatherApiTest(unittest.TestCase):
             ranks = [item["rank"] for item in group["items"]]
             self.assertEqual(ranks, list(range(1, 11)))
             all_items.extend(group["items"])
-        self.assertEqual(len({item["key"] for item in all_items}), 40)
-        self.assertEqual(len({item["target"] for item in all_items}), 40)
-        self.assertTrue(any(item["already_added"] for item in all_items))
-
-        add = self.client.post("/api/resource-catalog/add", json={"resource_keys":["int-chatgpt","msg-youtube"]})
-        self.assertEqual(add.status_code, 200)
-        self.assertEqual(len(add.json()["added"]), 2)
-        again = self.client.post("/api/resource-catalog/add", json={"resource_keys":["int-chatgpt","msg-youtube"]})
-        self.assertEqual(again.status_code, 200)
-        self.assertEqual(len(again.json()["added"]), 0)
-        self.assertEqual(len(again.json()["existing"]), 2)
-
-    def test_manual_catalog_match_uses_catalog_resource_without_duplicate(self):
-        match = self.client.get("/api/resource-catalog/match", params={"target":"https://github.com/openai"}).json()
-        self.assertTrue(match["matched"])
-        self.assertEqual(match["resource"]["key"], "int-github")
-        self.assertTrue(match["already_added"])
-
-        first = self.client.post("/api/resources", json={
-            "name":"Ñ€ÑƒÑ‡Ğ½Ğ¾Ğ¹ YouTube",
-            "target":"https://youtu.be/",
-            "group_name":"CUSTOM",
-        })
-        self.assertEqual(first.status_code, 200)
-        body = first.json()
-        self.assertTrue(body["used_catalog"])
-        self.assertTrue(body["created"])
-        rid = body["id"]
-        detail = self.client.get("/api/resources/%d" % rid).json()["resource"]
-        self.assertEqual(detail["name"], "YouTube")
-        self.assertEqual(detail["group_name"], "MESSENGERS")
-        self.assertEqual(detail["catalog_key"], "msg-youtube")
-
-        second = self.client.post("/api/resources", json={
-            "name":"ĞµÑ‰Ñ‘ YouTube",
-            "target":"https://www.youtube.com/watch?v=test",
-            "group_name":"RUSSIAN",
-        })
-        self.assertEqual(second.status_code, 200)
-        self.assertTrue(second.json()["already_exists"])
-        self.assertEqual(second.json()["id"], rid)
-
-    def test_target_metadata_blocks_private_targets(self):
-        response = self.client.get("/api/target-meta", params={"target":"http://127.0.0.1/"})
-        self.assertEqual(response.status_code, 400)
+        self.asserYªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×5N‹Z–‹­¦ëeŠw¬ÕÑÅÕ…°¡±•¸¡í¥Ñ•µl‰­•ä‰t™½È¥Ñ•´¥¸…±±}¥Ñ•µÍô¤°€ĞÀ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡±•¸¡í¥Ñ•µl‰Ñ…É•Ğ‰t™½È¥Ñ•´¥¸…±±}¥Ñ•µÍô¤°€ĞÀ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑQÉÕ”¡…¹ä¡¥Ñ•µl‰…±É•…‘å}…‘‘•‰t™½È¥Ñ•´¥¸…±±}¥Ñ•µÌ¤¤((€€€€€€€…‘€ôÍ•±˜¹±¥•¹Ğ¹Á½ÍĞ ˆ½…Á¤½É•Í½ÕÉ”µ…Ñ…±½œ½…‘ˆ°©Í½¸õì‰É•Í½ÕÉ•}­•åÌˆél‰¥¹Ğµ¡…ÑÁĞˆ°‰µÍœµå½ÕÑÕ‰”‰uô¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡…‘¹ÍÑ…ÑÕÍ}½‘”°€ÈÀÀ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡±•¸¡…‘¹©Í½¸ ¥l‰…‘‘•‰t¤°€È¤(€€€€€€€……¥¸€ôÍ•±˜¹±¥•¹Ğ¹Á½ÍĞ ˆ½…Á¤½É•Í½ÕÉ”µ…Ñ…±½œ½…‘ˆ°©Í½¸õì‰É•Í½ÕÉ•}­•åÌˆél‰¥¹Ğµ¡…ÑÁĞˆ°‰µÍœµå½ÕÑÕ‰”‰uô¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡……¥¸¹ÍÑ…ÑÕÍ}½‘”°€ÈÀÀ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡±•¸¡……¥¸¹©Í½¸ ¥l‰…‘‘•‰t¤°€À¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡±•¸¡……¥¸¹©Í½¸ ¥l‰•á¥ÍÑ¥¹œ‰t¤°€È¤((€€€‘•˜Ñ•ÍÑ}µ…¹Õ…±}…Ñ…±½}µ…Ñ¡}ÕÍ•Í}…Ñ…±½}É•Í½ÕÉ•}İ¥Ñ¡½ÕÑ}‘ÕÁ±¥…Ñ”¡Í•±˜¤è(€€€€€€€µ…Ñ €ôÍ•±˜¹±¥•¹Ğ¹•Ğ ˆ½…Á¤½É•Í½ÕÉ”µ…Ñ…±½œ½µ…Ñ ˆ°Á…É…µÌõì‰Ñ…É•Ğˆè‰¡ÑÑÁÌè¼½¥Ñ¡Õˆ¹½´½½Á•¹…¤‰ô¤¹©Í½¸ ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑQÉÕ”¡µ…Ñ¡l‰µ…Ñ¡•‰t¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡µ…Ñ¡l‰É•Í½ÕÉ”‰ul‰­•ä‰t°€‰¥¹Ğµ¥Ñ¡Õˆˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑQÉÕ”¡µ…Ñ¡l‰…±É•…‘å}…‘‘•‰t¤((€€€€€€€™¥ÉÍĞ€ôÍ•±˜¹±¥•¹Ğ¹Á½ÍĞ ˆ½…Á¤½É•Í½ÕÉ•Ìˆ°©Í½¸õì(€€€€€€€€€€€€‰¹…µ”ˆè‹FFFB÷BûBäe½ÕQÕ‰”ˆ°(€€€€€€€€€€€€‰Ñ…É•Ğˆè‰¡ÑÑÁÌè¼½å½ÕÑÔ¹‰”¼ˆ°(€€€€€€€€€€€€‰É½ÕÁ}¹…µ”ˆè‰UMQ=4ˆ°(€€€€€€€ô¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡™¥ÉÍĞ¹ÍÑ…ÑÕÍ}½‘”°€ÈÀÀ¤(€€€€€€€‰½‘ä€ô™¥ÉÍĞ¹©Í½¸ ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑQÉÕ”¡‰½‘ål‰ÕÍ•‘}…Ñ…±½œ‰t¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑQÉÕ”¡‰½‘ål‰É•…Ñ•‰t¤(€€€€€€€É¥€ô‰½‘ål‰¥‰t(€€€€€€€‘•Ñ…¥°€ôÍ•±˜¹±¥•¹Ğ¹•Ğ ˆ½…Á¤½É•Í½ÕÉ•Ì¼•ˆ€”É¥¤¹©Í½¸ ¥l‰É•Í½ÕÉ”‰t(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡‘•Ñ…¥±l‰¹…µ”‰t°€‰e½ÕQÕ‰”ˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡‘•Ñ…¥±l‰É½ÕÁ}¹…µ”‰t°€‰5MM9ILˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡‘•Ñ…¥±l‰…Ñ…±½}­•ä‰t°€‰µÍœµå½ÕÑÕ‰”ˆ¤((€€€€€€€Í•½¹€ôÍ•±˜¹±¥•¹Ğ¹Á½ÍĞ ˆ½…Á¤½É•Í½ÕÉ•Ìˆ°©Í½¸õì(€€€€€€€€€€€€‰¹…µ”ˆè‹B×F'FDe½ÕQÕ‰”ˆ°(€€€€€€€€€€€€‰Ñ…É•Ğˆè‰¡ÑÑÁÌè¼½İİÜ¹å½ÕÑÕ‰”¹½´½İ…Ñ ıØõÑ•ÍĞˆ°(€€€€€€€€€€€€‰É½ÕÁ}¹…µ”ˆè‰IUMM%8ˆ°(€€€€€€€ô¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡Í•½¹¹ÍÑ…ÑÕÍ}½‘”°€ÈÀÀ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑQÉÕ”¡Í•½¹¹©Í½¸ ¥l‰…±É•…‘å}•á¥ÍÑÌ‰t¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡Í•½¹¹©Í½¸ ¥l‰¥‰t°É¥¤((€€€‘•˜Ñ•ÍÑ}Ñ…É•Ñ}µ•Ñ…‘…Ñ…}‰±½­Í}ÁÉ¥Ù…Ñ•}Ñ…É•ÑÌ¡Í•±˜¤è(€€€€€€€É•ÍÁ½¹Í”€ôÍ•±˜¹±¥•¹Ğ¹•Ğ ˆ½…Á¤½Ñ…É•Ğµµ•Ñ„ˆ°Á…É…µÌõì‰Ñ…É•Ğˆè‰¡ÑÑÀè¼¼ÄÈÜ¸À¸À¸Ä¼‰ô¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡É•ÍÁ½¹Í”¹ÍÑ…ÑÕÍ}½‘”°€Ó[h‘éì¶»§q«^t0)
         self.assertIn("Private", response.json()["detail"])
 
     def test_resource_crud_and_auth(self):
@@ -345,44 +164,7 @@ class NetWeatherApiTest(unittest.TestCase):
         self.assertEqual(row["diagnosis"], "LOCAL_NETWORK")
         self.assertTrue(dash["summary"]["your_network_available"])
         self.assertEqual(next(p for p in dash["probes"] if p["probe_key"] == "ANDROID_TEST_123")["agent_version"], "0.4.0")
-        self.assertGreaterEqual(dash["summary"]["local"], 1)
-
-    def test_device_code_pairing_issues_unique_token_and_blocks_spoofed_probe_key(self):
-        self.main.AUTH_REQUIRED = True
-        start = self.client.post("/api/v1/device-auth/start", json={
-            "device_id":"android-installation-1234567890",
-            "device_name":"Galaxy S25",
-            "app_version":"0.4.1",
-        })
-        self.assertEqual(start.status_code, 200)
-        pending = start.json()
-        self.assertRegex(pending["user_code"], r"^[A-Z2-9]{4}-[A-Z2-9]{4}$")
-        blocked = self.client.get("/api/v1/client-probe/resources")
-        self.assertEqual(blocked.status_code, 401)
-        self.client.post("/api/session/login", json={"password":"owner-pass"})
-        approved = self.client.post("/api/device-auth/approve", json={"user_code":pending["user_code"]})
-        self.assertEqual(approved.status_code, 200)
-        token_response = self.client.post("/api/v1/device-auth/poll", json={
-            "session_id":pending["session_id"], "poll_secret":pending["poll_secret"],
-        }).json()
-        self.assertEqual(token_response["status"], "authorized")
-        device_auth = {"Authorization":f"Bearer {token_response['access_token']}"}
-        resources = self.client.get("/api/v1/client-probe/resources", headers=device_auth)
-        self.assertEqual(resources.status_code, 200)
-        rid = resources.json()[0]["id"]
-        result = self.client.post("/api/v1/client-probe/result", headers=device_auth, json={
-            "payload":{"resource_id":rid,"status":"OK","response_time_ms":100,"message":"ok"},
-            "probe":{"probe_key":"SPOOFED_DEVICE","name":"Spoofed","app_version":"0.4.1"},
-        })
-        self.assertEqual(result.status_code, 200)
-        probes = self.client.get("/api/dashboard").json()["probes"]
-        self.assertTrue(any(p["probe_key"] == "android-installation-1234567890" for p in probes))
-        self.assertFalse(any(p["probe_key"] == "SPOOFED_DEVICE" for p in probes))
-
-        restarted = self.client.post("/api/v1/device-auth/start", json={
-            "device_id":"android-installation-1234567890", "device_name":"Galaxy S25", "app_version":"0.4.1",
-        }).json()
-        self.assertNotEqual(restarted["user_code"], pending["user_code"])
+        selYªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×5N‹Z–‹­¦ëeŠw¬Õ˜¹…ÍÍ•ÉÑÉ•…Ñ•ÉÅÕ…°¡‘…Í¡l‰ÍÕµµ…Éä‰ul‰±½…°‰t°€Ä¤((€€€‘•˜Ñ•ÍÑ}‘•Ù¥•}½‘•}Á…¥É¥¹}¥ÍÍÕ•Í}Õ¹¥ÅÕ•}Ñ½­•¹}…¹‘}‰±½­Í}ÍÁ½½™•‘}ÁÉ½‰•}­•ä¡Í•±˜¤è(€€€€€€€Í•±˜¹µ…¥¸¹UQ!}IEU%I€ôQÉÕ”(€€€€€€€ÍÑ…ÉĞ€ôÍ•±˜¹±¥•¹Ğ¹Á½ÍĞ ˆ½…Á¤½ØÄ½‘•Ù¥”µ…ÕÑ ½ÍÑ…ÉĞˆ°©Í½¸õì(€€€€€€€€€€€€‰‘•Ù¥•}¥ˆè‰…¹‘É½¥µ¥¹ÍÑ…±±…Ñ¥½¸´ÄÈÌĞÔØÜàäÀˆ°(€€€€€€€€€€€€‰‘•Ù¥•}¹…µ”ˆè‰…±…áäLÈÔˆ°(€€€€€€€€€€€€‰…ÁÁ}Ù•ÉÍ¥½¸ˆèˆÀ¸Ğ¸Äˆ°(€€€€€€€ô¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡ÍÑ…ÉĞ¹ÍÑ…ÑÕÍ}½‘”°€ÈÀÀ¤(€€€€€€€Á•¹‘¥¹œ€ôÍÑ…ÉĞ¹©Í½¸ ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑI••à¡Á•¹‘¥¹l‰ÕÍ•É}½‘”‰t°È‰ymµhÈ´åuìÑôµmµhÈ´åuìÑôˆ¤(€€€€€€€‰±½­•€ôÍ•±˜¹±¥•¹Ğ¹•Ğ ˆ½…Á¤½ØÄ½±¥•¹ĞµÁÉ½‰”½É•Í½ÕÉ•Ìˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡‰±½­•¹ÍÑ…ÑÕÍ}½‘”°€ĞÀÄ¤(€€€€€€€Í•±˜¹±¥•¹Ğ¹Á½ÍĞ ˆ½…Á¤½Í•ÍÍ¥½¸½±½¥¸ˆ°©Í½¸õì‰Á…ÍÍİ½Éˆè‰½İ¹•ÈµÁ…ÍÌ‰ô¤(€€€€€€€…ÁÁÉ½Ù•€ôÍ•±˜¹±¥•¹Ğ¹Á½ÍĞ ˆ½…Á¤½‘•Ù¥”µ…ÕÑ ½…ÁÁÉ½Ù”ˆ°©Í½¸õì‰ÕÍ•É}½‘”ˆéÁ•¹‘¥¹l‰ÕÍ•É}½‘”‰uô¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡…ÁÁÉ½Ù•¹ÍÑ…ÑÕÍ}½‘”°€ÈÀÀ¤(€€€€€€€Ñ½­•¹}É•ÍÁ½¹Í”€ôÍ•±˜¹±¥•¹Ğ¹Á½ÍĞ ˆ½…Á¤½ØÄ½‘•Ù¥”µ…ÕÑ ½Á½±°ˆ°©Í½¸õì(€€€€€€€€€€€€‰Í•ÍÍ¥½¹}¥ˆéÁ•¹‘¥¹l‰Í•ÍÍ¥½¹}¥‰t°€‰Á½±±}Í•É•ĞˆéÁ•¹‘¥¹l‰Á½±±}Í•É•Ğ‰t°(€€€€€€€ô¤¹©Í½¸ ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡Ñ½­•¹}É•ÍÁ½¹Í•l‰ÍÑ…ÑÕÌ‰t°€‰…ÕÑ¡½É¥é•ˆ¤(€€€€€€€‘•Ù¥•}…ÕÑ €ôì‰ÕÑ¡½É¥é…Ñ¥½¸ˆé˜‰	•…É•ÈíÑ½­•¹}É•ÍÁ½¹Í•l…•ÍÍ}Ñ½­•¸uô‰ô(€€€€€€€É•Í½ÕÉ•Ì€ôÍ•±˜¹±¥•¹Ğ¹•Ğ ˆ½…Á¤½ØÄ½±¥•¹ĞµÁÉ½‰”½É•Í½ÕÉ•Ìˆ°¡•…‘•ÉÌõ‘•Ù¥•}…ÕÑ ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡É•Í½ÕÉ•Ì¹ÍÑ…ÑÕÍ}½‘”°€ÈÀÀ¤(€€€€€€€É¥€ôÉ•Í½ÕÉ•Ì¹©Í½¸ ¥lÁul‰¥‰t(€€€€€€€É•ÍÕ±Ğ€ôÍ•±˜¹±¥•¹Ğ¹Á½ÍĞ ˆ½…Á¤½ØÄ½±¥•¹ĞµÁÉ½‰”½É•ÍÕ±Ğˆ°¡•…‘•ÉÌõ‘•Ù¥•}…ÕÑ °©Í½¸õì(€€€€€€€€€€€€‰Á…å±½…ˆéì‰É•Í½ÕÉ•}¥ˆéÉ¥°‰ÍÑ…ÑÕÌˆè‰=,ˆ°‰É•ÍÁ½¹Í•}Ñ¥µ•}µÌˆèÄÀÀ°‰µ•ÍÍ…”ˆè‰½¬‰ô°(€€€€€€€€€€€€‰ÁÉ½‰”ˆéì‰ÁÉ½‰•}­•äˆè‰MA==}Y%ˆ°‰¹…µ”ˆè‰MÁ½½™•ˆ°‰…ÁÁ}Ù•ÉÍ¥½¸ˆèˆÀ¸Ğ¸Ä‰ô°(€€€€€€€ô¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡É•ÍÕ±Ğ¹ÍÑ…ÑÕÍ}½‘”°€ÈÀÀ¤(€€€€€€€ÁÉ½‰•Ì€ôÍ•±˜¹±¥•¹Ğ¹•Ğ ˆ½…Á¤½‘…Í¡‰½…Éˆ¤¹©Í½¸ ¥l‰ÁÉ½‰•Ì‰t(€€€€€€€Í•±˜¹…ÍÍ•ÉÑQÉÕ”¡…¹ä¡Ál‰ÁÉ½‰•}­•ä‰t€ôô€‰…¹‘É½¥µ¥¹ÍÑ…±±…Ñ¥½¸´ÄÈÌĞÔØÜàäÀˆ™½ÈÀ¥¸ÁÉ½‰•Ì¤¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ…±Í”¡…¹ä¡Ál‰ÁÉ½‰•}­•ä‰t€ôô€‰MA==}Y%ˆ™½ÈÀ¥¸ÁÉ½‰•Ì¤¤((€€€€€€€É•ÍÑ…ÉÑ•€ôÍ•±˜¹±¥•¹Ğ¹Á½ÍĞ ˆ½…Á¤½ØÄ½‘•Ù¥”µ…ÕÑ ½ÍÑ…ÉĞˆ°©Í½¸õì(€€€€€€€€€€€€‰‘•Ù¥•}¥ˆè‰…¹‘É½¥µ¥¹ÍÑ…±±…Ñ¥½¸´ÄÈÌĞÔØÜàäÀˆ°€‰‘•Ù¥•}¹…µ”ˆè‰…±…áäLÈÔˆ°€‰…ÁÁ}Ù•ÉÍ¥½¸ˆèˆÀ¸Ğ¸Äˆ°(€€€€€€€ô¤¹©Í½¸ ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ9½ÑÅÕ…°¡É•ÍÑ…ÉÑ•‘l‰ÕÍ—[h‘éì¶»§q«^v_code"], pending["user_code"])
         # Asking for a fresh code does not break an already-authorized installation.
         self.assertEqual(self.client.get("/api/v1/client-probe/resources", headers=device_auth).status_code, 200)
 
@@ -418,35 +200,7 @@ class NetWeatherApiTest(unittest.TestCase):
         rid = self.client.get("/api/dashboard").json()["resources"][0]["id"]
         now = int(time.time())
         with self.main.db() as conn:
-            conn.execute("""INSERT INTO diagnostic_jobs(
-              resource_id,provider,priority,status,created_at,updated_at,classification,confidence,result_summary_json,raw_json,completed_at
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?)""", (rid,"globalping",1,"finished",now-30,now,"SERVICE_DOWN","high",'{"failed":3}','{"sensitive":"hidden"}',now))
-            conn.execute("""INSERT INTO external_evidence(
-              resource_id,provider,scope_key,status,classification,confidence,summary_json,raw_json,fetched_at,expires_at
-            ) VALUES(?,?,?,?,?,?,?,?,?,?)""", (rid,"statuspage","github.com","SIGNAL","PROVIDER_INCIDENT","medium",'{"description":"API degraded"}','{}',now-20,now+300))
-        detail = self.client.get(f"/api/resources/{rid}").json()
-        self.assertEqual(len(detail["timeline"]), 2)
-        sources = {entry["source"] for entry in detail["timeline"]}
-        self.assertIn("statuspage", sources)
-        self.assertIn("globalping", sources)
-        self.assertTrue(any(entry["classification"] == "SERVICE_DOWN" for entry in detail["timeline"]))
-        self.assertTrue(all("raw" not in entry for entry in detail["timeline"]))
-        self.assertNotIn("sensitive", str(detail["timeline"]))
-
-    def test_incident_refresh_stores_official_status_page_evidence(self):
-        rid = next(r["id"] for r in self.client.get("/api/resources").json() if r["target"] == "https://github.com")
-        evidence = IntelligenceEvidence("statuspage", "SIGNAL", "PROVIDER_INCIDENT", "medium",
-                                        {"service":"GitHub","description":"API degraded"}, {})
-        with patch.object(self.main._statuspage, "fetch", new=AsyncMock(return_value=evidence)) as fetch:
-            result = asyncio.run(self.main.refresh_external_intelligence(rid, force=True))
-        fetch.assert_awaited_once_with("https://github.com")
-        self.assertEqual(result["statuspage"]["classification"], "PROVIDER_INCIDENT")
-        detail = self.client.get(f"/api/resources/{rid}").json()
-        self.assertTrue(any(x["source"] == "statuspage" for x in detail["timeline"]))
-
-    def test_external_diagnostic_requests_are_deduplicated(self):
-        rid = self.client.get("/api/dashboard").json()["resources"][0]["id"]
-        submission = ProviderSubmission("globalping", "measurement-1", "queued", {})
+            conn.execute("""INSERT INTO diagnostiYªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×5N‹Z–‹­¦ëeŠw¬Õ}©½‰Ì (€€€€€€€€€€€€€É•Í½ÕÉ•}¥±ÁÉ½Ù¥‘•È±ÁÉ¥½É¥Ñä±ÍÑ…ÑÕÌ±É•…Ñ•‘}…Ğ±ÕÁ‘…Ñ•‘}…Ğ±±…ÍÍ¥™¥…Ñ¥½¸±½¹™¥‘•¹”±É•ÍÕ±Ñ}ÍÕµµ…Éå}©Í½¸±É…İ}©Í½¸±½µÁ±•Ñ•‘}…Ğ(€€€€€€€€€€€€¤Y1UL ü°ü°ü°ü°ü°ü°ü°ü°ü°ü°ü¤ˆˆˆ°€¡É¥°‰±½‰…±Á¥¹œˆ°Ä°‰™¥¹¥Í¡•ˆ±¹½Ü´ÌÀ±¹½Ü°‰MIY%}=]8ˆ°‰¡¥ ˆ°ì‰™…¥±•ˆèÍôœ°ì‰Í•¹Í¥Ñ¥Ù”ˆè‰¡¥‘‘•¸‰ôœ±¹½Ü¤¤(€€€€€€€€€€€½¹¸¹•á•ÕÑ” ˆˆ‰%9MIP%9Q<•áÑ•É¹…±}•Ù¥‘•¹” (€€€€€€€€€€€€€É•Í½ÕÉ•}¥±ÁÉ½Ù¥‘•È±Í½Á•}­•ä±ÍÑ…ÑÕÌ±±…ÍÍ¥™¥…Ñ¥½¸±½¹™¥‘•¹”±ÍÕµµ…Éå}©Í½¸±É…İ}©Í½¸±™•Ñ¡•‘}…Ğ±•áÁ¥É•Í}…Ğ(€€€€€€€€€€€€¤Y1UL ü°ü°ü°ü°ü°ü°ü°ü°ü°ü¤ˆˆˆ°€¡É¥°‰ÍÑ…ÑÕÍÁ…”ˆ°‰¥Ñ¡Õˆ¹½´ˆ°‰M%90ˆ°‰AI=Y%I}%9%9Pˆ°‰µ•‘¥Õ´ˆ°ì‰‘•ÍÉ¥ÁÑ¥½¸ˆè‰A$‘•É…‘•‰ôœ°íôœ±¹½Ü´ÈÀ±¹½Ü¬ÌÀÀ¤¤(€€€€€€€‘•Ñ…¥°€ôÍ•±˜¹±¥•¹Ğ¹•Ğ¡˜ˆ½…Á¤½É•Í½ÕÉ•Ì½íÉ¥‘ôˆ¤¹©Í½¸ ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡±•¸¡‘•Ñ…¥±l‰Ñ¥µ•±¥¹”‰t¤°€È¤(€€€€€€€Í½ÕÉ•Ì€ôí•¹ÑÉål‰Í½ÕÉ”‰t™½È•¹ÑÉä¥¸‘•Ñ…¥±l‰Ñ¥µ•±¥¹”‰uô(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ%¸ ‰ÍÑ…ÑÕÍÁ…”ˆ°Í½ÕÉ•Ì¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ%¸ ‰±½‰…±Á¥¹œˆ°Í½ÕÉ•Ì¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑQÉÕ”¡…¹ä¡•¹ÑÉål‰±…ÍÍ¥™¥…Ñ¥½¸‰t€ôô€‰MIY%}=]8ˆ™½È•¹ÑÉä¥¸‘•Ñ…¥±l‰Ñ¥µ•±¥¹”‰t¤¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑQÉÕ”¡…±° ‰É…Üˆ¹½Ğ¥¸•¹ÑÉä™½È•¹ÑÉä¥¸‘•Ñ…¥±l‰Ñ¥µ•±¥¹”‰t¤¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ9½Ñ%¸ ‰Í•¹Í¥Ñ¥Ù”ˆ°ÍÑÈ¡‘•Ñ…¥±l‰Ñ¥µ•±¥¹”‰t¤¤((€€€‘•˜Ñ•ÍÑ}¥¹¥‘•¹Ñ}É•™É•Í¡}ÍÑ½É•Í}½™™¥¥…±}ÍÑ…ÑÕÍ}Á…•}•Ù¥‘•¹”¡Í•±˜¤è(€€€€€€€É¥€ô¹•áĞ¡Él‰¥‰t™½ÈÈ¥¸Í•±˜¹±¥•¹Ğ¹•Ğ ˆ½…Á¤½É•Í½ÕÉ•Ìˆ¤¹©Í½¸ ¤¥˜Él‰Ñ…É•Ğ‰t€ôô€‰¡ÑÑÁÌè¼½¥Ñ¡Õˆ¹½´ˆ¤(€€€€€€€•Ù¥‘•¹”€ô%¹Ñ•±±¥•¹•Ù¥‘•¹” ‰ÍÑ…ÑÕÍÁ…”ˆ°€‰M%90ˆ°€‰AI=Y%I}%9%9Pˆ°€‰µ•‘¥Õ´ˆ°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€ì‰Í•ÉÙ¥”ˆè‰¥Ñ!Õˆˆ°‰‘•ÍÉ¥ÁÑ¥½¸ˆè‰A$‘•É…‘•‰ô°íô¤(€€€€€€€İ¥Ñ Á…Ñ ¹½‰©•Ğ¡Í•±˜¹µ…¥¸¹}ÍÑ…ÑÕÍÁ…”°€‰™•Ñ ˆ°¹•ÜõÍå¹5½¬¡É•ÑÕÉ¹}Ù…±Õ”õ•Ù¥‘•¹”¤¤…Ì™•Ñ è(€€€€€€€€€€€É•ÍÕ±Ğ€ô…Íå¹¥¼¹ÉÕ¸¡Í•±˜¹µ…¥¸¹É•™É•Í¡}•áÑ•É¹…±}¥¹Ñ•±±¥•¹”¡É¥°™½É”õQÉÕ”¤¤(€€€€€€€™•Ñ ¹…ÍÍ•ÉÑ}…İ…¥Ñ•‘}½¹•}İ¥Ñ  ‰¡ÑÑÁÌè¼½¥Ñ¡Õˆ¹½´ˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡É•ÍÕ±Ñl‰ÍÑ…ÑÕÍÁ…”‰ul‰±…ÍÍ¥™¥…Ñ¥½¸‰t°€‰AI=Y%I}%9%9Pˆ¤(€€€€€€€‘•Ñ…¥°€ôÍ•±˜¹±¥•¹Ğ¹•Ğ¡˜ˆ½…Á¤½É•Í½ÕÉ•Ì½íÉ¥‘ôˆ¤¹©Í½¸ ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑQÉÕ”¡…¹ä¡ál‰Í½ÕÉ”‰t€ôô€‰ÍÑ…ÑÕÍÁ…”ˆ™½Èà¥¸‘•Ñ…¥±l‰Ñ¥µ•±¥¹”‰t¤¤((€€€‘•˜Ñ•ÍÑ}•áÑ•É¹…±}‘¥…¹½ÍÑ¥}É•ÅÕ•ÍÑÍ}…É•}‘•‘ÕÁ±¥…Ñ•¡Í•±˜¤è(€€€€€€€É¥€ôÍ•±˜¹±¥•¹Ğ¹•Ğ ˆ½…Á¤½‘…Í¡‰½…Éˆ¤¹©Í½¸ ¥l‰É•Í½ÕÉ•Ì‰ulÁul‰¥‰t(€€€€€€€ÍÕ‰µ¥ÍÍ¥½¸€ôAÉ½Ù¥‘•ÉMÕ‰µ¥ÍÍ¥½¸ ‰±½‰…³[h‘éì¶»§q«^ting", "measurement-1", "queued", {})
         with patch.object(self.main._diagnostics, "request", new=AsyncMock(return_value=submission)) as submit:
             first = asyncio.run(self.main.request_external_diagnostic(rid, DiagnosticPriority.NEW_DOWN))
             second = asyncio.run(self.main.request_external_diagnostic(rid, DiagnosticPriority.MANUAL))
@@ -475,39 +229,7 @@ class NetWeatherApiTest(unittest.TestCase):
         self.main.write_check(rid, bad)
         self.assertEqual(len(self.client.get("/api/incidents?active=true").json()), 0)
         self.main.write_check(rid, bad)
-        active = self.client.get("/api/incidents?active=true").json()
-        self.assertEqual(len(active), 1)
-        incident_id = active[0]["id"]
-        self.assertIsNone(active[0]["acknowledged_at"])
-        ack = self.client.post("/api/incidents/%d/ack" % incident_id)
-        self.assertEqual(ack.status_code, 200)
-        active = self.client.get("/api/incidents?active=true").json()
-        self.assertIsNotNone(active[0]["acknowledged_at"])
-        events = self.client.get("/api/events?limit=20").json()
-        incident_event = next(e for e in events if e.get("incident_id") == incident_id)
-        self.assertEqual(incident_event["acknowledged_at"], active[0]["acknowledged_at"])
-        good = dict(bad, status="OK", response_time_ms=120, http_ms=60, http_status=200, message="HTTP 200")
-        self.main.write_check(rid, good)
-        self.assertEqual(len(self.client.get("/api/incidents?active=true").json()), 0)
-
-    def test_russia_incident_emits_one_open_and_one_recovery(self):
-        created = self.client.post("/api/resources", headers=self.auth, json={"name":"Russia outage","target":"https://example.com","failure_threshold":2})
-        rid = created.json()["id"]
-        baseline = {"status":"OK","response_time_ms":120,"message":"HTTP 200"}
-        self.main.write_check(rid, baseline, probe_key="test-global", probe_scope="GLOBAL")
-        bad = {"status":"TIMEOUT","response_time_ms":8000,"message":"timeout"}
-        first = self.main.write_check(rid, bad, probe_key="test-russia", probe_scope="RUSSIA")
-        second = self.main.write_check(rid, bad, probe_key="test-russia", probe_scope="RUSSIA")
-        repeated = self.main.write_check(rid, bad, probe_key="test-russia", probe_scope="RUSSIA")
-        self.assertEqual([n["event"] for n in first], [])
-        self.assertEqual([n["event"] for n in second], ["incident_opened"])
-        self.assertEqual(repeated, [])
-        good = {"status":"OK","response_time_ms":120,"message":"HTTP 200"}
-        recovery = self.main.write_check(rid, good, probe_key="test-russia", probe_scope="RUSSIA")
-        self.assertEqual([n["event"] for n in recovery], ["incident_closed"])
-        self.assertEqual(self.client.get("/api/incidents?active=true").json(), [])
-
-    def test_russia_failures_do_not_open_restriction_when_global_resource_is_down(self):
+        active = self.client.get("/api/iYªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×5N‹Z–‹­¦ëeŠw¬Õ¹¥‘•¹ÑÌı…Ñ¥Ù”õÑÉÕ”ˆ¤¹©Í½¸ ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡±•¸¡…Ñ¥Ù”¤°€Ä¤(€€€€€€€¥¹¥‘•¹Ñ}¥€ô…Ñ¥Ù•lÁul‰¥‰t(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ%Í9½¹”¡…Ñ¥Ù•lÁul‰…­¹½İ±•‘•‘}…Ğ‰t¤(€€€€€€€…¬€ôÍ•±˜¹±¥•¹Ğ¹Á½ÍĞ ˆ½…Á¤½¥¹¥‘•¹ÑÌ¼•½…¬ˆ€”¥¹¥‘•¹Ñ}¥¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡…¬¹ÍÑ…ÑÕÍ}½‘”°€ÈÀÀ¤(€€€€€€€…Ñ¥Ù”€ôÍ•±˜¹±¥•¹Ğ¹•Ğ ˆ½…Á¤½¥¹¥‘•¹ÑÌı…Ñ¥Ù”õÑÉÕ”ˆ¤¹©Í½¸ ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ%Í9½Ñ9½¹”¡…Ñ¥Ù•lÁul‰…­¹½İ±•‘•‘}…Ğ‰t¤(€€€€€€€•Ù•¹ÑÌ€ôÍ•±˜¹±¥•¹Ğ¹•Ğ ˆ½…Á¤½•Ù•¹ÑÌı±¥µ¥ĞôÈÀˆ¤¹©Í½¸ ¤(€€€€€€€¥¹¥‘•¹Ñ}•Ù•¹Ğ€ô¹•áĞ¡”™½È”¥¸•Ù•¹ÑÌ¥˜”¹•Ğ ‰¥¹¥‘•¹Ñ}¥ˆ¤€ôô¥¹¥‘•¹Ñ}¥¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡¥¹¥‘•¹Ñ}•Ù•¹Ñl‰…­¹½İ±•‘•‘}…Ğ‰t°…Ñ¥Ù•lÁul‰…­¹½İ±•‘•‘}…Ğ‰t¤(€€€€€€€½½€ô‘¥Ğ¡‰…°ÍÑ…ÑÕÌô‰=,ˆ°É•ÍÁ½¹Í•}Ñ¥µ•}µÌôÄÈÀ°¡ÑÑÁ}µÌôØÀ°¡ÑÑÁ}ÍÑ…ÑÕÌôÈÀÀ°µ•ÍÍ…”ô‰!QQ@€ÈÀÀˆ¤(€€€€€€€Í•±˜¹µ…¥¸¹İÉ¥Ñ•}¡•¬¡É¥°½½¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡±•¸¡Í•±˜¹±¥•¹Ğ¹•Ğ ˆ½…Á¤½¥¹¥‘•¹ÑÌı…Ñ¥Ù”õÑÉÕ”ˆ¤¹©Í½¸ ¤¤°€À¤((€€€‘•˜Ñ•ÍÑ}ÉÕÍÍ¥…}¥¹¥‘•¹Ñ}•µ¥ÑÍ}½¹•}½Á•¹}…¹‘}½¹•}É•½Ù•Éä¡Í•±˜¤è(€€€€€€€É•…Ñ•€ôÍ•±˜¹±¥•¹Ğ¹Á½ÍĞ ˆ½…Á¤½É•Í½ÕÉ•Ìˆ°¡•…‘•ÉÌõÍ•±˜¹…ÕÑ °©Í½¸õì‰¹…µ”ˆè‰IÕÍÍ¥„½ÕÑ…”ˆ°‰Ñ…É•Ğˆè‰¡ÑÑÁÌè¼½•á…µÁ±”¹½´ˆ°‰™…¥±ÕÉ•}Ñ¡É•Í¡½±ˆèÉô¤(€€€€€€€É¥€ôÉ•…Ñ•¹©Í½¸ ¥l‰¥‰t(€€€€€€€‰…Í•±¥¹”€ôì‰ÍÑ…ÑÕÌˆè‰=,ˆ°‰É•ÍÁ½¹Í•}Ñ¥µ•}µÌˆèÄÈÀ°‰µ•ÍÍ…”ˆè‰!QQ@€ÈÀÀ‰ô(€€€€€€€Í•±˜¹µ…¥¸¹İÉ¥Ñ•}¡•¬¡É¥°‰…Í•±¥¹”°ÁÉ½‰•}­•äô‰Ñ•ÍĞµ±½‰…°ˆ°ÁÉ½‰•}Í½Á”ô‰1=	0ˆ¤(€€€€€€€‰…€ôì‰ÍÑ…ÑÕÌˆè‰Q%5=UPˆ°‰É•ÍÁ½¹Í•}Ñ¥µ•}µÌˆèàÀÀÀ°‰µ•ÍÍ…”ˆè‰Ñ¥µ•½ÕĞ‰ô(€€€€€€€™¥ÉÍĞ€ôÍ•±˜¹µ…¥¸¹İÉ¥Ñ•}¡•¬¡É¥°‰…°ÁÉ½‰•}­•äô‰Ñ•ÍĞµÉÕÍÍ¥„ˆ°ÁÉ½‰•}Í½Á”ô‰IUMM%ˆ¤(€€€€€€€Í•½¹€ôÍ•±˜¹µ…¥¸¹İÉ¥Ñ•}¡•¬¡É¥°‰…°ÁÉ½‰•}­•äô‰Ñ•ÍĞµÉÕÍÍ¥„ˆ°ÁÉ½‰•}Í½Á”ô‰IUMM%ˆ¤(€€€€€€€É•Á•…Ñ•€ôÍ•±˜¹µ…¥¸¹İÉ¥Ñ•}¡•¬¡É¥°‰…°ÁÉ½‰•}­•äô‰Ñ•ÍĞµÉÕÍÍ¥„ˆ°ÁÉ½‰•}Í½Á”ô‰IUMM%ˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡m¹l‰•Ù•¹Ğ‰t™½È¸¥¸™¥ÉÍÑt°mt¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡m¹l‰•Ù•¹Ğ‰t™½È¸¥¸Í•½¹‘t°l‰¥¹¥‘•¹Ñ}½Á•¹•‰t¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡É•Á•…Ñ•°mt¤(€€€€€€€½½€ôì‰ÍÑ…ÑÕÌˆè‰=,ˆ°‰É•ÍÁ½¹Í•}Ñ¥µ•}µÌˆèÄÈÀ°‰µ•ÍÍ…”ˆè‰!QQ@€ÈÀÀ‰ô(€€€€€€€É•½Ù•Éä€ôÍ•±˜¹µ…¥¸¹İÉ¥Ñ•}¡•¬¡É¥°½½°ÁÉ½‰•}­•äô‰Ñ•ÍĞµÉÕÍÍ¥„ˆ°ÁÉ½‰•}Í½Á”ô‰IUMM%ˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡m¹l‰•Ù•¹Ğ‰t™½È¸¥¸É•½Ù•Éåt°l‰¥¹¥‘•¹Ñ}±½Í•‰t¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡Í•±˜¹±¥•¹Ğ¹•Ğ ˆ½…Á¤½¥¹¥‘•¹ÑÌı…Ñ¥Ù”õÑÉÕ”ˆ¤¹©Í½¸ ¤°mt¤((€€€‘•˜Ñ•ÍÑ}ÉÕÍÍ¥…}™…¥±ÕÉ•Í}‘½}¹½Ñ}½Á•¹}É•ÍÑÉ¥Ñ¥½»[h‘éì¶»§q«^wwhen_global_resource_is_down(self):
         created = self.client.post("/api/resources", headers=self.auth, json={"name":"Same outage","target":"https://example.com","failure_threshold":1})
         rid = created.json()["id"]
         bad = {"status":"TIMEOUT","response_time_ms":8000,"message":"timeout"}
@@ -535,12 +257,13 @@ class NetWeatherApiTest(unittest.TestCase):
         now = int(time.time())
         with self.main.db() as conn:
             conn.execute(
-                "INSERT INTO checks(resource_id,checked_at,status,response_time_ms,probe_scope) VALUES(?,?,?,?,?)",
-                (rid, now, "UNKNOWN", 0, "RUSSIA"),
+                "INSERT INTO checks(resource_id,checked_at,status,response_time_ms,probe_scope,message) VALUES(?,?,?,?,?,?)",
+                (rid, now, "UNKNOWN", 0, "RUSSIA", "Globalping: Ğ²ÑĞµ Ñ‚Ğ¾Ñ‡ĞºĞ¸ Ğ½Ğ°Ğ±Ğ»ÑĞ´ĞµĞ½Ğ¸Ñ Ğ·Ğ°Ğ²ĞµÑ€ÑˆĞ¸Ğ»Ğ¸ÑÑŒ Ğ²Ğ½ÑƒÑ‚Ñ€ĞµĞ½Ğ½ĞµĞ¹ Ğ¾ÑˆĞ¸Ğ±ĞºĞ¾Ğ¹."),
             )
         payload = self.client.get("/api/realtime?minutes=60&scope=DOMESTIC").json()
         row = next(resource for resource in payload["resources"] if resource["id"] == rid)
         self.assertEqual(row["points"][-1]["state"], "UNKNOWN")
+        self.assertEqual(row["points"][-1]["message"], "Globalping: Ğ²ÑĞµ Ñ‚Ğ¾Ñ‡ĞºĞ¸ Ğ½Ğ°Ğ±Ğ»ÑĞ´ĞµĞ½Ğ¸Ñ Ğ·Ğ°Ğ²ĞµÑ€ÑˆĞ¸Ğ»Ğ¸ÑÑŒ Ğ²Ğ½ÑƒÑ‚Ñ€ĞµĞ½Ğ½ĞµĞ¹ Ğ¾ÑˆĞ¸Ğ±ĞºĞ¾Ğ¹.")
 
     def test_ping_incidents_are_logged_without_notifications(self):
         created = self.client.post("/api/resources", headers=self.auth, json={
