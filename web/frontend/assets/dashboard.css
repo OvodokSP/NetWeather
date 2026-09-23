@@ -1192,4 +1192,9 @@ body.core-offline .overview-view .kpi-card::after{
 .full-table .table-row>div.neutral{color:var(--muted)}
 .overview-row-pinned .resource-card{grid-template-rows:auto 16px 28px minmax(24px,1fr) auto}
 .compact-table .table-row{height:54px}
+.overview-row-pinned .resource-card{height:auto!important;min-height:156px;grid-template-rows:auto 16px auto 40px auto}
+.overview-row-pinned .resource-card-metrics{align-items:start;gap:8px}
+.overview-row-pinned .resource-card-metrics span{line-height:1.2;margin-bottom:4px}
+.overview-row-pinned .resource-card-foot{display:grid;grid-template-columns:minmax(0,1fr);gap:2px;align-items:start}
+.overview-row-pinned .resource-card-foot span{overflow:visible;text-overflow:clip;white-space:normal;overflow-wrap:anywhere;line-height:1.2}
 .incident-read-mark{color:var(--muted);font-size:10px}

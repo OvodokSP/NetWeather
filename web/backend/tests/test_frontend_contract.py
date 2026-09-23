@@ -227,7 +227,8 @@ class FrontendContractTest(unittest.TestCase):
         self.assertIn("esc(russianResourceState(r).text)", self.js)
         self.assertIn("isConfirmedUnavailable((r.domestic||{}).status))return 0", self.js)
         self.assertIn(".resource-ru-status.bad,.table-resource-ru.bad{color:var(--red)}", self.css)
-        self.assertIn(".overview-row-pinned .resource-card{grid-template-rows:auto 16px 28px minmax(24px,1fr) auto}", self.css)
+        self.assertIn(".overview-row-pinned .resource-card{height:auto!important;min-height:156px;grid-template-rows:auto 16px auto 40px auto}", self.css)
+        self.assertIn(".overview-row-pinned .resource-card-foot span{overflow:visible;text-overflow:clip;white-space:normal;overflow-wrap:anywhere;line-height:1.2}", self.css)
 
     def test_kpi_cards_keep_enough_width_for_values_at_demo_viewports(self):
         self.assertIn("@media(max-width:1450px) and (min-width:1051px){.kpi-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}", self.css)
