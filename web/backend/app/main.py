@@ -215,11 +215,16 @@ async def run_russia_check(row) -> None:
             "message": probe_message,
         }, probe_key=RUSSIA_PROBE_KEY, probe_scope="RUSSIA")
     except Exception as exc:
+        failure = str(exc)
+        if failure == "Globalping quota: reserve_protected":
+            failure = "Проверка из РФ не запущена: исчерпан лимит фоновых запросов Globalping; оставшийся резерв сохранён для срочных проверок."
+        elif failure == "Globalping quota: quota_exhausted":
+            failure = "Проверка из РФ не запущена: полностью исчерпан часовой лимит запросов Globalping."
         write_check(int(row["id"]), {
             "status": "UNKNOWN", "response_time_ms": 0, "dns_ms": None, "tcp_ms": None,
             "tls_ms": None, "http_ms": None, "http_status": None, "resolved_ip": None,
             "tls_days_left": None, "final_url": row["target"], "location": "RU",
-            "message": f"РФ Globalping: {str(exc)[:300]}",
+            "message": failure if failure != str(exc) else f"Проверка из РФ не завершена: {failure[:300]}",
         }, probe_key=RUSSIA_PROBE_KEY, probe_scope="RUSSIA")
 
 

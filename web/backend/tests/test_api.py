@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 from app.providers import ProviderSubmission
-from app.diagnostics import DiagnosticPriority
+from app.diagnostics import DiagnosticPriority, QuotaDecision
 from app.intelligence import IntelligenceEvidence
 
 
@@ -542,6 +542,26 @@ class NetWeatherApiTest(unittest.TestCase):
         row = next(resource for resource in payload["resources"] if resource["id"] == rid)
         self.assertEqual(row["points"][-1]["state"], "UNKNOWN")
         self.assertEqual(row["points"][-1]["message"], "Globalping: все точки наблюдения завершились внутренней ошибкой.")
+
+    def test_russia_quota_failure_explains_probe_was_not_started(self):
+        created = self.client.post("/api/resources", headers=self.auth, json={
+            "name":"Quota limited RU", "target":"https://quota-limited.example",
+        }).json()
+        with self.main.db() as conn:
+            row = dict(conn.execute("SELECT * FROM resources WHERE id=?", (created["id"],)).fetchone())
+        denied = QuotaDecision(False, "reserve_protected", 175, 250, 75)
+        with patch.object(self.main._quota, "consume", return_value=denied), \
+             patch.object(self.main._globalping, "submit_http", new_callable=AsyncMock) as submit:
+            asyncio.run(self.main.run_russia_check(row))
+        self.assertFalse(submit.called)
+        with self.main.db() as conn:
+            check = conn.execute(
+                "SELECT status,message FROM checks WHERE resource_id=? AND probe_scope='RUSSIA' ORDER BY id DESC LIMIT 1",
+                (created["id"],),
+            ).fetchone()
+        self.assertEqual(check["status"], "UNKNOWN")
+        self.assertIn("Проверка из РФ не запущена", check["message"])
+        self.assertIn("резерв сохранён для срочных проверок", check["message"])
 
     def test_ping_incidents_are_logged_without_notifications(self):
         created = self.client.post("/api/resources", headers=self.auth, json={
