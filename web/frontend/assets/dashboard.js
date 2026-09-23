@@ -546,7 +546,11 @@ function timelineCurrentLabel(point,state,isStale){if(state==="up")return"Дос
 function timelineReason(point,state,isStale,staleAfter){
   if(!point)return"В выбранном периоде нет записи о проверке. Это не означает, что ресурс недоступен: проверка не запускалась или результат не был сохранён.";
   if(isStale)return"Последний результат («"+stText(point.status)+"») получен "+ago(point.timestamp)+" назад; предел свежести — "+(staleAfter/60)+" мин. Текущее состояние не подтверждено.";
-  if(point.message)return point.message;
+  if(point.message){
+    if(point.message.indexOf("Globalping quota: reserve_protected")>=0)return"Проверка из РФ не отправлена: достигнут лимит фоновых запросов Globalping. Ресурс этим замером не проверен; резерв квоты оставлен для срочных проверок.";
+    if(point.message.indexOf("Globalping quota: quota_exhausted")>=0)return"Проверка из РФ не отправлена: исчерпан часовой лимит запросов Globalping. Ресурс этим замером не проверен.";
+    return point.message
+  }
   if(state==="up")return point.status||"Проверка завершилась успешно.";
   if(state==="down")return point.status||"Проверка подтвердила недоступность.";
   if(point.status==="UNKNOWN_ERROR")return"Проверка завершилась внутренней ошибкой; состояние ресурса не установлено.";

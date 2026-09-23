@@ -234,6 +234,8 @@ class FrontendContractTest(unittest.TestCase):
         self.assertIn('Причина: <b>', self.js)
         self.assertIn('Проверка завершилась без подтверждения доступности или отказа', self.js)
         self.assertIn('UNKNOWN_ERROR:"Ошибка проверки"', self.js)
+        self.assertIn('достигнут лимит фоновых запросов Globalping', self.js)
+        self.assertIn('исчерпан часовой лимит запросов Globalping', self.js)
 
     def test_bulk_check_button_calls_owner_endpoint(self):
         self.assertIn('id="checkAllResources"', self.html)
