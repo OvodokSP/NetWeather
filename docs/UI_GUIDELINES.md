@@ -1,4 +1,73 @@
-YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×5N‹Z–‹­¦ëeŠw¬ÔŒ9•Ñ]•…Ñ¡•ÈU$Õ¥‘•±¥¹•Ì()Q¡¥Ì™¥±”¥ÌÑ¡”U$½¹ÑÉ…Ğ™½È•Ù•Éäİ•ˆÍÉ••¸¸((ŒŒ€Ä¸QåÁ½É…Á¡ä((´5¥¹¥µÕ´É•¹‘•É•Ñ•áĞÍ¥é”è€¨¨ÄÀÁà¨¨¸(´	½‘ä½½¹ÑÉ½°Ñ•áĞÍ¡½Õ±¹½Éµ…±±ä‰”€ÄÇŠLÄĞÁà¸(´!•…‘¥¹ÌµÕÍĞ™½É´„½¹Í¥ÍÑ•¹Ğ¡¥•É…É¡ä¸(´¼¹½ĞÍ½±Ù”‘•¹Í¥ÑäÁÉ½‰±•µÌ‰äÍ¡É¥¹­¥¹œÑ•áĞ‰•±½ÜÑ¡”µ¥¹¥µÕ´¸(´=¹”±½‰…°™½¹ĞÍÑ…¬¥ÌÕÍ•…É½ÍÌ=Ù•ÉÙ¥•Ü°Ñ…‰±•Ì°‘¥…±½Ì°Í•ÑÑ¥¹Ì…¹‘¥…¹½ÍÑ¥Ì¸((ŒŒ€È¸•¹Í¥Ñä()9•Ñ]•…Ñ¡•È¥Ì…¸¥¹™½Éµ…Ñ¥½¸‘…Í¡‰½…É¸()AÉ•™•Èè(´ÕÍ•™Õ°µ•ÑÉ¥Ìì(´½µÁ…ĞÉ½ÕÁÌì(´±•…È¡¥•É…É¡äì(´…±¥¹•½±Õµ¹Ìì(´ÁÉ•‘¥Ñ…‰±”Á…¹•°Í¥é•Ì¸()Ù½¥è(´½Ù•ÉÍ¥é••µÁÑäÍÕÉ™…•Ìì(´‘•½É…Ñ¥Ù”…É‘Ìİ¥Ñ ¹¼¥¹™½Éµ…Ñ¥½¸ì(´™½É¥¹œÑ¡”İ¡½±”=Ù•ÉÙ¥•Ü¥¹Ñ¼½¹”Ù¥•İÁ½ÉĞ‰äÍ¡É¥¹­¥¹œ½È±¥ÁÁ¥¹œÕÍ•™Õ°¥¹™½Éµ…Ñ¥½¸ì(´¹•ÍÑ•Ù•ÉÑ¥…°ÍÉ½±°…É•…Ì™½ÈÁÉ¥µ…Éä‘…Í¡‰½…É½¹Ñ•¹Ğ¸UÍ”¹…ÑÕÉ…°Á…”ÍÉ½±±¥¹œİ¡•¸¥Ğ(€­••ÁÌ¡…ÉÑÌ°É•Í½ÕÉ”…É‘Ì…¹ÁÉ½‰±•´É½İÌÉ•…‘…‰±”¸((ŒŒ€Ì¸É½ÕÁÌ()É½ÕÁÌ…É”„™¥ÉÍĞµ±…ÍÌµ½‘•°¸()Ù•ÉäÉ•Í½ÕÉ”™±½ÜµÕÍĞÁÉ•Í•ÉÙ”É½ÕÀ½¹Ñ•áĞè(´…‘ì(´•‘¥Ğì(´™¥±Ñ•Èì(´Á¥¸Ñ¼=Ù•ÉÙ¥•Üì(´…Ñ…±½œì(´É•Á½ÉÑÌ¸()I•Í½ÕÉ•Ì™É½´Ñ¡”ÕÉ…Ñ•…Ñ…±½œµÕÍĞ¹½Ğ‰”‘ÕÁ±¥…Ñ•…É½ÍÌÉ½ÕÁÌ¸()áÁ…¹‘•…Ñ…±½œÉ½ÕÁÌ­••ÀÑ¡•¥È¹…ÑÕÉ…°½¹Ñ•¹Ğ¡•¥¡Ğ¸Q¡•äµÕÍĞ¹•Ù•ÈÍ¡…É”½È½µÁÉ•ÍÌ„)™¥á•µ¡•¥¡ĞÉ¥ÑÉ…¬ìÑ¡”…Ñ…±½œÙ¥•İÁ½ÉĞ½İ¹ÌÑ¡”Í¥¹±”Ù•ÉÑ¥…°ÍÉ½±±‰…È°Í¼•Ù•ÉäÉ•Í½ÕÉ”)¥¸…¸•áÁ…¹‘•É½ÕÀÉ•µ…¥¹ÌÉ•…¡…‰±”¸()…Ñ…±½œÉ½İÌÉ•Í•ÉÙ”•áÁ±¥¥Ğ½±Õµ¹Ì™½ÈÑ¡”¡•­‰½à…¹É•Í½ÕÉ”¥½¸¸Q¡”É•µ…¥¹¥¹œİ¥‘Ñ )‰•±½¹ÌÑ¼Ñ¡”É•Í½ÕÉ”¹…µ”…¹‘½µ…¥¸ì±…‰•±ÌµÕÍĞ¹•Ù•È½±±…ÁÍ”¥¹Ñ¼±•ÑÑ•Èµİ¥‘”™É…µ•¹ÑÌ¸()	…Í¥ŒÉ•Í½ÕÉ”…‘‘¥Ñ¥½¸¥Ì„ÁÕ‰±¥Œ…Ñ¥½¸¸=İ¹•È…ÕÑ¡•¹Ñ¥…Ñ¥½¸µÕÍĞ½¹±ä‰”É•ÅÕ•ÍÑ•™½È)µ…¹…•µ•¹Ğ…Ñ¥½¹Ì½È…Á…‰¥±¥Ñäµ…Ñ•¡•­ÌìÑ¡”…‘™±½ÜµÕÍĞ¹½ĞÉ•‘¥É•Ğ„Ù¥•İ•ÈÑ¼±½¥¸¸((ŒŒ€Ğ¸…Á…‰¥±¥Ñäµ…İ…É”U$()%˜™Õ¹Ñ¥½¹…±¥Ñä¥ÌÕ¹…Ù…¥±…‰±”°¡¥‘”¥Ğ¥¹ÍÑ•…½˜Í¡½İ¥¹œ„‘•…Á…¹•°¸()á…µÁ±•Ìè(´¹¼¹‘É½¥ÁÉ½‰”ƒŠHÍ¡½ÜƒŠsBKBÃF#BÀƒFB×FF0èƒB÷B×BÓBûFFFBÿB÷BøƒBÇB×BÜƒBÿFBãBïBûBÛB×B÷BãF?Štİ¥Ñ¡½ÕĞ¥µÁ±å¥¹œ„™…¥±ÕÉ”ì(´¹¼•áÑ•É¹…°ÁÉ½Ù¥‘•ÈƒŠH¡¥‘”ÁÉ½Ù¥‘•È…Ñ¥½¸½ÈÍ¡½Ü…¸•áÁ±¥¥Ğ‘¥Í…‰±•ÍÑ…Ñ”ì(´¹¼•½‘…Ñ„ƒŠH¹¼½ÕÑ…”µ…Àì(´¹¼ÑÉ…•É½ÕÑ”…Á…‰¥±¥ÑäƒŠH¹¼ÑÉ…•É½ÕÑ”…Ñ¥½¸¸()Q¡”ÍÕÉÉ½Õ¹‘¥¹œ±…å½ÕĞµÕÍĞÉ•±…¥´Ñ¡”ÍÁ…”¸((ŒŒ€Ô¸	ÕÑÑ½¹Ì()Ù•Éä‰ÕÑÑ½¸µÕÍĞ¡…Ù”è(´¹½Éµ…°ÍÓ[h‘éì¶»§q«^ute;
+# NetWeather UI Guidelines
+
+This file is the UI contract for every web screen.
+
+## 1. Typography
+
+- Minimum rendered text size: **10 px**.
+- Body/control text should normally be 11â€“14 px.
+- Headings must form a consistent hierarchy.
+- Do not solve density problems by shrinking text below the minimum.
+- One global font stack is used across Overview, tables, dialogs, settings and diagnostics.
+
+## 2. Density
+
+NetWeather is an information dashboard.
+
+Prefer:
+- useful metrics;
+- compact groups;
+- clear hierarchy;
+- aligned columns;
+- predictable panel sizes.
+
+Avoid:
+- oversized empty surfaces;
+- decorative cards with no information;
+- forcing the whole Overview into one viewport by shrinking or clipping useful information;
+- nested vertical scroll areas for primary dashboard content. Use natural page scrolling when it
+  keeps charts, resource cards and problem rows readable.
+
+## 3. Groups
+
+Groups are a first-class model.
+
+Every resource flow must preserve group context:
+- add;
+- edit;
+- filter;
+- pin to Overview;
+- catalog;
+- reports.
+
+Resources from the curated catalog must not be duplicated across groups.
+
+Expanded catalog groups keep their natural content height. They must never share or compress a
+fixed-height grid track; the catalog viewport owns the single vertical scrollbar, so every resource
+in an expanded group remains reachable.
+
+Catalog rows reserve explicit columns for the checkbox and resource icon. The remaining width
+belongs to the resource name and domain; labels must never collapse into letter-wide fragments.
+
+Basic resource addition is a public action. Owner authentication must only be requested for
+management actions or capability-gated checks; the add flow must not redirect a viewer to login.
+
+## 4. Capability-aware UI
+
+If functionality is unavailable, hide it instead of showing a dead panel.
+
+Examples:
+- no Android probe â†’ show â€œĞ’Ğ°ÑˆĞ° ÑĞµÑ‚ÑŒ: Ğ½ĞµĞ´Ğ¾ÑÑ‚ÑƒĞ¿Ğ½Ğ¾ Ğ±ĞµĞ· Ğ¿Ñ€Ğ¸Ğ»Ğ¾Ğ¶ĞµĞ½Ğ¸Ñâ€ without implying a failure;
+- no external provider â†’ hide provider action or show an explicit disabled state;
+- no geodata â†’ no outage map;
+- no traceroute capability â†’ no traceroute action.
+
+The surrounding layout must reclaim the space.
+
+## 5. Buttons
+
+Every button must have:
+- normal state;
 - hover state;
 - visible keyboard focus;
 - disabled state;
