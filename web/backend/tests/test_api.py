@@ -489,6 +489,24 @@ class NetWeatherApiTest(unittest.TestCase):
         self.assertEqual([n["event"] for n in recovery], ["incident_closed"])
         self.assertEqual(self.client.get("/api/incidents?active=true").json(), [])
 
+    def test_bulk_check_runs_enabled_resources_and_records_results(self):
+        payload = {
+            "status":"OK", "response_time_ms":120, "dns_ms":10, "tcp_ms":20,
+            "tls_ms":30, "http_ms":60, "http_status":200,
+            "resolved_ip":"93.184.216.34", "tls_days_left":90,
+            "final_url":"https://example.com", "location":None, "message":"HTTP 200",
+        }
+        with self.database.db() as conn:
+            expected = conn.execute("SELECT COUNT(*) FROM resources WHERE enabled=1").fetchone()[0]
+        with patch.object(self.main,"perform_check",new_callable=AsyncMock,return_value=payload) as perform_check:
+            result = self.client.post("/api/check-all",headers=self.auth)
+        self.assertEqual(result.status_code,200)
+        self.assertEqual(result.json(),{"checked":expected,"ok":expected,"failed":0})
+        self.assertEqual(perform_check.await_count,expected)
+        with self.database.db() as conn:
+            recorded=conn.execute("SELECT COUNT(*) FROM checks WHERE probe_scope='GLOBAL'").fetchone()[0]
+        self.assertEqual(recorded,expected)
+
 
 if __name__ == "__main__":
     unittest.main()
