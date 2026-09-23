@@ -214,6 +214,10 @@ class FrontendContractTest(unittest.TestCase):
         self.assertIn('tag:"netweather-"+t.key,renotify:false', self.js)
         self.assertIn('new Notification(title', self.js)
 
+    def test_pinned_resource_cards_wrap_long_labels_inside_card_width(self):
+        self.assertIn(".overview-row-pinned .resource-card{grid-template-columns:minmax(0,1fr)}", self.css)
+        self.assertIn(".overview-row-pinned .resource-state{flex:0 1 62%;min-width:0;white-space:normal;overflow:visible;overflow-wrap:anywhere;text-overflow:clip;line-height:1.15}", self.css)
+
     def test_global_search_can_offer_resource_addition(self):
         for token in (
             "function searchTargetCandidate(",

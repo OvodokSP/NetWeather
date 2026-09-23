@@ -1171,8 +1171,9 @@ body.core-offline .overview-view .kpi-card::after{
 .overview-row-dual>.domestic-stream-panel .domestic-chart-wrap{min-height:0;height:auto!important}
 .overview-row-dual>.domestic-stream-panel .stream-legend{min-height:38px;overflow:hidden}
 .overview-row-pinned .resource-card-top{min-width:0}
+.overview-row-pinned .resource-card{grid-template-columns:minmax(0,1fr)}
 .overview-row-pinned .resource-card-name{flex:1 1 0;min-width:0}
-.overview-row-pinned .resource-state{flex:0 1 62%;min-width:0}
+.overview-row-pinned .resource-state{flex:0 1 62%;min-width:0;white-space:normal;overflow:visible;overflow-wrap:anywhere;text-overflow:clip;line-height:1.15}
 
 .overview-row-dual>.domestic-stream-panel .domestic-chart-wrap{padding:6px 10px 0}
 
