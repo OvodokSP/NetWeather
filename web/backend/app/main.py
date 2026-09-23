@@ -166,6 +166,7 @@ async def run_russia_check(row) -> None:
                 break
         summary = result.summary if result else {}
         classification = result.classification if result else None
+        now = int(time.time())
         # An incomplete or mixed Globalping result is not evidence that the
         # resource is unavailable in Russia. Keep it explicitly unknown so
         # the UI cannot turn a provider timeout into a regional outage.
@@ -179,12 +180,13 @@ async def run_russia_check(row) -> None:
             # remain unknown instead of being presented as a block.
             with db() as conn:
                 global_check = conn.execute(
-                    "SELECT status FROM checks WHERE resource_id=? AND probe_scope='GLOBAL' ORDER BY checked_at DESC,id DESC LIMIT 1",
+                    "SELECT status,checked_at FROM checks WHERE resource_id=? AND probe_scope='GLOBAL' ORDER BY checked_at DESC,id DESC LIMIT 1",
                     (int(row["id"]),),
                 ).fetchone()
             independent_failures = int(summary.get("failed") or 0) - int(summary.get("internal_failures") or 0)
             valid = int(summary.get("valid") or 0)
-            if global_check and is_reachable(global_check["status"]) and valid >= 2 and independent_failures >= 2:
+            global_is_fresh = bool(global_check and now - int(global_check["checked_at"]) <= max(180, 3 * DEFAULT_INTERVAL))
+            if global_is_fresh and is_reachable(global_check["status"]) and valid >= 2 and independent_failures >= 2:
                 status = "HTTP_ERROR"
         write_check(int(row["id"]), {
             "status": status, "response_time_ms": int(summary.get("median_latency_ms") or 0),

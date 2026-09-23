@@ -501,6 +501,18 @@ class NetWeatherApiTest(unittest.TestCase):
         active = self.client.get("/api/incidents?active=true").json()
         self.assertEqual([incident["kind"] for incident in active], ["DOWN"])
 
+    def test_stale_global_success_cannot_confirm_russia_restriction(self):
+        created = self.client.post("/api/resources", headers=self.auth, json={"name":"Stale baseline","target":"https://example.com","failure_threshold":1})
+        rid = created.json()["id"]
+        good = {"status":"OK","response_time_ms":120,"message":"HTTP 200"}
+        self.main.write_check(rid, good, probe_key="test-global", probe_scope="GLOBAL")
+        with self.main.db() as conn:
+            conn.execute("UPDATE checks SET checked_at=? WHERE resource_id=? AND probe_scope='GLOBAL'", (int(time.time())-3600,rid))
+        bad = {"status":"TIMEOUT","response_time_ms":8000,"message":"timeout"}
+        notices = self.main.write_check(rid, bad, probe_key="test-russia", probe_scope="RUSSIA")
+        self.assertEqual(notices, [])
+        self.assertEqual(self.client.get("/api/incidents?active=true").json(), [])
+
     def test_unknown_russia_measurement_is_a_chart_gap_not_a_failure(self):
         created = self.client.post("/api/resources", headers=self.auth, json={"name":"Unknown RU","target":"https://unknown.example"})
         rid = created.json()["id"]

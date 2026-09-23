@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 
-from .config import ALERT_WEBHOOK_URL, SERVER_PROBE_KEY
+from .config import ALERT_WEBHOOK_URL, DEFAULT_INTERVAL, SERVER_PROBE_KEY
 from .database import db
 from .availability import is_reachable
 
@@ -170,22 +170,23 @@ def write_check(
             # and simultaneous global outages must not open a regional alert.
             confirmed_failures = {"DNS_ERROR", "TCP_ERROR", "TLS_ERROR", "HTTP_ERROR", "TIMEOUT", "BLOCKED_TARGET"}
             global_check = conn.execute(
-                "SELECT status FROM checks WHERE resource_id=? AND probe_scope='GLOBAL' ORDER BY checked_at DESC,id DESC LIMIT 1",
+                "SELECT status,checked_at FROM checks WHERE resource_id=? AND probe_scope='GLOBAL' ORDER BY checked_at DESC,id DESC LIMIT 1",
                 (resource_id,),
             ).fetchone()
+            global_is_fresh = bool(global_check and now - int(global_check["checked_at"]) <= max(180, 3 * DEFAULT_INTERVAL))
             recent = conn.execute(
                 """SELECT status FROM checks WHERE resource_id=? AND probe_scope='RUSSIA'
                    ORDER BY checked_at DESC,id DESC LIMIT ?""",
                 (resource_id, threshold),
             ).fetchall()
-            failing = bool(global_check and is_reachable(global_check["status"]) and len(recent) >= threshold
+            failing = bool(global_is_fresh and is_reachable(global_check["status"]) and len(recent) >= threshold
                            and all(x["status"] in confirmed_failures for x in recent))
             if failing:
                 msg = f"{resource['name']}: вероятное ограничение в РФ — из российского контура недоступен, глобальная проверка успешна"
                 iid = _open(conn, resource_id, "RUSSIA_DOWN", "critical", msg, now)
                 if iid:
                     notices.append(_notice("incident_opened", iid, resource["name"], "RUSSIA_DOWN", "critical", msg, now))
-            elif is_reachable(payload["status"]) or not (global_check and is_reachable(global_check["status"])):
+            elif is_reachable(payload["status"]) or not (global_is_fresh and is_reachable(global_check["status"])):
                 for iid in _close(conn, resource_id, "RUSSIA_DOWN", now):
                     notices.append(_notice(
                         "incident_closed", iid, resource["name"], "RUSSIA_DOWN", "info",
