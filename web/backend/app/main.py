@@ -87,6 +87,11 @@ def require_token(request: Request, authorization: str | None = Header(default=N
         raise HTTPException(401, "Owner session required")
 
 
+def require_monitoring_enabled() -> None:
+    if not SCHEDULER_ENABLED:
+        raise HTTPException(503, "Проверки и мониторинг на сайте временно остановлены")
+
+
 def require_device(authorization: str | None = Header(default=None)) -> DeviceIdentity:
     if not AUTH_REQUIRED:
         return DeviceIdentity("LOCAL_DEVELOPMENT", "Local development")
@@ -363,15 +368,15 @@ def system_info():
     return {"version":APP_VERSION,"started_at":STARTED_AT,"uptime_seconds":int(time.time())-STARTED_AT,"resources":resources,
       "checks":checks,"active_incidents":incidents,"database":"ok","traceroute_available":traceroute_available,
       "webhook_configured":bool(ALERT_WEBHOOK_URL),"private_targets_allowed":ALLOW_PRIVATE_TARGETS,
-      "default_interval_seconds":DEFAULT_INTERVAL,"scheduler_enabled":SCHEDULER_ENABLED,
-      "auth_required":AUTH_REQUIRED,"globalping_enabled":GLOBALPING_ENABLED,
-      "ooni_enabled":OONI_ENABLED,"ioda_enabled":IODA_ENABLED,"diagnostic_quota":_quota.status()}
+      "default_interval_seconds":DEFAULT_INTERVAL,"scheduler_enabled":SCHEDULER_ENABLED,"monitoring_paused":not SCHEDULER_ENABLED,
+      "auth_required":AUTH_REQUIRED,"globalping_enabled":GLOBALPING_ENABLED and SCHEDULER_ENABLED,
+      "ooni_enabled":OONI_ENABLED and SCHEDULER_ENABLED,"ioda_enabled":IODA_ENABLED and SCHEDULER_ENABLED,"diagnostic_quota":_quota.status()}
 
 
 @app.get("/api/capabilities")
 def capabilities(request: Request, authorization: str | None = Header(default=None)):
     return capability_registry(owner=not AUTH_REQUIRED or _is_owner(request, authorization),
-                               globalping_enabled=GLOBALPING_ENABLED)
+                               globalping_enabled=GLOBALPING_ENABLED and SCHEDULER_ENABLED)
 
 
 @app.get("/api/auth/verify", dependencies=[Depends(require_token)])
@@ -520,7 +525,7 @@ def delete_group(group_key: str):
     return {"ok":True,"reassigned_to":"CUSTOM"}
 
 
-@app.get("/api/target-meta")
+@app.get("/api/target-meta", dependencies=[Depends(require_monitoring_enabled)])
 async def target_metadata(target:str=Query(min_length=1,max_length=2048)):
     return await discover_target_metadata(target)
 
@@ -762,7 +767,7 @@ def delete_resource(resource_id:int):
     return {"ok":True}
 
 
-@app.post("/api/resources/{resource_id}/check", dependencies=[Depends(require_token)])
+@app.post("/api/resources/{resource_id}/check", dependencies=[Depends(require_token), Depends(require_monitoring_enabled)])
 async def manual_check(resource_id:int):
     payload = await check_resource(resource_id)
     payload["external_diagnostic"] = None
@@ -771,11 +776,11 @@ async def manual_check(resource_id:int):
     return payload
 
 
-@app.post("/api/resources/{resource_id}/trace", dependencies=[Depends(require_token)])
+@app.post("/api/resources/{resource_id}/trace", dependencies=[Depends(require_token), Depends(require_monitoring_enabled)])
 async def trace_resource(resource_id:int): return await traceroute_to_resource(resource_id)
 
 
-@app.get("/api/v1/client-probe/resources")
+@app.get("/api/v1/client-probe/resources", dependencies=[Depends(require_monitoring_enabled)])
 def client_probe_resources(device: DeviceIdentity = Depends(require_device)):
     with db() as conn:
         rows = conn.execute("""SELECT id,name,target,group_name,expected_status_min,expected_status_max
@@ -783,7 +788,7 @@ def client_probe_resources(device: DeviceIdentity = Depends(require_device)):
     return [dict(row) for row in rows]
 
 
-@app.post("/api/v1/client-probe/result")
+@app.post("/api/v1/client-probe/result", dependencies=[Depends(require_monitoring_enabled)])
 def client_probe_result(payload: ClientProbeResult, probe: ClientProbeRegistration,
                         device: DeviceIdentity = Depends(require_device)):
     probe_key = probe.probe_key if device.device_id == "LOCAL_DEVELOPMENT" else device.device_id
@@ -831,12 +836,12 @@ async def request_external_diagnostic(resource_id: int, priority: DiagnosticPrio
 
 @app.get("/api/diagnostics/status")
 def diagnostic_status():
-    return {"provider":"globalping","enabled":GLOBALPING_ENABLED,"quota":_quota.status(),
+    return {"provider":"globalping","enabled":GLOBALPING_ENABLED and SCHEDULER_ENABLED,"quota":_quota.status(),
             "reserve_percent":DIAGNOSTIC_RESERVE_PERCENT,"cooldown_seconds":DIAGNOSTIC_COOLDOWN_SECONDS,
             "poll_seconds":DIAGNOSTIC_POLL_SECONDS,"ooni_enabled":OONI_ENABLED,"ioda_enabled":IODA_ENABLED}
 
 
-@app.post("/api/resources/{resource_id}/diagnose", dependencies=[Depends(require_token)])
+@app.post("/api/resources/{resource_id}/diagnose", dependencies=[Depends(require_token), Depends(require_monitoring_enabled)])
 async def diagnose_resource(resource_id:int):
     if not GLOBALPING_ENABLED:
         raise HTTPException(503, "External diagnostics provider is disabled")
@@ -845,7 +850,7 @@ async def diagnose_resource(resource_id:int):
     return diagnostic
 
 
-@app.post("/api/resources/{resource_id}/intelligence", dependencies=[Depends(require_token)])
+@app.post("/api/resources/{resource_id}/intelligence", dependencies=[Depends(require_token), Depends(require_monitoring_enabled)])
 async def refresh_resource_intelligence(resource_id: int):
     return await refresh_external_intelligence(resource_id, force=True)
 
@@ -866,7 +871,7 @@ def trace_task(task_id:int):
     return dict(row)
 
 
-@app.post("/api/check-all", dependencies=[Depends(require_token)])
+@app.post("/api/check-all", dependencies=[Depends(require_token), Depends(require_monitoring_enabled)])
 async def check_all():
     with db() as conn: rows=conn.execute("SELECT * FROM resources WHERE enabled=1").fetchall()
     results=await asyncio.gather(*(perform_check(row) for row in rows))

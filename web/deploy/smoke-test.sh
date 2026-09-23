@@ -50,10 +50,10 @@ cleanup(){ curl -fsS -X DELETE "${AUTH[@]}" "$BASE_URL/api/resources/$RID" >/dev
 trap cleanup EXIT
 ok 'POST /api/resources'
 curl -fsS -X PATCH "${AUTH[@]}" -H 'Content-Type: application/json' "$BASE_URL/api/resources/$RID" -d '{"slow_threshold_ms":1200,"failure_threshold":3}' >/dev/null; ok 'PATCH /api/resources/{id}'
-curl -fsS -X POST "${AUTH[@]}" "$BASE_URL/api/resources/$RID/check" >/dev/null; ok 'POST /api/resources/{id}/check'
+test "$(curl -sS -o /dev/null -w '%{http_code}' -X POST "${AUTH[@]}" "$BASE_URL/api/resources/$RID/check")" = "503"; ok 'POST /api/resources/{id}/check paused'
 curl -fsS "$BASE_URL/api/resources/$RID" >/dev/null; ok 'GET /api/resources/{id}'
-curl -fsS -X POST "${AUTH[@]}" "$BASE_URL/api/resources/$RID/trace" >/dev/null; ok 'POST /api/resources/{id}/trace'
-curl -fsS -X POST "${AUTH[@]}" "$BASE_URL/api/check-all" >/dev/null; ok 'POST /api/check-all'
+test "$(curl -sS -o /dev/null -w '%{http_code}' -X POST "${AUTH[@]}" "$BASE_URL/api/resources/$RID/trace")" = "503"; ok 'POST /api/resources/{id}/trace paused'
+test "$(curl -sS -o /dev/null -w '%{http_code}' -X POST "${AUTH[@]}" "$BASE_URL/api/check-all")" = "503"; ok 'POST /api/check-all paused'
 cleanup
 trap - EXIT
 ok 'DELETE /api/resources/{id}'

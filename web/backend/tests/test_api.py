@@ -352,23 +352,20 @@ class NetWeatherApiTest(unittest.TestCase):
         self.assertEqual(token_response["status"], "authorized")
         device_auth = {"Authorization":f"Bearer {token_response['access_token']}"}
         resources = self.client.get("/api/v1/client-probe/resources", headers=device_auth)
-        self.assertEqual(resources.status_code, 200)
-        rid = resources.json()[0]["id"]
+        self.assertEqual(resources.status_code, 503)
+        rid = self.client.get("/api/dashboard").json()["resources"][0]["id"]
         result = self.client.post("/api/v1/client-probe/result", headers=device_auth, json={
             "payload":{"resource_id":rid,"status":"OK","response_time_ms":100,"message":"ok"},
             "probe":{"probe_key":"SPOOFED_DEVICE","name":"Spoofed","app_version":"0.4.1"},
         })
-        self.assertEqual(result.status_code, 200)
-        probes = self.client.get("/api/dashboard").json()["probes"]
-        self.assertTrue(any(p["probe_key"] == "android-installation-1234567890" for p in probes))
-        self.assertFalse(any(p["probe_key"] == "SPOOFED_DEVICE" for p in probes))
+        self.assertEqual(result.status_code, 503)
 
         restarted = self.client.post("/api/v1/device-auth/start", json={
             "device_id":"android-installation-1234567890", "device_name":"Galaxy S25", "app_version":"0.4.1",
         }).json()
         self.assertNotEqual(restarted["user_code"], pending["user_code"])
         # Asking for a fresh code does not break an already-authorized installation.
-        self.assertEqual(self.client.get("/api/v1/client-probe/resources", headers=device_auth).status_code, 200)
+        self.assertEqual(self.client.get("/api/v1/client-probe/resources", headers=device_auth).status_code, 503)
 
     def test_device_code_start_is_rate_limited(self):
         self.main.DEVICE_AUTH_START_LIMIT = 1
@@ -489,23 +486,19 @@ class NetWeatherApiTest(unittest.TestCase):
         self.assertEqual([n["event"] for n in recovery], ["incident_closed"])
         self.assertEqual(self.client.get("/api/incidents?active=true").json(), [])
 
-    def test_bulk_check_runs_enabled_resources_and_records_results(self):
-        payload = {
-            "status":"OK", "response_time_ms":120, "dns_ms":10, "tcp_ms":20,
-            "tls_ms":30, "http_ms":60, "http_status":200,
-            "resolved_ip":"93.184.216.34", "tls_days_left":90,
-            "final_url":"https://example.com", "location":None, "message":"HTTP 200",
-        }
-        with self.database.db() as conn:
-            expected = conn.execute("SELECT COUNT(*) FROM resources WHERE enabled=1").fetchone()[0]
-        with patch.object(self.main,"perform_check",new_callable=AsyncMock,return_value=payload) as perform_check:
-            result = self.client.post("/api/check-all",headers=self.auth)
-        self.assertEqual(result.status_code,200)
-        self.assertEqual(result.json(),{"checked":expected,"ok":expected,"failed":0})
-        self.assertEqual(perform_check.await_count,expected)
-        with self.database.db() as conn:
-            recorded=conn.execute("SELECT COUNT(*) FROM checks WHERE probe_scope='GLOBAL'").fetchone()[0]
-        self.assertEqual(recorded,expected)
+    def test_bulk_check_is_disabled_while_site_monitoring_is_paused(self):
+        rid = self.client.get("/api/dashboard").json()["resources"][0]["id"]
+        with patch.object(self.main,"perform_check",new_callable=AsyncMock) as perform_check:
+            for path in (f"/api/resources/{rid}/check", f"/api/resources/{rid}/trace",
+                         f"/api/resources/{rid}/diagnose", f"/api/resources/{rid}/intelligence",
+                         "/api/check-all"):
+                with self.subTest(path=path):
+                    result = self.client.post(path, headers=self.auth)
+                    self.assertEqual(result.status_code, 503)
+                    self.assertIn("временно остановлены", result.json()["detail"])
+            self.assertEqual(perform_check.await_count, 0)
+        self.assertEqual(self.client.get("/api/v1/client-probe/resources").status_code, 503)
+
 
 
 if __name__ == "__main__":
