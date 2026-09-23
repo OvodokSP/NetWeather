@@ -1087,4 +1087,270 @@ function renderSettings(){
 
 async function manualCheck(id,button){
   try{await withBusy(button,"Проверяем…",async function(){
-    toast("Проверяем ресур�
+    toast("Проверяем ресурс…");
+    var r=await api("/api/resources/"+id+"/check",{method:"POST"},true);
+    await loadAll(true);
+    toast(r.scheduled_domestic?"VPS проверен · проверка РФ поставлена в очередь":"Проверка VPS завершена")
+  })}catch(e){toast(e.message)}
+}
+async function trace(id,domestic,button){
+  if(domestic)return traceDomestic(id,button);
+  try{await withBusy(button,"Traceroute…",async function(){
+    q("#traceOutput").innerHTML=empty("Traceroute","Выполняем маршрут с VPS…");
+    var r=await api("/api/resources/"+id+"/trace",{method:"POST"},true);
+    q("#traceMeta").textContent=r.host+" → "+r.resolved_ip+" · DNS "+r.dns_ms+" мс";
+    q("#traceOutput").innerHTML=r.hops.length?r.hops.map(function(h){return '<div class="trace-hop"><span>'+h.hop+'</span><span>'+esc(h.ip||"*")+'</span><span>'+(h.latency_ms==null?"*":h.latency_ms+" ms")+'</span></div>'}).join(""):'<pre class="trace-raw">'+esc(r.raw)+'</pre>';
+    openView("diagnostics");q("#diagResource").value=String(id);S.diagId=id
+  })}catch(e){q("#traceOutput").innerHTML=empty("Traceroute не выполнен",e.message);toast(e.message)}
+}
+async function browserTraceProbe(target){
+  var url=targetUrl(target);if(!url)throw new Error("Некорректный адрес ресурса");
+  if(url.protocol!=="https:")throw new Error("Браузерная проверка доступна только для HTTPS-ресурсов");
+  var samples=[],errors=[];
+  for(var i=0;i<2;i++){
+    var started=performance.now();
+    try{
+      await window.fetch(url.href,{method:"GET",mode:"no-cors",cache:"no-store",redirect:"follow",credentials:"omit"});
+      samples.push(Math.round(performance.now()-started));
+    }catch(e){errors.push(String(e&&e.message||e||"network error"))}
+  }
+  if(!samples.length)throw new Error(errors[0]||"Браузер не получил ответ");
+  samples.sort(function(a,b){return a-b});
+  return {url:url.href,ok:true,samples:samples,median_ms:samples[Math.floor(samples.length/2)],online:navigator.onLine!==false};
+}
+async function traceDomestic(id,button){
+  var resource=resourceById(id);if(!resource)return;
+  try{await withBusy(button,"Проверяем из браузера…",async function(){
+    openView("diagnostics");
+    q("#traceMeta").textContent="Браузер пользователя · его сеть";
+    q("#traceOutput").innerHTML=empty("Проверка из браузера","Запрашиваем ресурс напрямую из текущего браузера…");
+    var result=await browserTraceProbe(resource.target);
+    q("#traceOutput").innerHTML='<div class="browser-trace-result"><b>Ресурс доступен из браузера</b><span>'+esc(resource.target)+'</span><span>Измерения: '+result.samples.join(" / ")+' мс · медиана '+result.median_ms+' мс</span><small>Это проверка из вашей сети. Браузеры не раскрывают hop-by-hop маршрут, поэтому IP-узлы трассировки здесь недоступны.</small></div>';
+  })}catch(e){q("#traceOutput").innerHTML=empty("Проверка из браузера не выполнена",e.message);toast(e.message)}
+}
+
+function catalogItemByKey(key){
+  if(!S.catalog)return null;
+  for(var gi=0;gi<S.catalog.groups.length;gi++){
+    var items=S.catalog.groups[gi].items||[];
+    for(var ii=0;ii<items.length;ii++)if(items[ii].key===key)return items[ii]
+  }
+  return null
+}
+async function loadResourceCatalog(force){
+  if(S.catalog&&!force)return S.catalog;
+  S.catalog=await api("/api/resource-catalog");
+  return S.catalog
+}
+function renderCatalog(filter){
+  var el=q("#resourceCatalogGroups");if(!el||!S.catalog)return;
+  var needle=String(filter||"").trim().toLowerCase();
+  var html=S.catalog.groups.map(function(group,groupIndex){
+    var items=(group.items||[]).filter(function(item){
+      if(!needle)return true;
+      return item.name.toLowerCase().indexOf(needle)>=0||item.target.toLowerCase().indexOf(needle)>=0||group.title.toLowerCase().indexOf(needle)>=0
+    });
+    if(!items.length)return "";
+    var available=items.filter(function(item){return !item.already_added}).length;
+    var open=needle||groupIndex===0?" open":"";
+    return '<details class="catalog-group" data-catalog-group="'+esc(group.key)+'"'+open+'><summary><div class="catalog-group-title"><i style="background:'+esc(group.color||"#55C7FF")+'"></i><div><b>'+esc(group.title)+'</b><span>'+items.length+' ресурсов · '+available+' можно добавить</span></div></div><div class="catalog-group-meta"><span>'+esc(group.source||"")+'</span><small>'+esc(group.as_of||"")+'</small><strong>⌄</strong></div></summary><div class="catalog-group-description">'+esc(group.description||"")+'</div><div class="catalog-resource-list">'+items.map(function(item){
+      var checked=!!S.catalogSelected[item.key],disabled=!!item.already_added;
+      return '<label class="catalog-resource-row '+(disabled?"already-added":"")+'" data-catalog-row="'+esc(item.key)+'"><input type="checkbox" data-catalog-check="'+esc(item.key)+'" '+(checked?"checked ":"")+(disabled?"disabled ":"")+'><span class="catalog-checkmark"></span>'+resourceIconHtml(item.target,item.name)+'<span class="catalog-resource-main"><b><em>#'+item.rank+'</em>'+esc(item.name)+'</b><small>'+esc(item.target.replace(/^https?:\/\//,""))+'</small></span>'+(disabled?'<span class="catalog-added-badge">Уже добавлен</span>':'<span class="catalog-add-hint">Добавить</span>')+'</label>'
+    }).join("")+'</div></details>'
+  }).join("");
+  el.innerHTML=html||empty("Ничего не найдено","Измените запрос.");
+  qa("[data-catalog-check]").forEach(function(box){box.onchange=function(){if(box.checked)S.catalogSelected[box.dataset.catalogCheck]=true;else delete S.catalogSelected[box.dataset.catalogCheck];updateCatalogSelection()}});
+  updateCatalogSelection()
+}
+function updateCatalogSelection(){
+  var keys=Object.keys(S.catalogSelected),count=keys.length;
+  q("#catalogSelectedCount").textContent=count;
+  var custom=String(q("#customResourceTarget").value||"").trim();
+  var customPart=custom?(S.customCatalogMatch?" · свой адрес совпал с каталогом":" · + свой ресурс"):"";
+  q("#catalogSelectionSummary").textContent=count?(count+" "+(count===1?"ресурс выбран":count<5?"ресурса выбрано":"ресурсов выбрано")+customPart):(custom?"Будет добавлен свой ресурс":"Ничего не выбрано");
+  q("#addCatalogResources").disabled=!count&&!custom
+}
+function fillCustomGroupOptions(){
+  var sel=q("#customResourceGroup");if(!sel)return;
+  var groups=(S.groups||[]).slice().sort(function(a,b){return Number(a.sort_order||0)-Number(b.sort_order||0)});
+  sel.innerHTML=groups.map(function(g){return '<option value="'+esc(g.id)+'" '+(g.id==="CUSTOM"?"selected":"")+'>'+esc(g.title)+'</option>'}).join("")
+}
+async function openResourceCatalog(initialTarget){
+  initialTarget=typeof initialTarget==="string"?initialTarget:"";
+  S.catalogSelected={};S.customCatalogMatch=null;S.customAutoCatalogKey=null;
+  q("#catalogSearch").value="";q("#customResourceTarget").value=initialTarget;q("#customResourceName").value="";q("#customResourceName").dataset.autoSuggested="1";
+  q("#customCatalogMatch").className="custom-match hidden";q("#customCatalogMatch").innerHTML="";
+  fillCustomGroupOptions();q("#resourceCatalogGroups").innerHTML='<div class="catalog-loading">Загружаем каталог…</div>';
+  openDialog(q("#resourceDialog"),initialTarget?"#customResourceTarget":"#catalogSearch");
+  try{await loadResourceCatalog(true);renderCatalog("")}catch(e){q("#resourceCatalogGroups").innerHTML=empty("Каталог не загружен",e.message);toast(e.message)}
+  updateCatalogSelection();if(initialTarget)await inspectCustomResource()
+}
+async function inspectCustomResource(){
+  var input=q("#customResourceTarget"),raw=String(input.value||"").trim(),notice=q("#customCatalogMatch"),name=q("#customResourceName");
+  if(S.customAutoCatalogKey){delete S.catalogSelected[S.customAutoCatalogKey];S.customAutoCatalogKey=null}
+  S.customCatalogMatch=null;
+  if(!raw){notice.className="custom-match hidden";notice.innerHTML="";renderCatalog(q("#catalogSearch").value);updateCatalogSelection();return}
+  try{
+    var match=await api("/api/resource-catalog/match?target="+encodeURIComponent(raw));
+    if(input.value.trim()!==raw)return;
+    if(match.matched){
+      S.customCatalogMatch=match;
+      var item=match.resource;
+      name.value=item.name;name.dataset.autoSuggested="1";
+      notice.className="custom-match catalog-match-found";
+      notice.innerHTML='<div>'+resourceIconHtml(item.target,item.name)+'</div><div><b>Этот ресурс уже есть в каталоге</b><span>'+esc(item.name)+' · '+esc(groupTitle(item.group_key))+'</span><small>'+(match.already_added?"Он уже добавлен в мониторинг. Дубликат создан не будет.":"Будет использован каталоговый вариант вместо ручного.")+'</small></div>';
+      if(!match.already_added&&!S.catalogSelected[item.key]){S.catalogSelected[item.key]=true;S.customAutoCatalogKey=item.key}
+      renderCatalog(q("#catalogSearch").value);updateCatalogSelection();return
+    }
+    notice.className="custom-match custom-match-new";notice.innerHTML='<div class="custom-match-icon">+</div><div><b>Новый пользовательский ресурс</b><span>Совпадений в каталоге нет.</span><small>Название и логотип определяются автоматически.</small></div>';
+    var meta=await getTargetMetadata(raw);
+    if(input.value.trim()!==raw)return;
+    if((!name.value.trim()||name.dataset.autoSuggested==="1")&&meta.name){name.value=meta.name;name.dataset.autoSuggested="1"}
+  }catch(e){
+    notice.className="custom-match custom-match-error";notice.innerHTML='<div class="custom-match-icon">!</div><div><b>Не удалось проверить адрес</b><span>'+esc(e.message)+'</span></div>'
+  }
+  updateCatalogSelection()
+}
+async function submitResourceCatalog(e){
+  e.preventDefault();
+  var button=e.submitter||q("#addCatalogResources");
+  if(button&&button.dataset.busy==="1")return;
+  var keys=Object.keys(S.catalogSelected),customTarget=q("#customResourceTarget").value.trim(),messages=[],added=0,existing=0;
+  try{
+    await withBusy(button,"Добавляем…",async function(){
+      if(S.customCatalogMatch&&S.customCatalogMatch.matched&&!S.customCatalogMatch.already_added&&keys.indexOf(S.customCatalogMatch.resource.key)<0)keys.push(S.customCatalogMatch.resource.key);
+      if(keys.length){
+        var batch=await api("/api/resource-catalog/add",{method:"POST",body:JSON.stringify({resource_keys:keys})});
+        added+=batch.added.length;existing+=batch.existing.length
+      }
+      if(customTarget&&!S.customCatalogMatch){
+        var customName=q("#customResourceName").value.trim();
+        if(!customName){var meta=await getTargetMetadata(customTarget);customName=meta.name||targetMeta(customTarget).name||customTarget}
+        var custom=await api("/api/resources",{method:"POST",body:JSON.stringify({
+          name:customName,target:customTarget,group_name:q("#customResourceGroup").value||"CUSTOM",
+          interval_seconds:60,expected_status_min:200,expected_status_max:399,slow_threshold_ms:1500,failure_threshold:2,enabled:true,alerts_enabled:true
+        })});
+        if(custom.used_catalog){
+          var matchedName=custom.catalog_match&&custom.catalog_match.name||customName;
+          messages.push("«"+matchedName+"» найден в каталоге — использован каталоговый вариант")
+        }
+        if(custom.created)added++;else existing++
+      }else if(customTarget&&S.customCatalogMatch&&S.customCatalogMatch.already_added){
+        existing++;messages.push("«"+S.customCatalogMatch.resource.name+"» уже находится в мониторинге")
+      }
+      q("#resourceDialog").close();
+      S.catalog=null;await loadAll(true);
+      var parts=[];if(added)parts.push("добавлено: "+added);if(existing)parts.push("уже было: "+existing);
+      toast((parts.length?parts.join(" · "):"Изменений нет")+(messages.length?" · "+messages.join("; "):""))
+    })
+  }catch(err){toast(err.message)}
+}
+
+function formPayload(){return{name:q("#resourceName").value.trim(),target:q("#resourceTarget").value.trim(),group_name:q("#resourceGroup").value.trim()||"CUSTOM",interval_seconds:Number(q("#resourceInterval").value),expected_status_min:Number(q("#statusMin").value),expected_status_max:Number(q("#statusMax").value),slow_threshold_ms:Number(q("#slowThreshold").value),failure_threshold:Number(q("#failureThreshold").value),enabled:q("#resourceEnabled").checked,alerts_enabled:q("#alertsEnabled").checked}}
+function openResourceForm(r){
+  if(!r){openResourceCatalog();return}
+  q("#resourceForm").reset();q("#resourceId").value=r.id;q("#resourceDialogTitle").textContent="Изменить ресурс";
+  q("#resourceName").value=r.name;q("#resourceName").dataset.autoSuggested="0";q("#resourceTarget").value=r.target;q("#resourceGroup").value=r.group_name;
+  q("#resourceInterval").value=String(r.interval_seconds||60);q("#statusMin").value=r.expected_status_min||200;q("#statusMax").value=r.expected_status_max||399;
+  q("#slowThreshold").value=r.slow_threshold_ms||1500;q("#failureThreshold").value=r.failure_threshold||2;q("#resourceEnabled").checked=!!r.enabled;q("#alertsEnabled").checked=!!r.alerts_enabled;
+  syncResourceIdentity(false);openDialog(q("#resourceEditDialog"),"#resourceName")
+}
+async function saveResource(e){
+  e.preventDefault();var id=q("#resourceId").value,p=formPayload(),button=e.submitter||q("#resourceForm [type=submit]");
+  if(!id||!p.name||!p.target){toast("Заполните название и адрес");return}
+  try{await withBusy(button,"Сохраняем…",async function(){
+    await api("/api/resources/"+id,{method:"PATCH",body:JSON.stringify(p)},true);
+    q("#resourceEditDialog").close();S.catalog=null;await loadAll(true);toast("Ресурс обновлён")
+  })}catch(err){toast(err.message)}
+}
+
+async function openDetail(id){
+  try{var d=await api("/api/resources/"+id),r=normalizeResourceShape(d.resource);S.detailId=id;q("#detailTitle").textContent=r.name;q("#detailBody").innerHTML='<div class="detail-top"><div class="detail-kv"><span>Вывод</span><b>'+diagText(r.diagnosis)+'</b></div><div class="detail-kv"><span>VPS</span><b>'+stText(r.external&&r.external.status)+'</b></div><div class="detail-kv"><span>РФ</span><b>'+esc(russianResourceState(r).text)+'</b></div><div class="detail-kv"><span>Отклик</span><b>'+num((r.domestic||r.external||{}).response_time_ms," мс")+'</b></div></div><div class="detail-section"><h3>'+esc(r.target)+'</h3><div class="detail-kv"><span>Пояснение</span><b>'+esc(r.diagnosis_text||"—")+'</b></div></div><div class="detail-section"><h3>Последние проверки</h3><div class="check-list">'+(d.checks.length?d.checks.map(function(c){return '<div class="check-row"><div>'+fmt(c.checked_at)+'</div><div>'+esc(c.probe_scope||"")+' · '+stText(c.status)+'</div><div>'+esc(c.message||"")+'</div><div>'+c.response_time_ms+' мс</div></div>'}).join(""):empty("Проверок нет",""))+'</div></div>';openDialog(q("#detailDialog"),"#detailCheck")}catch(e){toast(e.message)}
+}
+async function deleteResource(){var r=resourceById(S.detailId);if(!r)return;var ok=await confirmAction({title:"Удалить ресурс?",message:"«"+r.name+"» будет удалён из мониторинга.",hint:"История проверок этого ресурса также будет удалена.",accept:"Удалить ресурс"});if(!ok)return;try{await withBusy(q("#deleteResource"),"Удаляем…",async function(){await api("/api/resources/"+r.id,{method:"DELETE"},true);q("#detailDialog").close();await loadAll(true);toast("Ресурс удалён")})}catch(e){toast(e.message)}}
+
+function appIconMarkup(name){
+  var icons={
+    overview:'<svg viewBox="0 0 24 24"><path d="M3 11.5L12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M9.5 20v-6h5v6"/></svg>',
+    resources:'<svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="11" rx="2"/><path d="M8 20h8M12 17v3"/></svg>',
+    alerts:'<svg viewBox="0 0 24 24"><path d="M12 3l9 16H3L12 3z"/><path d="M12 9v4M12 16.5h.01"/></svg>',
+    map:'<svg viewBox="0 0 24 24"><path d="M9 18l-5 2V6l5-2 6 2 5-2v14l-5 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>',
+    probes:'<svg viewBox="0 0 24 24"><circle cx="12" cy="11" r="3"/><path d="M19 11c0 5-7 10-7 10S5 16 5 11a7 7 0 0114 0z"/></svg>',
+    history:'<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>',
+    notifications:'<svg viewBox="0 0 24 24"><path d="M6 9a6 6 0 0112 0c0 7 3 7 3 7H3s3 0 3-7"/><path d="M10 20h4"/></svg>',
+    integrations:'<svg viewBox="0 0 24 24"><circle cx="7" cy="7" r="2"/><circle cx="17" cy="7" r="2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M9 7h6M7 9v6M17 9v6M9 17h6"/></svg>',
+    settings:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 13.5v-3l-2-.7-.8-1.9.9-1.9-2.1-2.1-1.9.9-1.9-.8L10.5 2h-3l-.7 2-1.9.8-1.9-.9L.9 6l.9 1.9L1 9.8l-2 .7v3l2 .7.8 1.9-.9 1.9L3 20.1l1.9-.9 1.9.8.7 2h3l.7-2 1.9-.8 1.9.9 2.1-2.1-.9-1.9.8-1.9z" transform="translate(2.5 0) scale(.79)"/></svg>',
+    bell:'<svg viewBox="0 0 24 24"><path d="M6 9a6 6 0 0112 0c0 7 3 7 3 7H3s3 0 3-7"/><path d="M10 20h4"/></svg>',
+    theme:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+    world:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 010 18M12 3a15 15 0 000 18"/></svg>',
+    expand:'<svg viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/><path d="M9 9L3 3M15 9l6-6M9 15l-6 6M15 15l6 6"/></svg>',
+    cloud:'<svg viewBox="0 0 32 32"><path d="M9 24h14a6 6 0 000-12h-.5A8 8 0 007 14.5 4.8 4.8 0 009 24z" fill="#0b2036"/><path d="M13 17h6l-2.1 3H20l-5 6 1.2-4H13z" fill="#0b2036"/></svg>'
+  };
+  return icons[name]||""
+}
+function hydrateChromeIcons(){
+  qa(".side-item[data-view]").forEach(function(b){var slot=b.querySelector(":scope > span");if(slot)slot.innerHTML=appIconMarkup(b.dataset.view)});
+  var brand=q(".brand-logo");if(brand)brand.innerHTML=appIconMarkup("cloud");
+  var alert=q("#openAlerts");if(alert)alert.innerHTML=appIconMarkup("bell")+'<i id="notifyCount" class="notify-count hidden">0</i>';
+  var theme=q("#themeToggle");if(theme)theme.innerHTML=appIconMarkup("theme");
+  var world=q("#worldButton");if(world)world.innerHTML=appIconMarkup("world");
+}
+
+function setup(){
+  hydrateChromeIcons();
+  setupDialogs();
+  localStorage.removeItem("netweather_token");
+  var shortcut=q(".search-wrap kbd");if(shortcut)shortcut.textContent=/Mac|iPhone|iPad/.test(navigator.platform)?"⌘ K":"Ctrl K";
+  updateClock();setInterval(updateClock,1000);
+  qa(".side-item[data-view]").forEach(function(b){b.onclick=function(){openView(b.dataset.view)}});
+  qa("[data-view-jump]").forEach(function(b){b.onclick=function(){openView(b.dataset.viewJump)}});
+  q("#globalSearch").oninput=function(){renderSearch(this.value)};
+  q("#globalSearch").addEventListener("keydown",handleSearchKeydown);
+  var identityTimer=null;
+  q("#resourceTarget").addEventListener("input",function(){clearTimeout(identityTimer);identityTimer=setTimeout(function(){syncResourceIdentity(false)},180)});
+  q("#resourceName").addEventListener("input",function(){this.dataset.autoSuggested="0"});
+  document.addEventListener("keydown",function(e){
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){e.preventDefault();var input=q("#globalSearch");input.focus();input.select();return}
+    if(e.key==="Escape"){
+      var search=q("#searchResults");if(search&&!search.classList.contains("hidden")){hideSearch();return}
+    }
+  });
+  document.addEventListener("click",function(e){if(!e.target.closest(".search-wrap"))hideSearch()});
+  q("#themeToggle").onclick=function(){var light=document.documentElement.dataset.theme==="light";document.documentElement.dataset.theme=light?"dark":"light";localStorage.setItem("netweather_theme",light?"dark":"light");renderAll()};
+  document.documentElement.dataset.theme=localStorage.getItem("netweather_theme")||"dark";
+  q("#openAlerts").onclick=function(){openView("alerts")};
+  q("#ackAllIncidents").onclick=acknowledgeAllIncidents;
+  q("#worldButton").onclick=function(){openView("map")};
+  q("#manageGroups").onclick=function(){openView("groups")};
+  q("#customizeOverview").onclick=openDashboardPreferences;
+  q("#dashboardPreferencesForm").onsubmit=submitDashboardPreferences;
+  q("#ownerLoginForm").onsubmit=submitOwnerLogin;
+  q("#ownerAuthAction").onclick=ownerAuthAction;
+  q("#resetDashboardPreferences").onclick=resetDashboardPreferences;
+  [q("#sidebarAddResource"),q("#openAddResource"),q("#overviewAddResource")].forEach(function(b){if(b)b.onclick=function(){openResourceCatalog()}});
+  q("#resourceCatalogForm").onsubmit=submitResourceCatalog;
+  q("#catalogSearch").oninput=function(){renderCatalog(this.value)};
+  var customTimer=null;
+  q("#customResourceTarget").oninput=function(){clearTimeout(customTimer);customTimer=setTimeout(inspectCustomResource,260);updateCatalogSelection()};
+  q("#customResourceName").oninput=function(){this.dataset.autoSuggested="0"};
+  q("#resourceForm").onsubmit=saveResource;q("#groupForm").onsubmit=saveGroup;q("#openAddGroup").onclick=function(){openGroupForm(null)};
+  qa(".modal-close").forEach(function(b){b.onclick=function(){closeDialog(b.closest("dialog"))}});
+  qa('.seg[data-minutes]').forEach(function(b){b.onclick=async function(){if(b.dataset.busy==="1")return;qa('.seg[data-minutes]').forEach(function(x){x.classList.remove("active")});b.classList.add("active");S.streamMinutes=Number(b.dataset.minutes);try{await withBusy(b,"…",async function(){var data=await Promise.all([api("/api/realtime?minutes="+S.streamMinutes+"&scope=EXTERNAL"),api("/api/realtime?minutes="+S.streamMinutes+"&scope=DOMESTIC")]);S.realtime=data[0];S.realtimeDom=data[1];renderRealtime();renderDomesticRealtime();renderResourceCards();renderOverviewTable()})}catch(e){toast(e.message)}}});
+  qa("[data-overview-resource-mode]").forEach(function(b){b.onclick=function(){S.overviewResourceMode=b.dataset.overviewResourceMode;qa("[data-overview-resource-mode]").forEach(function(x){x.classList.toggle("active",x===b)});renderOverviewTable()}});
+  q("#streamChart").addEventListener("mousemove",function(e){var canvas=q("#streamChart");setChartHover(canvas,e);handleChartMoveForCanvas(canvas,"#chartTooltip",e)});q("#streamChart").addEventListener("mouseleave",function(){q("#chartTooltip").classList.add("hidden");if(S.hoverSeries){S.hoverSeries=null;renderRealtime();renderDomesticRealtime()}});q("#domesticStreamChart").addEventListener("mousemove",function(e){var canvas=q("#domesticStreamChart");setChartHover(canvas,e);handleChartMoveForCanvas(canvas,"#domesticChartTooltip",e)});q("#domesticStreamChart").addEventListener("mouseleave",function(){q("#domesticChartTooltip").classList.add("hidden");if(S.hoverSeries){S.hoverSeries=null;renderRealtime();renderDomesticRealtime()}});
+  q("#checkAllResources").onclick=async function(){var button=this;try{await withBusy(button,"Проверяем…",async function(){var result=await api("/api/check-all",{method:"POST"},true);await loadAll(true);toast("Проверка завершена: "+result.checked+" ресурсов · доступно "+result.ok+" · проблемы "+result.failed)})}catch(e){toast(e.message)}};
+  q("#mapZoomIn").onclick=function(){S.mapScale=Math.min(2,S.mapScale+.15);q("#worldMapSvg").style.transform="scale("+S.mapScale+")"};
+  q("#mapZoomOut").onclick=function(){S.mapScale=Math.max(.8,S.mapScale-.15);q("#worldMapSvg").style.transform="scale("+S.mapScale+")"};
+  q("#mapRegion").onchange=function(){renderMap()};
+  q("#faultResourceSelect").onchange=function(){S.faultId=Number(this.value);renderFaultPanel()};
+  q("#searchInput").oninput=renderResources;q("#groupFilter").onchange=renderResources;q("#statusFilter").onchange=renderResources;
+  q("#diagResource").onchange=function(){S.diagId=Number(this.value);var r=resourceById(this.value);if(r)showDiagnostic(r)};
+  q("#diagCheck").onclick=function(){var id=Number(q("#diagResource").value);if(id)manualCheck(id,this)};q("#diagTrace").onclick=function(){var id=Number(q("#diagResource").value);if(id)trace(id,false,this)};q("#diagTraceDomestic").onclick=function(){var id=Number(q("#diagResource").value);if(id)trace(id,true,this)};
+  q("#historyRange").onchange=function(){loadAll(true)};
+  q("#enableNotifications").onclick=async function(){var button=this;if(!("Notification" in window)){toast("Браузер не поддерживает уведомления");return}await withBusy(button,"Запрашиваем…",async function(){var p=await Notification.requestPermission();renderNotifications();toast(p==="granted"?"Уведомления включены":"Разрешение не выдано")})};
+  q("#deleteResource").onclick=deleteResource;q("#editResource").onclick=function(){var r=resourceById(S.detailId);q("#detailDialog").close();if(r)openResourceForm(r)};q("#detailCheck").onclick=function(){var b=this,id=S.detailId;q("#detailDialog").close();manualCheck(id,b)};q("#detailTrace").onclick=function(){var b=this,id=S.detailId;q("#detailDialog").close();trace(id,false,b)};
+  window.addEventListener("resize",function(){renderRealtime();renderHistory();renderResourceCards();renderOverviewTable();applyDashboardPreferences()});
+  loadAll(false);S.poll=setInterval(function(){if(!S.loading)loadAll(true)},5000)
+}
+document.addEventListener("DOMContentLoaded",setup);
+})();
