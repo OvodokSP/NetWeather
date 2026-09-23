@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#08111f">
   <meta name="description" content="NetWeather — мониторинг доступности ресурсов и диагностика сетевых проблем в реальном времени.">
   <title>NetWeather</title>
-  <link rel="stylesheet" href="/assets/dashboard.css?v=0.3.10-dynamic22">
+  <link rel="stylesheet" href="/assets/dashboard.css?v=0.4.2-timeline10">
 </head>
 <body>
 <div class="shell">
@@ -22,7 +22,6 @@
       <button class="side-item" data-view="alerts"><span>△</span>Инциденты <i id="alertBadge" class="badge hidden">0</i></button>
       <button class="side-item" data-view="map"><span>◇</span>Карта сбоев</button>
       <button class="side-item" data-view="probes"><span>⌾</span>Точки наблюдения</button>
-      <button class="side-item" data-view="history"><span>▥</span>Отчёты</button>
       <button class="side-item" data-view="settings"><span>⚙</span>Настройки</button>
     </nav>
 
@@ -87,15 +86,6 @@
           </div>
 
           <div class="kpi-grid">
-            <article class="kpi-card" id="kpiGlobalCard" data-dashboard-panel="global_kpi">
-              <div class="kpi-icon blue">◎</div>
-              <div class="kpi-body">
-                <span>Глобальная доступность</span>
-                <div><strong id="kpiGlobal">—</strong><em id="kpiGlobalDelta">внешний VPS</em></div>
-                <small id="kpiGlobalHint">нет истории</small>
-              </div>
-              <canvas class="mini-spark" id="kpiGlobalSpark"></canvas>
-            </article>
             <article class="kpi-card" id="kpiResourcesCard" data-dashboard-panel="resources_kpi">
               <div class="kpi-icon green">✓</div>
               <div class="kpi-body">
@@ -113,15 +103,6 @@
                 <small id="kpiLatencyHint">медиана доступных ресурсов</small>
               </div>
               <canvas class="mini-spark" id="kpiLatencySpark"></canvas>
-            </article>
-            <article class="kpi-card" id="kpiDomesticCard" data-dashboard-panel="domestic_kpi">
-              <div class="kpi-icon violet">◒</div>
-              <div class="kpi-body">
-                <span>Российский контур</span>
-                <div><strong id="kpiRu">—</strong><em id="kpiRuDelta">нет probe</em></div>
-                <small id="kpiRuHint">данные не получены</small>
-              </div>
-              <canvas class="mini-spark" id="kpiRuSpark"></canvas>
             </article>
             <article class="kpi-card" id="kpiPersonalCard" data-dashboard-panel="personal_kpi">
               <div class="kpi-icon green">⌘</div>
@@ -141,51 +122,6 @@
               </div>
               <canvas class="mini-spark" id="kpiIncidentSpark"></canvas>
             </article>
-          </div>
-
-          <div class="overview-row overview-row-chart overview-row-dual">
-            <article class="panel streams-panel" data-dashboard-panel="realtime">
-              <div class="panel-head compact">
-                <div><h2>Доступность ресурсов в реальном времени <span class="info-dot">i</span></h2></div>
-                <div class="panel-actions">
-                  <div class="segmented">
-                    <button class="seg active" data-minutes="60">1ч</button>
-                    <button class="seg" data-minutes="360">6ч</button>
-                    <button class="seg" data-minutes="1440">24ч</button>
-                    <button class="seg" data-minutes="10080">7д</button>
-                  </div>
-                </div>
-              </div>
-              <div class="chart-wrap stream-chart-wrap">
-                <canvas id="streamChart"></canvas>
-                <div id="streamEmpty" class="chart-empty hidden">Пока нет измерений</div>
-                <div id="chartTooltip" class="chart-tooltip hidden"></div>
-              </div>
-              <div id="streamLegend" class="stream-legend"></div>
-            </article>
-
-            <article class="panel domestic-stream-panel" data-dashboard-panel="domestic_realtime">
-              <div class="panel-head compact">
-                <div><h2>Доступность из российского контура <span class="info-dot">i</span></h2><span class="panel-subtitle" id="domesticGraphMeta">Проверка с общедоступного российского probe</span></div>
-                <div class="panel-actions"><span class="stream-scope-badge" id="domesticGraphStatus">нет данных</span></div>
-              </div>
-              <div class="chart-wrap domestic-chart-wrap">
-                <canvas id="domesticStreamChart"></canvas>
-                <div id="domesticStreamEmpty" class="chart-empty">Нет измерений российского контура</div>
-                <div id="domesticChartTooltip" class="chart-tooltip hidden"></div>
-              </div>
-              <div id="domesticStreamLegend" class="stream-legend"></div>
-            </article>
-          </div>
-
-          <div class="overview-row overview-row-pinned">
-            <section class="resource-cards-section" data-dashboard-panel="pinned_resources">
-              <div class="section-head">
-                <div><span class="eyebrow">В ФОКУСЕ</span><h2>Выбранные ресурсы</h2><p>Ключевые цели и их состояние за последние 24 часа.</p></div>
-                <button class="link-btn" data-view-jump="resources">Все ресурсы →</button>
-              </div>
-              <div id="resourceCards" class="resource-cards"></div>
-            </section>
           </div>
 
           <div class="overview-row overview-row-events-map">
@@ -266,6 +202,17 @@
           <div><h1>Мониторинг и трассировка</h1><p>Ресурсы, группы, интервалы, диагностика и маршрут до цели.</p></div>
           <div class="page-actions"><button class="btn secondary owner-only" id="checkAllResources">Проверить все</button><button class="btn secondary" data-view-jump="diagnostics">Трассировка</button><button class="btn secondary owner-only" id="manageGroups">Группы</button><button class="btn primary" id="openAddResource">+ Добавить ресурс</button></div>
         </div>
+        <div class="timeline-controls"><div class="segmented" aria-label="Период наблюдений"><button class="seg active" data-minutes="60">1ч</button><button class="seg" data-minutes="360">6ч</button><button class="seg" data-minutes="1440">24ч</button><button class="seg" data-minutes="10080">7д</button></div><span>Деление шкалы — 10 секунд · статус обновляется по фактическим проверкам</span><div class="timeline-legend"><i class="up"></i>Доступен <i class="down"></i>Недоступен <i class="unknown"></i>Нет данных</div></div>
+        <div class="monitoring-timeline-grid">
+          <article class="panel timeline-panel" data-scope="global">
+            <div class="panel-head compact"><div><h2>Глобальный контур</h2><span class="panel-subtitle">Состояние каждого ресурса по последовательным проверкам</span></div><span class="stream-scope-badge" id="globalTimelineStatus">нет данных</span></div>
+            <div id="globalTimeline" class="resource-timeline-list"></div>
+          </article>
+          <article class="panel timeline-panel" data-scope="russia">
+            <div class="panel-head compact"><div><h2>Российский контур</h2><span class="panel-subtitle">Проверки из российской точки наблюдения</span></div><span class="stream-scope-badge" id="russiaTimelineStatus">нет данных</span></div>
+            <div id="russiaTimeline" class="resource-timeline-list"></div>
+          </article>
+        </div>
         <article class="panel page-panel">
           <div class="filters">
             <input class="input" id="searchInput" placeholder="Поиск по имени, адресу или IP">
@@ -326,15 +273,6 @@
         </article>
       </section>
 
-      <section class="view" id="view-history">
-        <div class="page-head"><div><h1>Отчёты</h1><p>Доступность, задержка и история проверок.</p></div><select class="select" id="historyRange"><option value="6">6 часов</option><option value="24" selected>24 часа</option><option value="72">3 дня</option><option value="168">7 дней</option><option value="720">30 дней</option></select></div>
-        <div class="two-col">
-          <article class="panel page-panel"><div class="panel-head"><h2>Доступность</h2><b id="historyAvailability">—</b></div><div class="history-chart"><canvas id="historyChart"></canvas><div id="historyEmpty" class="chart-empty hidden">Нет данных</div></div></article>
-          <article class="panel page-panel"><div class="panel-head"><h2>Задержка</h2><b id="historyLatency">—</b></div><div class="history-chart"><canvas id="latencyChart"></canvas><div id="latencyEmpty" class="chart-empty hidden">Нет данных</div></div></article>
-        </div>
-        <article class="panel page-panel"><div class="panel-head"><h2>Последние интервалы</h2></div><div id="historyTable" class="history-table"></div></article>
-      </section>
-
       <section class="view" id="view-notifications">
         <div class="page-head"><div><h1>Уведомления</h1><p>Каналы и политика оповещений.</p></div><button class="btn primary" id="enableNotifications">Включить уведомления браузера</button></div>
         <div class="settings-grid">
@@ -372,17 +310,10 @@
 <dialog id="dashboardPreferencesDialog" class="modal dashboard-preferences-modal">
   <form id="dashboardPreferencesForm">
     <div class="modal-head">
-      <div><span>ГЛАВНЫЙ ЭКРАН</span><h2>Настроить обзор</h2><p>Закрепите важные ресурсы и оставьте только нужные панели.</p></div>
+      <div><span>ГЛАВНЫЙ ЭКРАН</span><h2>Настроить обзор</h2><p>Оставьте на главном экране только нужные панели.</p></div>
       <button type="button" class="modal-close" aria-label="Закрыть окно">×</button>
     </div>
     <div class="dashboard-preferences-body">
-      <section class="preferences-section">
-        <div class="preferences-section-head">
-          <div><h3>Закреплённые ресурсы</h3><p>До 10 компактных карточек на главном экране. Ресурсы сгруппированы так же, как в мониторинге.</p></div>
-          <span id="pinnedResourceCount" class="preferences-counter">0 / 10</span>
-        </div>
-        <div id="pinnedResourceGroups" class="pinned-resource-groups"></div>
-      </section>
       <section class="preferences-section">
         <div class="preferences-section-head">
           <div><h3>Панели Overview</h3><p>Недоступные технически панели здесь не показываются вообще.</p></div>
@@ -497,6 +428,6 @@
 </dialog>
 
 <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
-<script src="/assets/dashboard.js?v=0.3.10-dynamic22"></script>
+<script src="/assets/dashboard.js?v=0.4.2-timeline10"></script>
 </body>
 </html>

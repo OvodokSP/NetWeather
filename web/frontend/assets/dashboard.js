@@ -2,10 +2,9 @@
 "use strict";
 
 var COLORS=["#ff6174","#58c7ff","#78a5ff","#42df9c","#ffd34f","#9a65ff","#56e1d0","#ff8bc7","#b8e35d","#7bb6ff"];
-var MAX_PINNED_RESOURCES=10;
 var S={
   dashboard:null,incidents:[],system:null,groups:[],realtime:null,realtimeDom:null,events:[],incidentNoticesInitialized:false,
-  historyExt:[],historyDom:[],streamMinutes:60,detailId:null,diagId:null,
+  streamMinutes:60,detailId:null,diagId:null,
   faultId:null,view:"overview",poll:null,streamMeta:null,chartMeta:{},authRequired:false,
   owner:true,mapScale:1,metaCache:{},catalog:null,catalogSelected:{},customCatalogMatch:null,customAutoCatalogKey:null,
   dashboardPrefs:null,searchIndex:-1,searchAddTarget:null,pendingSearchTarget:null,coreOnline:false,lastSuccessAt:null,
@@ -20,22 +19,18 @@ var DASHBOARD_PANEL_LABELS={
   domestic_kpi:"Российский контур",
   personal_kpi:"Моя сеть",
   incidents_kpi:"Активные инциденты",
-  realtime:"График доступности",
   events:"Последние события",
-  pinned_resources:"Закреплённые ресурсы",
   map:"Карта сбоев",
   resources_table:"Таблица ресурсов",
-  fault_domain:"Трассировка / fault domain",
-  domestic_realtime:"График российского контура"
+  fault_domain:"Трассировка / fault domain"
 };
-var DASHBOARD_PANEL_ORDER=["global_kpi","resources_kpi","latency_kpi","domestic_kpi","personal_kpi","incidents_kpi","realtime","domestic_realtime","events","pinned_resources","map","resources_table","fault_domain"];
+var DASHBOARD_PANEL_ORDER=["resources_kpi","latency_kpi","personal_kpi","incidents_kpi","events","map","resources_table","fault_domain"];
 
 function defaultDashboardPreferences(){
   return{
-    pinned_resource_ids:[],
     panels:{
-      global_kpi:true,resources_kpi:true,latency_kpi:true,domestic_kpi:true,personal_kpi:true,incidents_kpi:true,
-      realtime:true,events:true,pinned_resources:true,map:true,resources_table:true,fault_domain:true
+      resources_kpi:true,latency_kpi:true,personal_kpi:true,incidents_kpi:true,
+      events:true,map:true,resources_table:true,fault_domain:true
     }
   }
 }
@@ -45,7 +40,6 @@ function loadDashboardPreferences(){
   try{
     var raw=JSON.parse(localStorage.getItem(DASHBOARD_PREFS_KEY)||"null");
     if(raw&&typeof raw==="object"){
-      if(Array.isArray(raw.pinned_resource_ids))base.pinned_resource_ids=raw.pinned_resource_ids.map(Number).filter(Number.isFinite).slice(0,MAX_PINNED_RESOURCES);
       if(raw.panels&&typeof raw.panels==="object")Object.keys(base.panels).forEach(function(k){if(typeof raw.panels[k]==="boolean")base.panels[k]=raw.panels[k]})
     }
   }catch(_e){}
@@ -58,35 +52,18 @@ function saveDashboardPreferences(prefs){
 }
 function dashboardCapabilities(){
   var resources=S.dashboard&&S.dashboard.resources||[],probes=S.dashboard&&S.dashboard.probes||[];
-  var hasDomestic=!!((S.realtimeDom&&S.realtimeDom.resources&&S.realtimeDom.resources.length)||(S.historyDom&&S.historyDom.length));
   var hasPersonal=probes.some(function(p){return ["PERSONAL","BROWSER","DEVICE","LOCAL"].indexOf(String(p.scope||"").toUpperCase())>=0&&p.online});
   var hasMap=probes.some(function(p){return Number.isFinite(Number(p.lat))&&Number.isFinite(Number(p.lon))});
-  var hasRealtime=!!(S.realtime&&S.realtime.resources&&S.realtime.resources.length);
   return{
-    global_kpi:true,
     resources_kpi:true,
     latency_kpi:true,
-    domestic_kpi:hasDomestic,
     personal_kpi:hasPersonal,
     incidents_kpi:true,
-    realtime:hasRealtime,
     events:true,
-    pinned_resources:resources.length>0,
     map:hasMap,
     resources_table:resources.length>0,
-    fault_domain:resources.length>0&&(hasDomestic||hasPersonal),
-    domestic_realtime:true
+    fault_domain:resources.length>0,
   }
-}
-function visiblePinnedResourceIds(){
-  var resources=S.dashboard&&S.dashboard.resources||[],valid=new Set(resources.map(function(r){return Number(r.id)})),prefs=loadDashboardPreferences();
-  var chosen=(prefs.pinned_resource_ids||[]).filter(function(id){return valid.has(Number(id))}).slice(0,MAX_PINNED_RESOURCES);
-  var domestic=resources.filter(function(r){return String(r.group_name||"").toUpperCase()==="RUSSIAN"});
-  if(!chosen.length)chosen=domestic.concat(resources.filter(function(r){return domestic.indexOf(r)<0})).slice(0,MAX_PINNED_RESOURCES).map(function(r){return Number(r.id)});
-  else if(!chosen.some(function(id){return domestic.some(function(r){return Number(r.id)===Number(id)})})){
-    chosen=domestic.slice(0,2).map(function(r){return Number(r.id)}).concat(chosen).filter(function(id,pos,a){return a.indexOf(id)===pos}).slice(0,MAX_PINNED_RESOURCES)
-  }
-  return chosen
 }
 function applyDashboardPreferences(){
   if(!S.dashboard)return;
@@ -109,37 +86,20 @@ function applyDashboardPreferences(){
 }
 function renderDashboardPreferencesModal(){
   if(!S.dashboard)return;
-  var prefs=loadDashboardPreferences(),caps=dashboardCapabilities(),resources=S.dashboard.resources||[];
-  var selected=new Set(visiblePinnedResourceIds());
-  q("#pinnedResourceCount").textContent=selected.size+" / "+MAX_PINNED_RESOURCES;
-  var grouped=S.groups.map(function(g){
-    var rows=resources.filter(function(r){return r.group_name===g.id});
-    if(!rows.length)return "";
-    return '<details class="preferences-resource-group" open><summary><span><i style="background:'+esc(g.color||"#55C7FF")+'"></i><b>'+esc(g.title)+'</b></span><em>'+rows.length+'</em></summary><div class="preferences-resource-list">'+rows.map(function(r){
-      var checked=selected.has(Number(r.id));
-      return '<label class="preferences-resource-row"><input type="checkbox" data-pin-resource="'+r.id+'" '+(checked?"checked":"")+'><span class="preferences-checkbox"></span>'+resourceIconHtml(r.target,r.name)+'<span><b>'+esc(r.name)+'</b><small>'+esc(r.target.replace(/^https?:\/\//,""))+'</small></span></label>'
-    }).join("")+'</div></details>'
-  }).join("");
-  q("#pinnedResourceGroups").innerHTML=grouped||empty("Нет ресурсов","Сначала добавьте ресурсы в мониторинг.");
+  var prefs=loadDashboardPreferences(),caps=dashboardCapabilities();
   q("#dashboardPanelChoices").innerHTML=DASHBOARD_PANEL_ORDER.filter(function(key){return caps[key]}).map(function(key){
     var checked=prefs.panels[key]!==false;
     return '<label class="dashboard-panel-choice"><input type="checkbox" data-dashboard-choice="'+key+'" '+(checked?"checked":"")+'><span class="preferences-checkbox"></span><b>'+esc(DASHBOARD_PANEL_LABELS[key])+'</b></label>'
   }).join("");
-  qa("[data-pin-resource]").forEach(function(box){box.onchange=function(){
-    var checked=qa("[data-pin-resource]:checked");
-    if(checked.length>MAX_PINNED_RESOURCES){box.checked=false;toast("На главном экране можно закрепить максимум "+MAX_PINNED_RESOURCES+" ресурсов")}
-    q("#pinnedResourceCount").textContent=qa("[data-pin-resource]:checked").length+" / "+MAX_PINNED_RESOURCES
-  }});
   hydrateResourceIcons()
 }
 function openDashboardPreferences(){
   renderDashboardPreferencesModal();
-  openDialog(q("#dashboardPreferencesDialog"),"[data-pin-resource]")
+  openDialog(q("#dashboardPreferencesDialog"),"#dashboardPanelChoices")
 }
 function submitDashboardPreferences(e){
   e.preventDefault();
   var prefs=loadDashboardPreferences();
-  prefs.pinned_resource_ids=qa("[data-pin-resource]:checked").map(function(x){return Number(x.dataset.pinResource)}).slice(0,MAX_PINNED_RESOURCES);
   DASHBOARD_PANEL_ORDER.forEach(function(key){
     var box=q('[data-dashboard-choice="'+key+'"]');
     if(box)prefs.panels[key]=box.checked
@@ -262,7 +222,6 @@ function fmt(ts){if(!ts)return "—";return new Date(ts*1000).toLocaleString("ru
 function shortTime(ts){if(!ts)return "—";return new Date(ts*1000).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})}
 function ago(ts){if(!ts)return "—";var d=Math.max(0,Math.floor(Date.now()/1000-ts));if(d<60)return d+" сек назад";if(d<3600)return Math.floor(d/60)+" мин назад";if(d<86400)return Math.floor(d/3600)+" ч назад";return Math.floor(d/86400)+" дн назад"}
 function duration(sec){sec=Number(sec||0);if(sec<60)return sec+" сек";if(sec<3600)return Math.floor(sec/60)+" мин";if(sec<86400)return Math.floor(sec/3600)+" ч";return Math.floor(sec/86400)+" дн"}
-function pct(v,digits){if(v==null||!Number.isFinite(Number(v)))return "—";return Number(v).toFixed(digits==null?(Number(v)%1?1:0):digits)+"%"}
 function num(v,suffix){return v==null||!Number.isFinite(Number(v))?"—":Math.round(Number(v))+(suffix||"")}
 function stText(s){return({OK:"Доступен",HTTP_REJECTED:"Доступен · probe отклонён",DNS_ERROR:"DNS ошибка",TCP_ERROR:"TCP ошибка",TLS_ERROR:"TLS ошибка",HTTP_ERROR:"HTTP ошибка",TIMEOUT:"Таймаут",BLOCKED_TARGET:"Заблокировано",UNKNOWN:"Нет данных",UNKNOWN_ERROR:"Нет данных"})[s]||"Нет данных"}
 function stClass(s){return s==="OK"||s==="HTTP_REJECTED"?"ok":s==="TIMEOUT"?"warn":isConfirmedUnavailable(s)?"bad":"neutral"}
@@ -406,7 +365,7 @@ function openView(name){
   S.view=name;
   qa(".view").forEach(function(v){v.classList.toggle("active",v.id==="view-"+name)});
   qa(".side-item[data-view]").forEach(function(b){b.classList.toggle("active",b.dataset.view===name)});
-  if(name==="history")renderHistory();
+  if(name==="resources"){renderRealtime();renderDomesticRealtime()}
   if(name==="diagnostics")renderDiagnostics();
   if(name==="probes")renderProbes();
   if(name==="map")renderMapPage();
@@ -425,7 +384,6 @@ async function loadAll(silent){
   if(S.loading)return;
   S.loading=true;
   try{
-    var hours=Number(q("#historyRange")&&q("#historyRange").value||24);
     var a=await Promise.all([
       api("/api/dashboard"),
       api("/api/incidents?limit=100"),
@@ -434,12 +392,10 @@ async function loadAll(silent){
       api("/api/realtime?minutes="+S.streamMinutes+"&scope=EXTERNAL"),
       api("/api/realtime?minutes="+S.streamMinutes+"&scope=DOMESTIC"),
       api("/api/events?limit=30"),
-      api("/api/history?hours="+hours+"&scope=EXTERNAL"),
-      api("/api/history?hours="+hours+"&scope=DOMESTIC"),
       api("/api/session")
     ]);
-    S.dashboard=a[0];if(S.dashboard&&Array.isArray(S.dashboard.resources))S.dashboard.resources=S.dashboard.resources.map(normalizeResourceShape);S.incidents=a[1];notifyIncidentTransitions(S.incidents);S.system=a[2];S.groups=a[3];S.realtime=a[4];S.realtimeDom=a[5];S.events=a[6];S.historyExt=a[7];S.historyDom=a[8];
-    S.authRequired=!!a[9].auth_required;S.owner=!S.authRequired||!!a[9].authenticated;
+    S.dashboard=a[0];if(S.dashboard&&Array.isArray(S.dashboard.resources))S.dashboard.resources=S.dashboard.resources.map(normalizeResourceShape);S.incidents=a[1];notifyIncidentTransitions(S.incidents);S.system=a[2];S.groups=a[3];S.realtime=a[4];S.realtimeDom=a[5];S.events=a[6];
+    S.authRequired=!!a[7].auth_required;S.owner=!S.authRequired||!!a[7].authenticated;
     S.lastSuccessAt=Date.now();renderAll();setCoreOnline(true)
   }catch(e){
     setCoreOnline(false);
@@ -468,19 +424,6 @@ function setCoreOnline(ok){
   }
 }
 
-function historyAverage(h,key){
-  if(!h||!h.length)return null;
-  var vals=h.map(function(x){return Number(x[key])}).filter(function(x){return Number.isFinite(x)});
-  return vals.length?vals.reduce(function(a,b){return a+b},0)/vals.length:null
-}
-
-function historyDelta(h,key){
-  if(!h||h.length<4)return null;
-  var mid=Math.floor(h.length/2);
-  var a=historyAverage(h.slice(0,mid),key),b=historyAverage(h.slice(mid),key);
-  return a==null||b==null?null:b-a
-}
-
 function applyCapabilityNavigation(){
   if(!S.dashboard)return;
   var probes=S.dashboard.probes||[];
@@ -507,7 +450,6 @@ function renderAll(){
   renderResources();
   renderIncidents();
   renderDiagnostics();
-  renderHistory();
   renderProbes();
   renderNotifications();
   renderSettings();
@@ -520,19 +462,12 @@ function renderOverview(){
   if(!S.dashboard)return;
   var summary=S.dashboard.summary||{},legacy=S.dashboard.legacy_summary||{};
   var resources=(S.dashboard.resources||[]).filter(function(r){return r.enabled!==false&&r.enabled!==0});
-  var globalAvail=historyAverage(S.historyExt,"availability"),ruAvail=historyAverage(S.historyDom,"availability");
-  var globalDelta=historyDelta(S.historyExt,"availability"),ruDelta=historyDelta(S.historyDom,"availability");
   var active=S.incidents.filter(function(i){return !i.closed_at});
   var unread=active.filter(function(i){return !i.acknowledged_at});
   var available=resources.filter(function(r){return isReachable((r.external||{}).status)});
   var latencies=available.map(function(r){return Number((r.external||{}).response_time_ms)}).filter(Number.isFinite).sort(function(a,b){return a-b});
   var medianLatency=latencies.length?latencies.length%2?latencies[(latencies.length-1)/2]:Math.round((latencies[latencies.length/2-1]+latencies[latencies.length/2])/2):null;
   var latestCheck=resources.reduce(function(last,r){return Math.max(last,Number(r.checked_at||0))},0);
-
-  q("#kpiGlobal").textContent=pct(globalAvail,2);
-  q("#kpiGlobalDelta").textContent=globalDelta==null?"внешний VPS":((globalDelta>=0?"▲ +":"▼ ")+Math.abs(globalDelta).toFixed(2)+"%");
-  q("#kpiGlobalDelta").style.color=globalDelta==null?"var(--muted)":globalDelta>=0?"var(--green)":"var(--red)";
-  q("#kpiGlobalHint").textContent=globalAvail==null?"нет истории":"среднее за выбранный период";
 
   q("#kpiResources").textContent=available.length;
   q("#kpiResourcesDelta").textContent="из "+resources.length;
@@ -541,12 +476,6 @@ function renderOverview(){
   q("#kpiLatency").textContent=medianLatency==null?"—":Math.round(medianLatency);
   q("#kpiLatencyHint").textContent=medianLatency==null?"нет свежих измерений":medianLatency<500?"быстрый отклик":medianLatency<1500?"умеренная задержка":"высокая задержка";
 
-  q("#kpiRu").textContent=pct(ruAvail,2);
-  q("#kpiRuDelta").textContent=(summary.russia_available||summary.domestic_probe_online)?(ruDelta==null?"живые данные":((ruDelta>=0?"▲ +":"▼ ")+Math.abs(ruDelta).toFixed(2)+"%")):"нет probe";
-  q("#kpiRuDelta").style.color=(summary.russia_available||summary.domestic_probe_online)?(ruDelta!=null&&ruDelta<0?"var(--red)":"var(--green)"):"var(--muted)";
-  var domesticHasData=!!((S.historyDom&&S.historyDom.length)||(S.realtimeDom&&S.realtimeDom.resources||[]).some(function(r){return (r.points||[]).some(function(p){return p.availability!=null})}));
-  q("#kpiRuHint").textContent=domesticHasData?"GLOBALPING_RU · серверный источник":"данные российского контура не получены";
-
   q("#kpiPersonal").textContent="—";
   q("#kpiPersonalHint").textContent="device-probe ещё не подключён";
   q("#kpiIncidents").textContent=active.length;
@@ -554,10 +483,8 @@ function renderOverview(){
   q("#kpiIncidentDelta").style.color=unread.length?"var(--red)":"var(--muted)";
   q("#kpiIncidentHint").textContent=active.length?(unread.length?unread.length+" непрочитанных из "+active.length:"прочитано, но не закрыто: "+active.length):"открытых инцидентов нет";
 
-  drawSpark(q("#kpiGlobalSpark"),S.historyExt.map(function(x){return x.availability}),COLORS[1]);
   drawBars(q("#kpiResourcesSpark"),resources.map(function(r){return isReachable((r.external||{}).status)?1:0}),available.length===resources.length?COLORS[3]:COLORS[4]);
   drawSpark(q("#kpiLatencySpark"),latencies,COLORS[5]);
-  drawSpark(q("#kpiRuSpark"),S.historyDom.map(function(x){return x.availability}),COLORS[0]);
   drawSpark(q("#kpiPersonalSpark"),[],COLORS[3]);
   drawBars(q("#kpiIncidentSpark"),incidentSpark(),COLORS[0]);
 
@@ -571,7 +498,7 @@ function renderOverview(){
   q("#alertBadge").textContent=unread.length;q("#alertBadge").classList.toggle("hidden",!unread.length);
   q("#notifyCount").textContent=unread.length;q("#notifyCount").classList.toggle("hidden",!unread.length);
 
-  renderRealtime();renderDomesticRealtime();renderEvents();renderResourceCards();renderMap();renderOverviewTable();renderFaultPanel();applyDashboardPreferences()
+  renderRealtime();renderDomesticRealtime();renderEvents();renderMap();renderOverviewTable();renderFaultPanel();applyDashboardPreferences()
 }
 
 function overviewState(s,legacy,incidents){
@@ -589,111 +516,38 @@ function incidentSpark(){
   return b
 }
 
-function realtimePinnedSeries(source){
-  var resources=source&&source.resources||[],byId=new Map(resources.map(function(r){return [Number(r.id),r]}));
-  return visiblePinnedResourceIds().map(function(id){return byId.get(Number(id))}).filter(Boolean);
+function scopeRows(source){return source&&source.resources||[]}
+function latestPoint(row){var pts=(row.points||[]).slice().sort(function(a,b){return Number(b.timestamp)-Number(a.timestamp)});return pts[0]||null}
+function timelineState(point){if(!point)return"unknown";return point.state==="UP"?"up":point.state==="DOWN"?"down":"unknown"}
+function formatTimelineTime(ts){return ts?new Date(ts*1000).toLocaleString("ru-RU",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit",second:"2-digit"}):"—"}
+function drawResourceTimeline(containerId,statusId,source,scope){
+  var el=q("#"+containerId),status=q("#"+statusId);if(!el)return;
+  var rows=scopeRows(source),start=Number(source&&source.from||Date.now()/1000-S.streamMinutes*60),end=Number(source&&source.to||Date.now()/1000),span=Math.max(1,end-start),resources=S.dashboard&&S.dashboard.resources||[];
+  if(status){var any=rows.some(function(r){return (r.points||[]).length});status.textContent=any?"наблюдений: "+rows.reduce(function(n,r){return n+(r.points||[]).length},0):"нет данных";status.className="stream-scope-badge "+(any?"ok":"neutral")}
+  if(!rows.length){el.innerHTML=empty("Нет ресурсов","Добавьте ресурсы в мониторинг.");return}
+  var staleAfter=scope==="RUSSIA"?1800:120;
+  el.innerHTML=rows.map(function(row){
+    var pts=(row.points||[]).slice().sort(function(a,b){return Number(a.timestamp)-Number(b.timestamp)}),resource=resources.find(function(r){return Number(r.id)===Number(row.id)})||{},latest=latestPoint(row),now=Date.now()/1000,state=latest&&now-Number(latest.timestamp)<=staleAfter?timelineState(latest):"unknown";
+    var segments=[],cursor=start;
+    pts.forEach(function(point,index){
+      var t=Math.max(start,Number(point.timestamp)),scheduled=index+1<pts.length?Math.min(end,Number(pts[index+1].timestamp)):end,next=Math.min(scheduled,t+staleAfter);
+      if(t>cursor)segments.push({left:(cursor-start)/span*100,width:(t-cursor)/span*100,state:"unknown",title:"Нет измерений · "+formatTimelineTime(cursor)});
+      if(next>t){var st=timelineState(point),restricted=scope==="RUSSIA"&&st==="down"&&isReachable((resource.external||{}).status);segments.push({left:(t-start)/span*100,width:(next-t)/span*100,state:st,title:formatTimelineTime(t)+" · "+(st==="up"?"доступен":restricted?"вероятное ограничение в РФ":st==="down"?"недоступен":"нет данных")+(point.latency_ms!=null?" · "+point.latency_ms+" мс":"")})}
+      cursor=Math.max(cursor,next)
+    });
+    if(cursor<end)segments.push({left:(cursor-start)/span*100,width:(end-cursor)/span*100,state:"unknown",title:"Нет свежего измерения"});
+    if(!segments.length)segments=[{left:0,width:100,state:"unknown",title:"Нет измерений за период"}];
+    var currentState=state==="up"?"Доступен":state==="down"?(scope==="RUSSIA"&&isReachable((resource.external||{}).status)?"Вероятное ограничение в РФ":"Недоступен"):"Нет данных";
+    var latency=latest&&latest.latency_ms!=null?latest.latency_ms:(scope==="RUSSIA"?(resource.domestic||{}).response_time_ms:(resource.external||{}).response_time_ms);
+    var checked=latest?latest.timestamp:null,alert=!!resource.alerts_enabled;
+    var marker=segments.map(function(seg){return '<i class="timeline-segment '+seg.state+'" style="left:'+Math.max(0,seg.left).toFixed(4)+'%;width:'+Math.max(0,seg.width).toFixed(4)+'%" title="'+esc(seg.title)+'"></i>'}).join("");
+    var tickPx=el.clientWidth/(S.streamMinutes*6);
+    return '<article class="resource-timeline-row" data-resource="'+row.id+'"><div class="timeline-row-head"><button class="timeline-resource-open" data-open-resource="'+row.id+'" title="Открыть ресурс"><b>'+esc(row.name||row.target||"Ресурс")+'</b><span>'+esc(row.target||"")+'</span></button><span class="timeline-notification '+(alert?"enabled":"disabled")+'" title="'+(alert?"Уведомления включены":"Уведомления выключены")+'" aria-label="'+(alert?"Уведомления включены":"Уведомления выключены")+'">'+(alert?"✓":"○")+'</span></div><div class="timeline-track" role="img" aria-label="'+esc(row.name)+': '+esc(currentState)+'; шкала с делениями 10 секунд" style="--timeline-tick:'+tickPx+'px">'+marker+'</div><div class="timeline-axis"><span>'+formatTimelineTime(start)+'</span><span>10 секунд на деление</span><span>'+formatTimelineTime(end)+'</span></div><div class="timeline-details"><span class="timeline-state '+state+'"><i></i>'+esc(currentState)+'</span><span>Отклик: <b>'+esc(num(latency," мс"))+'</b></span><span>Последняя проверка: <b>'+esc(checked?ago(checked):"нет")+'</b></span>'+(latest&&latest.http_status?'<span>HTTP '+esc(latest.http_status)+'</span>':"")+'</div></article>'
+  }).join("");
+  qa("#"+containerId+" [data-open-resource]").forEach(function(b){b.onclick=function(){openDetail(Number(b.dataset.openResource))}})
 }
-function renderRealtime(){
-  var series=realtimePinnedSeries(S.realtime),withPoints=series.filter(function(r){return (r.points||[]).some(function(p){return p.availability!=null})});
-  q("#streamEmpty").classList.toggle("hidden",!!withPoints.length);
-  drawAvailabilityChart(q("#streamChart"),series);
-  q("#streamLegend").innerHTML=series.slice(0,10).map(chartLegendItem).join("")
-}
-
-function chartSeriesActive(row,index){
-  if(!S.hoverSeries)return true;
-  return (S.hoverSeries.id!=null&&row.id!=null&&String(S.hoverSeries.id)===String(row.id))||(S.hoverSeries.id==null&&S.hoverSeries.index===index)
-}
-function chartLegendItem(row,index){
-  var hovered=chartSeriesActive(row,index),state=S.hoverSeries?(hovered?" is-active":" is-muted"):"";
-  return '<span class="legend-item'+state+'" data-series-id="'+esc(row.id==null?index:row.id)+'"><i class="legend-dot" style="background:'+COLORS[index%COLORS.length]+'"></i>'+esc(row.name||row.target||("Ресурс "+row.id))+'</span>'
-}
-
-
-function escapeHtml(value){return String(value==null?"":value).replace(/[&<>\"]/g,function(ch){return {"&":"&amp;","<":"&lt;",">":"&gt;",'\"':'&quot;'}[ch]||ch})}
-
-function domesticGraphSeries(){
-  return realtimePinnedSeries(S.realtimeDom);
-}
-
-
-function renderDomesticRealtime(){
-  var series=domesticGraphSeries(),canvas=q("#domesticStreamChart"),emptyEl=q("#domesticStreamEmpty"),status=q("#domesticGraphStatus"),meta=q("#domesticGraphMeta"),legend=q("#domesticStreamLegend");
-  var hasRows=series.some(function(r){return (r.points||[]).some(function(p){return p.availability!=null})});
-  if(emptyEl)emptyEl.classList.toggle("hidden",hasRows);
-  if(status){status.textContent=hasRows?"данные обновлены":"нет данных";status.className="stream-scope-badge "+(hasRows?"ok":"neutral")}
-  if(meta)meta.textContent=hasRows?"GLOBALPING_RU · общедоступный сервер в России · выбранные ресурсы":"Ожидается ответ российского probe; мобильное приложение на этот график не влияет";
-  if(legend)legend.innerHTML=series.slice(0,10).map(chartLegendItem).join("");
-  drawAvailabilityChart(canvas,series);
-}
-
-
-function drawAvailabilityChart(canvas,series){
-  if(!canvas)return;
-  var rect=canvas.getBoundingClientRect(),dpr=Math.min(2,window.devicePixelRatio||1);
-  canvas.width=Math.max(480,Math.floor(rect.width*dpr));canvas.height=Math.max(190,Math.floor(rect.height*dpr));
-  var ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);
-  var w=rect.width,h=rect.height,p={l:82,r:12,t:13,b:29};ctx.clearRect(0,0,w,h);
-  if(!series.length){S.streamMeta=null;S.chartMeta[canvas.id]=null;return}
-  var allTs=[],allVals=[];
-  series.forEach(function(row){(row.points||[]).forEach(function(x){if(x.availability!=null){allTs.push(Number(x.timestamp));allVals.push(Number(x.availability));}})});
-  if(!allTs.length){S.streamMeta=null;S.chartMeta[canvas.id]=null;return}
-  var plotBottom=h-p.b,ticks=[100,50,0];
-  ctx.font='600 11px "Inter","Segoe UI",system-ui,sans-serif';
-  ticks.forEach(function(v,i){var y=p.t+(plotBottom-p.t)*i/(ticks.length-1);ctx.strokeStyle="rgba(137,170,206,.18)";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(p.l,y+.5);ctx.lineTo(w-p.r,y+.5);ctx.stroke();ctx.fillStyle="rgba(184,204,226,.72)";ctx.fillText(v===100?"Доступен":v===50?"Частично":"Не отвечает",4,y+4)});
-  var tmin=Math.min.apply(null,allTs),tmax=Math.max.apply(null,allTs),span=Math.max(1,tmax-tmin);
-  ctx.fillStyle="rgba(184,204,226,.62)";ctx.font='500 10px "Inter","Segoe UI",system-ui,sans-serif';
-  [tmin,tmax].forEach(function(t,i){ctx.fillText(new Date(t*1000).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"}),i?(w-p.r-34):p.l, h-8)});
-  series.slice(0,10).forEach(function(row,si){
-    var active=!S.hoverSeries||((S.hoverSeries.id!=null&&row.id!=null&&String(S.hoverSeries.id)===String(row.id))||(S.hoverSeries.id==null&&S.hoverSeries.index===si));
-    ctx.globalAlpha=active?1:.22;
-    var pts=(row.points||[]).slice().sort(function(a,b){return a.timestamp-b.timestamp}),penDown=false,previousY=0;
-    if(!pts.length)return;
-    ctx.strokeStyle=COLORS[si%COLORS.length];ctx.lineWidth=2;ctx.beginPath();
-    pts.forEach(function(pt){if(pt.availability==null){penDown=false;return}var x=p.l+(Number(pt.timestamp)-tmin)/span*(w-p.l-p.r),val=Math.max(0,Math.min(100,Number(pt.availability))),y=p.t+(plotBottom-p.t)*(1-val/100);if(penDown){ctx.lineTo(x,previousY);ctx.lineTo(x,y)}else ctx.moveTo(x,y);penDown=true;previousY=y});
-    ctx.stroke();
-    ctx.globalAlpha=1;
-    var validPts=pts.filter(function(pt){return pt.availability!=null});
-    if(validPts.length===1){var pt=validPts[0],x=p.l+(Number(pt.timestamp)-tmin)/span*(w-p.l-p.r),val=Math.max(0,Math.min(100,Number(pt.availability))),y=p.t+(plotBottom-p.t)*(1-val/100);ctx.fillStyle=COLORS[si%COLORS.length];ctx.beginPath();ctx.arc(x,y,3,0,Math.PI*2);ctx.fill()}
-  });
-  ctx.globalAlpha=1;
-  var meta={series:series.slice(0,10),tmin:tmin,tmax:tmax,min:0,max:100,p:p,w:w,h:h,key:"availability",canvasId:canvas.id};
-  S.streamMeta=meta;S.chartMeta[canvas.id]=meta;
-}
-
-
-function chartHoverForEvent(canvas,e){
-  var m=(S.chartMeta&&S.chartMeta[canvas.id])||S.streamMeta;if(!m)return null;
-  var rect=canvas.getBoundingClientRect(),x=e.clientX-rect.left,y=e.clientY-rect.top;
-  var ratio=Math.max(0,Math.min(1,(x-m.p.l)/(m.w-m.p.l-m.p.r))),ts=m.tmin+(m.tmax-m.tmin)*ratio,best=null;
-  m.series.slice(0,10).forEach(function(row,si){
-    var pts=(row.points||[]).filter(function(p){return p.availability!=null});if(!pts.length)return;
-    var pt=pts.reduce(function(a,p){return Math.abs(p.timestamp-ts)<Math.abs(a.timestamp-ts)?p:a},pts[0]);
-    var value=Math.max(m.min,Math.min(100,Number(pt.availability))),py=m.p.t+(m.h-m.p.t-m.p.b)*(1-value/100),distance=Math.abs(py-y);
-    if(!best||distance<best.distance)best={id:row.id,index:si,distance:distance};
-  });
-  return best&&best.distance<28?best:null;
-}
-function setChartHover(canvas,e){
-  var next=chartHoverForEvent(canvas,e),key=next?(next.id!=null?String(next.id):String(next.index)):null,current=S.hoverSeries?(S.hoverSeries.id!=null?String(S.hoverSeries.id):String(S.hoverSeries.index)):null;
-  if(key!==current){S.hoverSeries=next;renderRealtime();renderDomesticRealtime()}
-}
-function handleChartMoveForCanvas(canvas,tooltipSelector,e){
-  var m=(S.chartMeta&&S.chartMeta[canvas.id])||S.streamMeta;if(!m)return;
-  var r=canvas.getBoundingClientRect(),x=e.clientX-r.left,ratio=Math.max(0,Math.min(1,(x-m.p.l)/(m.w-m.p.l-m.p.r))),ts=m.tmin+(m.tmax-m.tmin)*ratio;
-  var rows=[];
-  m.series.slice(0,10).forEach(function(s,si){
-    if(!(s.points||[]).length)return;
-    var pt=s.points.reduce(function(best,p){return Math.abs(p.timestamp-ts)<Math.abs(best.timestamp-ts)?p:best},s.points[0]);
-    if(pt.availability!=null)rows.push({name:s.name,value:Number(pt.availability)===100?"Доступен":Number(pt.availability)===0?"Не отвечает":"Частичная доступность",color:COLORS[si%COLORS.length],time:pt.timestamp})
-  });
-  var tip=q(tooltipSelector);if(!tip)return;
-  if(!rows.length){tip.classList.add("hidden");return}
-  tip.innerHTML='<b>'+new Date(rows[0].time*1000).toLocaleString("ru-RU",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})+'</b>'+rows.map(function(x){return '<span><i class="legend-dot" style="background:'+x.color+'"></i><em>'+esc(x.name)+'</em><strong>'+esc(x.value)+'</strong></span>'}).join("");
-  tip.classList.remove("hidden")
-}
-function handleChartMove(e){handleChartMoveForCanvas(q("#streamChart"),"#chartTooltip",e)}
-
+function renderRealtime(){drawResourceTimeline("globalTimeline","globalTimelineStatus",S.realtime,"GLOBAL")}
+function renderDomesticRealtime(){drawResourceTimeline("russiaTimeline","russiaTimelineStatus",S.realtimeDom,"RUSSIA")}
 function renderEvents(){
   var el=q("#eventFeed"),rows=S.events||[];
   var important=rows.filter(function(ev){return ev.severity==="critical"||ev.severity==="warning"}).length;
@@ -716,8 +570,8 @@ function resourceScopeGap(r){
 function russianResourceState(r){
   var ext=r&&r.external||{},dom=r&&r.domestic||{};
   var series=((S.realtimeDom&&S.realtimeDom.resources)||[]).find(function(item){return Number(item.id)===Number(r&&r.id)});
-  var points=(series&&series.points||[]).filter(function(point){return point.availability!=null}).sort(function(a,b){return b.timestamp-a.timestamp});
-  var chartFailure=!!(points.length&&Date.now()/1000-Number(points[0].timestamp)<1800&&Number(points[0].availability)===0);
+  var points=(series&&series.points||[]).filter(function(point){return point.state==="UP"||point.state==="DOWN"}).sort(function(a,b){return b.timestamp-a.timestamp});
+  var chartFailure=!!(points.length&&Date.now()/1000-Number(points[0].timestamp)<1800&&points[0].state==="DOWN");
   var ruFailure=isConfirmedUnavailable(dom.status)||chartFailure;
   if(r&&r.diagnosis==="LIKELY_RESTRICTION")return {text:"Вероятное ограничение в РФ",className:"warn",status:dom.status||"UNKNOWN"};
   if(isReachable(dom.status))return {text:"Доступен из РФ",className:"ok",status:dom.status};
@@ -726,24 +580,6 @@ function russianResourceState(r){
   if(isConfirmedUnavailable(ext.status))return {text:"Глобальная проверка: сбой · РФ неизвестна",className:"warn",status:dom.status||"UNKNOWN"};
   return {text:"Нет данных по РФ",className:"neutral",status:dom.status||"UNKNOWN"};
 }
-function renderResourceCards(){
-  var el=q("#resourceCards"),rows=S.realtime&&S.realtime.resources||[];
-  if(!rows.length){el.innerHTML=empty("Нет ресурсов","Добавьте первую цель.");return}
-  var current=S.dashboard.resources||[],pinned=visiblePinnedResourceIds();
-  var cards=pinned.map(function(id){return rows.find(function(r){return Number(r.id)===Number(id)})}).filter(Boolean).slice(0,MAX_PINNED_RESOURCES);
-  el.innerHTML=cards.map(function(r,i){
-    var rr=current.find(function(x){return x.id===r.id})||{},cls=resourceDisplayClass(rr);
-    var latency=(rr.domestic||rr.external||{}).response_time_ms,stateText=resourceDisplayText(rr),stateClass=cls,ruState=russianResourceState(rr);
-    return '<article class="resource-card" data-resource="'+r.id+'" tabindex="0" role="button" aria-label="Открыть ресурс «'+esc(r.name)+'». '+esc(ruState.text)+'"><div class="resource-card-top"><div class="resource-card-name">'+resourceIconHtml(r.target,r.name)+'<b>'+esc(r.name)+'</b></div><span class="resource-state '+stateClass+'"><i></i>'+esc(stateText)+'</span></div><div class="resource-ru-status '+ruState.className+'" title="Статус российской проверки: '+esc(ruState.status)+'"><i></i>'+esc(ruState.text)+'</div><div class="resource-card-metrics"><div><span>Доступность · 24ч</span><strong>'+pct(r.availability_24h,1)+'</strong></div><div><span>Отклик сейчас</span><strong>'+num(latency," мс")+'</strong></div></div><canvas data-card-spark="'+r.id+'"></canvas><div class="resource-card-foot"><span>'+esc(groupTitle(r.group_name))+'</span><span>Проверен '+ago(r.last_checked_at||rr.checked_at)+'</span></div></article>'
-  }).join("");
-  qa(".resource-card").forEach(function(card){
-    card.onclick=function(){openDetail(Number(card.dataset.resource))};
-    card.onkeydown=function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();openDetail(Number(card.dataset.resource))}}
-  });
-  cards.forEach(function(r,i){var c=document.querySelector('[data-card-spark="'+r.id+'"]');drawSpark(c,(r.points||[]).map(function(p){return p.availability}).filter(function(v){return v!=null}),COLORS[i%COLORS.length])});
-  hydrateResourceIcons()
-}
-
 function resourceDisplayClass(r){
   var ext=(r.external||{}).status,cls=diagClass(r.diagnosis);
   if(cls==="bad"||cls==="warn")return cls;
@@ -817,16 +653,15 @@ function renderOverviewTable(){
   var visible=matching.slice(0,8),issues=ordered.filter(function(r){return resourceAttentionRank(r)<3}).length;
   q("#overviewResourceSummary").textContent=S.overviewResourceMode==="ISSUES"?(issues?issues+" требуют внимания":"Проблем не обнаружено"):(issues?issues+" требуют внимания · проблемные показаны первыми":rows.length+" ресурсов · всё спокойно");
   if(!visible.length){el.innerHTML=empty("Всё спокойно","Сейчас нет ресурсов, требующих внимания.");return}
-  el.innerHTML='<div class="table-head"><div>Ресурс</div><div>Статус</div><div>Доступность (24ч)</div><div>Время ответа</div><div>DNS</div><div>TCP</div><div>TLS</div><div>HTTP</div><div>Тренд (1ч)</div><div></div></div>'+visible.map(function(r){
+  el.innerHTML='<div class="table-head"><div>Ресурс</div><div>Статус</div><div>Отклик</div><div>Уведомления</div><div>DNS</div><div>TCP</div><div>TLS</div><div>HTTP</div><div></div></div>'+visible.map(function(r){
     var rt=realtimeById(r.id)||{},x=r.domestic||r.external||{},ruState=russianResourceState(r);
-    return '<div class="table-row" data-resource="'+r.id+'" tabindex="0" aria-label="Открыть ресурс «'+esc(r.name)+'». '+esc(ruState.text)+'"><div class="table-resource with-logo">'+resourceIconHtml(r.target,r.name)+'<div><b>'+esc(r.name)+'</b><span>'+esc(r.target)+'</span><small class="table-resource-ru '+ruState.className+'"><i></i>'+esc(ruState.text)+'</small></div></div><div><span class="status-chip '+resourceDisplayClass(r)+'">'+esc(resourceDisplayText(r))+'</span></div><div>'+pct(rt.availability_24h,1)+'</div><div>'+num(x.response_time_ms," мс")+'</div><div><i class="stage-dot '+stageState("DNS",r,x)+'"></i></div><div><i class="stage-dot '+stageState("TCP",r,x)+'"></i></div><div><i class="stage-dot '+stageState("TLS",r,x)+'"></i></div><div><i class="stage-dot '+stageState("HTTP",r,x)+'"></i></div><div><canvas class="trend-canvas" data-trend="'+r.id+'"></canvas></div><button type="button" class="row-more" data-row-more="'+r.id+'" aria-label="Открыть «'+esc(r.name)+'»">⋮</button></div>'
+    return '<div class="table-row" data-resource="'+r.id+'" tabindex="0" aria-label="Открыть ресурс «'+esc(r.name)+'». '+esc(ruState.text)+'"><div class="table-resource with-logo">'+resourceIconHtml(r.target,r.name)+'<div><b>'+esc(r.name)+'</b><span>'+esc(r.target)+'</span><small class="table-resource-ru '+ruState.className+'"><i></i>'+esc(ruState.text)+'</small></div></div><div><span class="status-chip '+resourceDisplayClass(r)+'">'+esc(resourceDisplayText(r))+'</span></div><div>'+num(x.response_time_ms," мс")+'</div><div>'+(r.alerts_enabled?"✓ Включены":"○ Выключены")+'</div><div><i class="stage-dot '+stageState("DNS",r,x)+'"></i></div><div><i class="stage-dot '+stageState("TCP",r,x)+'"></i></div><div><i class="stage-dot '+stageState("TLS",r,x)+'"></i></div><div><i class="stage-dot '+stageState("HTTP",r,x)+'"></i></div><button type="button" class="row-more" data-row-more="'+r.id+'" aria-label="Открыть «'+esc(r.name)+'»">⋮</button></div>'
   }).join("");
   qa("#overviewResourceTable .table-row").forEach(function(row){
     row.onclick=function(e){if(e.target.closest("[data-row-more]"))return;openDetail(Number(row.dataset.resource))};
     row.onkeydown=function(e){if((e.key==="Enter"||e.key===" ")&&!e.target.closest("[data-row-more]")){e.preventDefault();openDetail(Number(row.dataset.resource))}}
   });
   qa("#overviewResourceTable [data-row-more]").forEach(function(button){button.onclick=function(e){e.stopPropagation();openDetail(Number(button.dataset.rowMore))}});
-  visible.forEach(function(r,i){var rt=realtimeById(r.id)||{},c=document.querySelector('[data-trend="'+r.id+'"]');drawSpark(c,(rt.points||[]).map(function(p){return p.availability}).filter(function(v){return v!=null}),COLORS[i%COLORS.length])});
   hydrateResourceIcons()
 }
 
@@ -1047,14 +882,6 @@ function showDiagnostic(r){
 
 function setStage(n,v,good){var e=q("#stage"+n);e.querySelector("b").textContent=v==null?"—":Math.round(v)+" мс";e.className="diag-step "+(v==null?"":good?"good":"bad")}
 
-function renderHistory(){
-  if(!q("#historyChart"))return;
-  drawSimpleChart(q("#historyChart"),S.historyExt,"availability",true);drawSimpleChart(q("#latencyChart"),S.historyExt,"avg_latency_ms",false);
-  q("#historyAvailability").textContent=pct(historyAverage(S.historyExt,"availability"));q("#historyLatency").textContent=num(historyAverage(S.historyExt,"avg_latency_ms")," мс");
-  q("#historyEmpty").classList.toggle("hidden",!!S.historyExt.length);q("#latencyEmpty").classList.toggle("hidden",!!S.historyExt.length);
-  var rows=S.historyExt.slice(-24).reverse();q("#historyTable").innerHTML=rows.length?'<div class="history-row head"><div>Время</div><div>Доступность</div><div>Задержка</div><div>Проверок</div></div>'+rows.map(function(x){return '<div class="history-row"><div>'+fmt(x.timestamp)+'</div><b>'+pct(x.availability)+'</b><div>'+num(x.avg_latency_ms," мс")+'</div><div>'+x.checks+'</div></div>'}).join(""):empty("Нет истории","")
-}
-
 function drawSimpleChart(canvas,data,key,percent,color,floor){
   if(!canvas)return;var rect=canvas.getBoundingClientRect(),dpr=Math.min(2,devicePixelRatio||1);canvas.width=Math.max(280,Math.floor(rect.width*dpr));canvas.height=Math.max(180,Math.floor(rect.height*dpr));var ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);var w=rect.width,h=rect.height,p={l:38,r:10,t:12,b:24};ctx.clearRect(0,0,w,h);if(!data.length)return;var vals=data.map(function(x){return Number(x[key]||0)}),min=percent?(floor==null?0:floor):Math.min.apply(null,vals),max=percent?100:Math.max.apply(null,vals);if(max===min)max=min+1;ctx.font="10px system-ui";ctx.strokeStyle=getCss("--line-soft");ctx.fillStyle=getCss("--muted");for(var i=0;i<=4;i++){var y=p.t+(h-p.t-p.b)*i/4;ctx.beginPath();ctx.moveTo(p.l,y);ctx.lineTo(w-p.r,y);ctx.stroke();var v=max-(max-min)*i/4;ctx.fillText(percent?Math.round(v)+"%":Math.round(v)+"",3,y+3)}ctx.strokeStyle=color||COLORS[1];ctx.lineWidth=1.7;ctx.beginPath();data.forEach(function(x,i){var xx=p.l+(w-p.l-p.r)*(data.length===1?.5:i/(data.length-1)),yy=p.t+(h-p.t-p.b)*(1-(Number(x[key]||0)-min)/(max-min));if(i===0)ctx.moveTo(xx,yy);else ctx.lineTo(xx,yy)});ctx.stroke();if(data.length===1){var only=Number(data[0][key]||0),xx=p.l+(w-p.l-p.r)/2,yy=p.t+(h-p.t-p.b)*(1-(only-min)/(max-min));ctx.fillStyle=color||COLORS[1];ctx.beginPath();ctx.arc(xx,yy,3,0,Math.PI*2);ctx.fill()}
 }
@@ -1256,8 +1083,19 @@ async function saveResource(e){
   })}catch(err){toast(err.message)}
 }
 
+function renderResourceCheckReport(checks){
+  var scopes=[{key:"GLOBAL",name:"Глобальный"},{key:"RUSSIA",name:"Россия"},{key:"USER",name:"Устройство"}],rows=(checks||[]).slice();
+  return '<div class="resource-report">'+scopes.map(function(scope){
+    var items=rows.filter(function(c){var key=String(c.probe_scope||"").toUpperCase();return key===scope.key||(scope.key==="RUSSIA"&&key==="DOMESTIC")||(scope.key==="GLOBAL"&&key==="EXTERNAL")}),up=items.filter(function(c){return isReachable(c.status)}).length,unknown=items.filter(function(c){return !c.status||["UNKNOWN","NO_DATA"].indexOf(String(c.status).toUpperCase())>=0}).length,down=items.length-up-unknown,lat=items.map(function(c){return Number(c.response_time_ms)}).filter(Number.isFinite),avg=lat.length?Math.round(lat.reduce(function(a,b){return a+b},0)/lat.length):null;
+    return '<div class="resource-report-row"><b>'+scope.name+'</b><span>'+items.length+' проверок</span><span class="up">Доступно: '+up+'</span><span class="down">Недоступно: '+down+'</span>'+(unknown?'<span>Без данных: '+unknown+'</span>':"")+'<span>Отклик: '+esc(num(avg," мс"))+'</span></div>'
+  }).join("")+'</div>'
+}
 async function openDetail(id){
-  try{var d=await api("/api/resources/"+id),r=normalizeResourceShape(d.resource);S.detailId=id;q("#detailTitle").textContent=r.name;q("#detailBody").innerHTML='<div class="detail-top"><div class="detail-kv"><span>Вывод</span><b>'+diagText(r.diagnosis)+'</b></div><div class="detail-kv"><span>VPS</span><b>'+stText(r.external&&r.external.status)+'</b></div><div class="detail-kv"><span>РФ</span><b>'+esc(russianResourceState(r).text)+'</b></div><div class="detail-kv"><span>Отклик</span><b>'+num((r.domestic||r.external||{}).response_time_ms," мс")+'</b></div></div><div class="detail-section"><h3>'+esc(r.target)+'</h3><div class="detail-kv"><span>Пояснение</span><b>'+esc(r.diagnosis_text||"—")+'</b></div></div><div class="detail-section"><h3>Последние проверки</h3><div class="check-list">'+(d.checks.length?d.checks.map(function(c){return '<div class="check-row"><div>'+fmt(c.checked_at)+'</div><div>'+esc(c.probe_scope||"")+' · '+stText(c.status)+'</div><div>'+esc(c.message||"")+'</div><div>'+c.response_time_ms+' мс</div></div>'}).join(""):empty("Проверок нет",""))+'</div></div>';openDialog(q("#detailDialog"),"#detailCheck")}catch(e){toast(e.message)}
+  try{
+    var d=await api("/api/resources/"+id),r=normalizeResourceShape(d.resource),checks=d.checks||[];S.detailId=id;q("#detailTitle").textContent=r.name;
+    q("#detailBody").innerHTML='<div class="detail-notify-state">'+(r.alerts_enabled?"✓ Уведомления о падении включены":"○ Уведомления о падении выключены")+'</div><div class="detail-top"><div class="detail-kv"><span>Вывод</span><b>'+diagText(r.diagnosis)+'</b></div><div class="detail-kv"><span>Глобальный контур</span><b>'+stText(r.external&&r.external.status)+'</b></div><div class="detail-kv"><span>РФ</span><b>'+esc(russianResourceState(r).text)+'</b></div><div class="detail-kv"><span>Отклик</span><b>'+num((r.domestic||r.external||{}).response_time_ms," мс")+'</b></div></div><div class="detail-section"><h3>'+esc(r.target)+'</h3><div class="detail-kv"><span>Пояснение</span><b>'+esc(r.diagnosis_text||"—")+'</b></div></div><div class="detail-section"><h3>Отчёт ресурса · последние проверки</h3>'+renderResourceCheckReport(checks)+'<div class="check-list">'+(checks.length?checks.map(function(c){return '<div class="check-row"><div>'+fmt(c.checked_at)+'</div><div>'+esc(c.probe_scope||"")+' · '+stText(c.status)+'</div><div>'+esc(c.message||"")+'</div><div>'+num(c.response_time_ms," мс")+'</div></div>'}).join(""):empty("Проверок нет",""))+'</div></div>';
+    openDialog(q("#detailDialog"),"#detailCheck")
+  }catch(e){toast(e.message)}
 }
 async function deleteResource(){var r=resourceById(S.detailId);if(!r)return;var ok=await confirmAction({title:"Удалить ресурс?",message:"«"+r.name+"» будет удалён из мониторинга.",hint:"История проверок этого ресурса также будет удалена.",accept:"Удалить ресурс"});if(!ok)return;try{await withBusy(q("#deleteResource"),"Удаляем…",async function(){await api("/api/resources/"+r.id,{method:"DELETE"},true);q("#detailDialog").close();await loadAll(true);toast("Ресурс удалён")})}catch(e){toast(e.message)}}
 
@@ -1327,9 +1165,8 @@ function setup(){
   q("#customResourceName").oninput=function(){this.dataset.autoSuggested="0"};
   q("#resourceForm").onsubmit=saveResource;q("#groupForm").onsubmit=saveGroup;q("#openAddGroup").onclick=function(){openGroupForm(null)};
   qa(".modal-close").forEach(function(b){b.onclick=function(){closeDialog(b.closest("dialog"))}});
-  qa('.seg[data-minutes]').forEach(function(b){b.onclick=async function(){if(b.dataset.busy==="1")return;qa('.seg[data-minutes]').forEach(function(x){x.classList.remove("active")});b.classList.add("active");S.streamMinutes=Number(b.dataset.minutes);try{await withBusy(b,"…",async function(){var data=await Promise.all([api("/api/realtime?minutes="+S.streamMinutes+"&scope=EXTERNAL"),api("/api/realtime?minutes="+S.streamMinutes+"&scope=DOMESTIC")]);S.realtime=data[0];S.realtimeDom=data[1];renderRealtime();renderDomesticRealtime();renderResourceCards();renderOverviewTable()})}catch(e){toast(e.message)}}});
+  qa('.seg[data-minutes]').forEach(function(b){b.onclick=function(){qa('.seg[data-minutes]').forEach(function(x){x.classList.toggle("active",x===b)});S.streamMinutes=Number(b.dataset.minutes);loadAll(true)}});
   qa("[data-overview-resource-mode]").forEach(function(b){b.onclick=function(){S.overviewResourceMode=b.dataset.overviewResourceMode;qa("[data-overview-resource-mode]").forEach(function(x){x.classList.toggle("active",x===b)});renderOverviewTable()}});
-  q("#streamChart").addEventListener("mousemove",function(e){var canvas=q("#streamChart");setChartHover(canvas,e);handleChartMoveForCanvas(canvas,"#chartTooltip",e)});q("#streamChart").addEventListener("mouseleave",function(){q("#chartTooltip").classList.add("hidden");if(S.hoverSeries){S.hoverSeries=null;renderRealtime();renderDomesticRealtime()}});q("#domesticStreamChart").addEventListener("mousemove",function(e){var canvas=q("#domesticStreamChart");setChartHover(canvas,e);handleChartMoveForCanvas(canvas,"#domesticChartTooltip",e)});q("#domesticStreamChart").addEventListener("mouseleave",function(){q("#domesticChartTooltip").classList.add("hidden");if(S.hoverSeries){S.hoverSeries=null;renderRealtime();renderDomesticRealtime()}});
   q("#checkAllResources").onclick=async function(){var button=this;try{await withBusy(button,"Проверяем…",async function(){var result=await api("/api/check-all",{method:"POST"},true);await loadAll(true);toast("Проверка завершена: "+result.checked+" ресурсов · доступно "+result.ok+" · проблемы "+result.failed)})}catch(e){toast(e.message)}};
   q("#mapZoomIn").onclick=function(){S.mapScale=Math.min(2,S.mapScale+.15);q("#worldMapSvg").style.transform="scale("+S.mapScale+")"};
   q("#mapZoomOut").onclick=function(){S.mapScale=Math.max(.8,S.mapScale-.15);q("#worldMapSvg").style.transform="scale("+S.mapScale+")"};
@@ -1338,10 +1175,9 @@ function setup(){
   q("#searchInput").oninput=renderResources;q("#groupFilter").onchange=renderResources;q("#statusFilter").onchange=renderResources;
   q("#diagResource").onchange=function(){S.diagId=Number(this.value);var r=resourceById(this.value);if(r)showDiagnostic(r)};
   q("#diagCheck").onclick=function(){var id=Number(q("#diagResource").value);if(id)manualCheck(id,this)};q("#diagTrace").onclick=function(){var id=Number(q("#diagResource").value);if(id)trace(id,false,this)};q("#diagTraceDomestic").onclick=function(){var id=Number(q("#diagResource").value);if(id)trace(id,true,this)};
-  q("#historyRange").onchange=function(){loadAll(true)};
   q("#enableNotifications").onclick=async function(){var button=this;if(!("Notification" in window)){toast("Браузер не поддерживает уведомления");return}await withBusy(button,"Запрашиваем…",async function(){var p=await Notification.requestPermission();renderNotifications();toast(p==="granted"?"Уведомления включены":"Разрешение не выдано")})};
   q("#deleteResource").onclick=deleteResource;q("#editResource").onclick=function(){var r=resourceById(S.detailId);q("#detailDialog").close();if(r)openResourceForm(r)};q("#detailCheck").onclick=function(){var b=this,id=S.detailId;q("#detailDialog").close();manualCheck(id,b)};q("#detailTrace").onclick=function(){var b=this,id=S.detailId;q("#detailDialog").close();trace(id,false,b)};
-  window.addEventListener("resize",function(){renderRealtime();renderHistory();renderResourceCards();renderOverviewTable();applyDashboardPreferences()});
+  window.addEventListener("resize",function(){renderRealtime();renderDomesticRealtime();renderOverviewTable();applyDashboardPreferences()});
   loadAll(false);S.poll=setInterval(function(){if(!S.loading)loadAll(true)},5000)
 }
 document.addEventListener("DOMContentLoaded",setup);

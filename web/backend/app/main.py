@@ -915,64 +915,38 @@ def realtime(minutes:int=Query(default=60,ge=5,le=10080), scope:str=Query(defaul
         raise HTTPException(400,"scope must be EXTERNAL, DOMESTIC or USER")
     now=int(time.time())
     since=now-minutes*60
-    bucket=max(30,(minutes*60)//240)
     with db() as conn:
         resources=[dict(r) for r in conn.execute(
-            "SELECT id,name,target,group_name FROM resources WHERE enabled=1 ORDER BY name"
+            "SELECT id,name,target,group_name,alerts_enabled FROM resources WHERE enabled=1 ORDER BY name"
         ).fetchall()]
         rows=conn.execute("""SELECT resource_id,checked_at,status,response_time_ms,dns_ms,tcp_ms,tls_ms,http_ms,http_status
           FROM checks WHERE checked_at>=? AND probe_scope=? ORDER BY checked_at ASC,id ASC""",
           (since,scope_key)).fetchall()
-        stats24=conn.execute("""SELECT resource_id,
-          SUM(CASE WHEN status IN ('OK','HTTP_REJECTED','DNS_ERROR','TCP_ERROR','TLS_ERROR','HTTP_ERROR','TIMEOUT','BLOCKED_TARGET') THEN 1 ELSE 0 END) total,
-          SUM(CASE WHEN status IN ('OK','HTTP_REJECTED') THEN 1 ELSE 0 END) ok,
-          AVG(response_time_ms) avg_latency,
-          MAX(checked_at) last_checked
-          FROM checks WHERE checked_at>=? AND probe_scope=? GROUP BY resource_id""",
-          (now-86400,scope_key)).fetchall()
-    stats={int(r["resource_id"]):dict(r) for r in stats24}
     by_resource={}
+    known_statuses={"OK","HTTP_REJECTED","DNS_ERROR","TCP_ERROR","TLS_ERROR","HTTP_ERROR","TIMEOUT","BLOCKED_TARGET"}
     for row in rows:
         rid=int(row["resource_id"])
-        b=(int(row["checked_at"])//bucket)*bucket
-        target=by_resource.setdefault(rid,{})
-        point=target.setdefault(b,{"timestamp":b,"total":0,"known":0,"ok":0,"latency_sum":0,"latency_count":0})
-        point["total"]+=1
-        if row["status"] in {"OK","HTTP_REJECTED","DNS_ERROR","TCP_ERROR","TLS_ERROR","HTTP_ERROR","TIMEOUT","BLOCKED_TARGET"}:
-            point["known"]+=1
-            point["ok"]+=int(is_reachable(row["status"]))
-        if row["response_time_ms"] is not None:
-            point["latency_sum"]+=int(row["response_time_ms"])
-            point["latency_count"]+=1
+        target=by_resource.setdefault(rid,[])
+        state="UP" if is_reachable(row["status"]) else "DOWN" if row["status"] in known_statuses else "UNKNOWN"
+        target.append({
+            "timestamp":int(row["checked_at"]),
+            "state":state,
+            "status":row["status"],
+            "latency_ms":row["response_time_ms"],
+            "http_status":row["http_status"],
+            "checks":1,
+        })
     result=[]
     for resource in resources:
         rid=int(resource["id"])
-        ordered=sorted(by_resource.get(rid,{}).values(),key=lambda x:x["timestamp"])
-        points=[]
-        for idx,p in enumerate(ordered):
-            if p["timestamp"] < since:
-                continue
-            points.append({
-                "timestamp":p["timestamp"],
-                # Keep each point tied to the checks made in this bucket.
-                # A rolling hour average makes a resource seem to drift
-                # through percentages after it has already recovered/failed.
-                "availability":round(p["ok"]/p["known"]*100,1) if p["known"] else None,
-                "latency_ms":round(p["latency_sum"]/p["latency_count"]) if p["latency_count"] else None,
-                "checks":p["total"],
-            })
-        st=stats.get(rid,{})
-        total=int(st.get("total") or 0)
-        ok=int(st.get("ok") or 0)
+        points=by_resource.get(rid,[])
         result.append({
             **resource,
-            "availability_24h":round(ok/total*100,2) if total else None,
-            "avg_latency_24h_ms":round(st.get("avg_latency")) if st.get("avg_latency") is not None else None,
-            "last_checked_at":st.get("last_checked"),
+            "last_checked_at":points[-1]["timestamp"] if points else None,
             "points":points,
         })
     return {
-        "scope":scope,"minutes":minutes,"bucket_seconds":bucket,
+        "scope":scope,"minutes":minutes,"scale_seconds":10,
         "from":since,"to":now,"resources":result,
     }
 

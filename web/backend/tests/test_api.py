@@ -234,10 +234,13 @@ class NetWeatherApiTest(unittest.TestCase):
         payload = self.client.get("/api/realtime?minutes=60&scope=GLOBAL").json()
         row = next(r for r in payload["resources"] if r["id"] == rid)
         self.assertTrue(row["points"])
-        latest = row["points"][-1]["availability"]
-        self.assertEqual(latest, 100)
-        failed = next(p for p in row["points"] if p["timestamp"] == ((now - 29 * 60) // 30) * 30)
-        self.assertEqual(failed["availability"], 0)
+        latest = row["points"][-1]["state"]
+        self.assertEqual(latest, "UP")
+        failed = next(p for p in row["points"] if p["status"] == "TIMEOUT")
+        self.assertEqual(failed["state"], "DOWN")
+        self.assertEqual(failed["latency_ms"], 8000)
+        self.assertEqual(payload["scale_seconds"], 10)
+        self.assertIn("alerts_enabled", row)
 
     def test_ranked_resource_catalog_and_batch_add(self):
         response = self.client.get("/api/resource-catalog")
@@ -524,7 +527,7 @@ class NetWeatherApiTest(unittest.TestCase):
             )
         payload = self.client.get("/api/realtime?minutes=60&scope=DOMESTIC").json()
         row = next(resource for resource in payload["resources"] if resource["id"] == rid)
-        self.assertEqual(row["points"][-1]["availability"], None)
+        self.assertEqual(row["points"][-1]["state"], "UNKNOWN")
 
     def test_ping_incidents_are_logged_without_notifications(self):
         created = self.client.post("/api/resources", headers=self.auth, json={

@@ -28,13 +28,13 @@ class FrontendContractTest(unittest.TestCase):
         self.assertTrue(views.issubset(sections))
         self.assertEqual(
             sections,
-            {"overview","resources","groups","alerts","map","probes","diagnostics","history","notifications","integrations","settings"},
+            {"overview","resources","groups","alerts","map","probes","diagnostics","notifications","integrations","settings"},
         )
 
     def test_reference_overview_sections_exist(self):
         required = (
-            "globalSearch","topSystemStatus","kpiGlobal","kpiResources","kpiLatency","kpiRu","kpiPersonal","kpiIncidents",
-            "streamChart","eventFeed","resourceCards","faultMap","overviewResourceTable",
+            "globalSearch","topSystemStatus","kpiResources","kpiLatency","kpiPersonal","kpiIncidents",
+            "globalTimeline","russiaTimeline","eventFeed","faultMap","overviewResourceTable",
             "faultPath","faultConclusion","faultResourceSelect","mapRegion","mapZoomIn","mapZoomOut",
             "overviewFreshness","overviewResourceSummary","eventSummary",
         )
@@ -44,7 +44,7 @@ class FrontendContractTest(unittest.TestCase):
     def test_reference_navigation_items_exist(self):
         for label in (
             "Обзор","Мониторинг","Инциденты","Карта сбоев","Точки наблюдения",
-            "Отчёты","Уведомления","Интеграции","Настройки",
+            "Уведомления","Интеграции","Настройки",
         ):
             self.assertIn(label, self.html)
 
@@ -56,8 +56,8 @@ class FrontendContractTest(unittest.TestCase):
             "ackAllIncidents","resourceIdentityPreview","resourceTargetHint",
             "resourceCatalogForm","catalogSearch","resourceCatalogGroups","customResourceTarget",
             "customResourceName","customResourceGroup","customCatalogMatch","addCatalogResources","resourceEditDialog",
-            "customizeOverview","dashboardPreferencesDialog","dashboardPreferencesForm","pinnedResourceGroups",
-            "pinnedResourceCount","dashboardPanelChoices","resetDashboardPreferences",
+            "customizeOverview","dashboardPreferencesDialog","dashboardPreferencesForm",
+            "dashboardPanelChoices","resetDashboardPreferences",
             "confirmDialog","confirmTitle","confirmMessage","confirmHint","confirmCancel","confirmAccept",
         ):
             self.assertIn(f'id="{item}"', self.html)
@@ -135,10 +135,14 @@ class FrontendContractTest(unittest.TestCase):
             self.assertTrue(token in self.js or token in self.html or token in self.css)
         self.assertNotIn('toast("Фильтр карты:', self.js)
 
-    def test_availability_axis_matches_reference_bands(self):
-        self.assertIn("var plotBottom=h-p.b,ticks=[100,50,0]", self.js)
-        self.assertIn('v===100?"Доступен":v===50?"Частично":"Не отвечает"', self.js)
-        self.assertIn("if(pt.availability==null){penDown=false;return}", self.js)
+    def test_resource_timeline_uses_observed_up_down_and_unknown_states(self):
+        self.assertIn("function drawResourceTimeline(", self.js)
+        self.assertIn("function timelineState(point)", self.js)
+        self.assertIn('point.state==="UP"?"up":point.state==="DOWN"?"down":"unknown"', self.js)
+        self.assertNotIn("availability", self.js)
+        self.assertIn("class=\"timeline-segment '+seg.state+'\"", self.js)
+        self.assertIn('class="timeline-notification ', self.js)
+        self.assertIn('scale_seconds', (self.root / "backend" / "app" / "main.py").read_text(encoding="utf-8"))
 
     def test_overview_resources_are_problem_first_and_bounded(self):
         self.assertIn(".compact-table{", self.css)
@@ -150,14 +154,14 @@ class FrontendContractTest(unittest.TestCase):
 
     def test_dashboard_preferences_and_capability_gating(self):
         for token in (
-            "DASHBOARD_PREFS_KEY", "function dashboardCapabilities(", "function visiblePinnedResourceIds(",
+            "DASHBOARD_PREFS_KEY", "function dashboardCapabilities(",
             "function applyDashboardPreferences(", "function renderDashboardPreferencesModal(",
-            "data-dashboard-panel", "data-pin-resource", "pinned_resource_ids",
+            "data-dashboard-panel",
         ):
             self.assertTrue(token in self.js or token in self.html)
         self.assertIn(".dashboard-hidden", self.css)
         self.assertIn(".overview-row.single-panel", self.css)
-        self.assertIn("fault_domain:resources.length>0&&(hasDomestic||hasPersonal)", self.js)
+        self.assertIn("fault_domain:resources.length>0", self.js)
 
     def test_font_sizes_never_drop_below_ten_pixels(self):
         values = [float(v) for v in re.findall(r'font-size:\s*(\d+(?:\.\d+)?)px', self.css)]
@@ -198,12 +202,18 @@ class FrontendContractTest(unittest.TestCase):
             self.css,
         )
 
-    def test_dual_charts_share_ranges_refresh_and_fixed_layout(self):
+    def test_dual_resource_timelines_share_range_and_refresh(self):
         self.assertNotIn("expandChart", self.html + self.js)
         self.assertNotIn("chart-expanded", self.css + self.js)
         self.assertIn('api("/api/realtime?minutes="+S.streamMinutes+"&scope=DOMESTIC")', self.js)
+        self.assertIn('data-minutes="10080"', self.html)
+        self.assertIn('Деление шкалы — 10 секунд', self.html)
+        self.assertNotIn('Отчёты', self.html)
+        self.assertNotIn('streamChart', self.html)
+        self.assertIn('alerts_enabled', self.js)
         self.assertIn('setInterval(function(){if(!S.loading)loadAll(true)},5000)', self.js)
-        self.assertIn(".overview-row-dual>.streams-panel,.overview-row-dual>.domestic-stream-panel{display:grid;grid-template-rows:56px minmax(0,1fr) 38px}", self.css)
+        self.assertIn('class="monitoring-timeline-grid"', self.html)
+        self.assertIn(".timeline-segment.up{background:#42df9c}.timeline-segment.down{background:#ff845c}.timeline-segment.unknown{background:#596579}", self.css)
 
     def test_bulk_check_button_calls_owner_endpoint(self):
         self.assertIn('id="checkAllResources"', self.html)
@@ -216,9 +226,11 @@ class FrontendContractTest(unittest.TestCase):
         self.assertIn('new Notification(title', self.js)
         self.assertIn('["DOWN","RUSSIA_DOWN"].indexOf(String(t.incident.kind||""))<0', self.js)
 
-    def test_pinned_resource_cards_wrap_long_labels_inside_card_width(self):
-        self.assertIn(".overview-row-pinned .resource-card{grid-template-columns:minmax(0,1fr)}", self.css)
-        self.assertIn(".overview-row-pinned .resource-state{flex:0 1 62%;min-width:0;white-space:normal;overflow:visible;overflow-wrap:anywhere;text-overflow:clip;line-height:1.15}", self.css)
+    def test_resource_cards_and_percent_availability_are_removed(self):
+        self.assertNotIn("resource-card", self.html)
+        self.assertNotIn("pinned_resource_ids", self.js)
+        self.assertNotIn("Доступность (24ч)", self.js)
+        self.assertIn('class="resource-timeline-row"', self.js)
 
     def test_russian_availability_is_explicit_per_resource(self):
         for label in ("Доступен из РФ", "Вероятное ограничение в РФ", "Нет данных по РФ"):
@@ -226,13 +238,9 @@ class FrontendContractTest(unittest.TestCase):
         self.assertIn("function russianResourceState(r)", self.js)
         self.assertIn("var ruFailure=isConfirmedUnavailable(dom.status)||chartFailure", self.js)
         self.assertIn("Сбой ресурса · РФ отдельно не подтверждена", self.js)
-        self.assertIn("class=\"resource-ru-status ", self.js)
-        self.assertIn("class=\"table-resource-ru ", self.js)
-        self.assertIn("esc(russianResourceState(r).text)", self.js)
-        self.assertIn("isConfirmedUnavailable((r.domestic||{}).status))return 0", self.js)
-        self.assertIn(".resource-ru-status.bad,.table-resource-ru.bad{color:var(--red)}", self.css)
-        self.assertIn(".overview-row-pinned .resource-card{height:auto!important;min-height:156px;grid-template-rows:auto auto auto 40px auto}", self.css)
-        self.assertIn(".overview-row-pinned .resource-card-foot span{overflow:visible;text-overflow:clip;white-space:normal;overflow-wrap:anywhere;line-height:1.2}", self.css)
+        self.assertIn("Вероятное ограничение в РФ", self.js)
+        self.assertIn("timeline-state ", self.js)
+        self.assertIn("alerts_enabled", self.js)
 
     def test_kpi_cards_keep_enough_width_for_values_at_demo_viewports(self):
         self.assertIn("@media(max-width:1450px) and (min-width:1051px){.kpi-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}", self.css)
@@ -270,8 +278,6 @@ class FrontendContractTest(unittest.TestCase):
 
     def test_no_inline_fake_metrics(self):
         self.assertNotRegex(self.html, r'>\s*9[0-9](?:\.\d+)?%\s*<')
-        self.assertIn('id="kpiGlobal">—</strong>', self.html)
-        self.assertIn('id="kpiRu">—</strong>', self.html)
 
 
 if __name__ == "__main__":
