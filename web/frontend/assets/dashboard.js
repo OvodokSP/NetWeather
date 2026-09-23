@@ -1265,7 +1265,6 @@ function hydrateChromeIcons(){
   var alert=q("#openAlerts");if(alert)alert.innerHTML=appIconMarkup("bell")+'<i id="notifyCount" class="notify-count hidden">0</i>';
   var theme=q("#themeToggle");if(theme)theme.innerHTML=appIconMarkup("theme");
   var world=q("#worldButton");if(world)world.innerHTML=appIconMarkup("world");
-  var expand=q("#expandChart");if(expand)expand.innerHTML=appIconMarkup("expand")
 }
 
 function setup(){
@@ -1285,7 +1284,6 @@ function setup(){
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){e.preventDefault();var input=q("#globalSearch");input.focus();input.select();return}
     if(e.key==="Escape"){
       var search=q("#searchResults");if(search&&!search.classList.contains("hidden")){hideSearch();return}
-      var expanded=q(".streams-panel.chart-expanded");if(expanded){expanded.classList.remove("chart-expanded")}
     }
   });
   document.addEventListener("click",function(e){if(!e.target.closest(".search-wrap"))hideSearch()});
@@ -1308,10 +1306,10 @@ function setup(){
   q("#customResourceName").oninput=function(){this.dataset.autoSuggested="0"};
   q("#resourceForm").onsubmit=saveResource;q("#groupForm").onsubmit=saveGroup;q("#openAddGroup").onclick=function(){openGroupForm(null)};
   qa(".modal-close").forEach(function(b){b.onclick=function(){closeDialog(b.closest("dialog"))}});
-  qa('.seg[data-minutes]').forEach(function(b){b.onclick=async function(){if(b.dataset.busy==="1")return;qa('.seg[data-minutes]').forEach(function(x){x.classList.remove("active")});b.classList.add("active");S.streamMinutes=Number(b.dataset.minutes);try{await withBusy(b,"…",async function(){S.realtime=await api("/api/realtime?minutes="+S.streamMinutes+"&scope=EXTERNAL");renderRealtime();renderResourceCards();renderOverviewTable()})}catch(e){toast(e.message)}}});
+  qa('.seg[data-minutes]').forEach(function(b){b.onclick=async function(){if(b.dataset.busy==="1")return;qa('.seg[data-minutes]').forEach(function(x){x.classList.remove("active")});b.classList.add("active");S.streamMinutes=Number(b.dataset.minutes);try{await withBusy(b,"…",async function(){var data=await Promise.all([api("/api/realtime?minutes="+S.streamMinutes+"&scope=EXTERNAL"),api("/api/realtime?minutes="+S.streamMinutes+"&scope=DOMESTIC")]);S.realtime=data[0];S.realtimeDom=data[1];renderRealtime();renderDomesticRealtime();renderResourceCards();renderOverviewTable()})}catch(e){toast(e.message)}}});
   qa("[data-overview-resource-mode]").forEach(function(b){b.onclick=function(){S.overviewResourceMode=b.dataset.overviewResourceMode;qa("[data-overview-resource-mode]").forEach(function(x){x.classList.toggle("active",x===b)});renderOverviewTable()}});
   q("#streamChart").addEventListener("mousemove",function(e){var canvas=q("#streamChart");setChartHover(canvas,e);handleChartMoveForCanvas(canvas,"#chartTooltip",e)});q("#streamChart").addEventListener("mouseleave",function(){q("#chartTooltip").classList.add("hidden");if(S.hoverSeries){S.hoverSeries=null;renderRealtime();renderDomesticRealtime()}});q("#domesticStreamChart").addEventListener("mousemove",function(e){var canvas=q("#domesticStreamChart");setChartHover(canvas,e);handleChartMoveForCanvas(canvas,"#domesticChartTooltip",e)});q("#domesticStreamChart").addEventListener("mouseleave",function(){q("#domesticChartTooltip").classList.add("hidden");if(S.hoverSeries){S.hoverSeries=null;renderRealtime();renderDomesticRealtime()}});
-  q("#expandChart").onclick=function(){var panel=q(".streams-panel"),expanded=panel.classList.toggle("chart-expanded");this.setAttribute("aria-expanded",expanded?"true":"false");this.setAttribute("title",expanded?"Свернуть график":"Развернуть график")};
+  q("#checkAllResources").onclick=async function(){var button=this;try{await withBusy(button,"Проверяем…",async function(){var result=await api("/api/check-all",{method:"POST"},true);await loadAll(true);toast("Проверка завершена: "+result.checked+" ресурсов · доступно "+result.ok+" · проблемы "+result.failed)})}catch(e){toast(e.message)}};
   q("#mapZoomIn").onclick=function(){S.mapScale=Math.min(2,S.mapScale+.15);q("#worldMapSvg").style.transform="scale("+S.mapScale+")"};
   q("#mapZoomOut").onclick=function(){S.mapScale=Math.max(.8,S.mapScale-.15);q("#worldMapSvg").style.transform="scale("+S.mapScale+")"};
   q("#mapRegion").onchange=function(){renderMap()};

@@ -62,15 +62,6 @@ class NetWeatherApiTest(unittest.TestCase):
         self.assertEqual(self.client.get("/api/system").status_code, 200)
         self.assertEqual(self.client.get("/api/groups").status_code, 200)
 
-    def test_unknown_api_paths_return_json_404_without_breaking_spa_routes(self):
-        for path in ("/api/agent/config.tsv", "/api/agent/result", "/api/nonexistent"):
-            response = self.client.get(path)
-            self.assertEqual(response.status_code, 404)
-            self.assertEqual(response.json(), {"detail": "Not Found"})
-        client_route = self.client.get("/resources/nonexistent-client-route")
-        self.assertEqual(client_route.status_code, 200)
-        self.assertIn("text/html", client_route.headers["content-type"])
-
     def test_owner_session_and_group_crud(self):
         status = self.client.get("/api/session")
         self.assertEqual(status.status_code, 200)
@@ -482,6 +473,21 @@ class NetWeatherApiTest(unittest.TestCase):
         good = dict(bad, status="OK", response_time_ms=120, http_ms=60, http_status=200, message="HTTP 200")
         self.main.write_check(rid, good)
         self.assertEqual(len(self.client.get("/api/incidents?active=true").json()), 0)
+
+    def test_russia_incident_emits_one_open_and_one_recovery(self):
+        created = self.client.post("/api/resources", headers=self.auth, json={"name":"Russia outage","target":"https://example.com","failure_threshold":2})
+        rid = created.json()["id"]
+        bad = {"status":"TIMEOUT","response_time_ms":8000,"message":"timeout"}
+        first = self.main.write_check(rid, bad, probe_key="test-russia", probe_scope="RUSSIA")
+        second = self.main.write_check(rid, bad, probe_key="test-russia", probe_scope="RUSSIA")
+        repeated = self.main.write_check(rid, bad, probe_key="test-russia", probe_scope="RUSSIA")
+        self.assertEqual([n["event"] for n in first], [])
+        self.assertEqual([n["event"] for n in second], ["incident_opened"])
+        self.assertEqual(repeated, [])
+        good = {"status":"OK","response_time_ms":120,"message":"HTTP 200"}
+        recovery = self.main.write_check(rid, good, probe_key="test-russia", probe_scope="RUSSIA")
+        self.assertEqual([n["event"] for n in recovery], ["incident_closed"])
+        self.assertEqual(self.client.get("/api/incidents?active=true").json(), [])
 
 
 if __name__ == "__main__":

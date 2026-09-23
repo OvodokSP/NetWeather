@@ -201,7 +201,6 @@ html[data-theme="light"] .panel{background:var(--panel)}
 .event-item.unread{background:linear-gradient(90deg,rgba(88,199,255,.04),transparent)}
 .event-ack{border:0;background:transparent;color:#6ed4ff;font-size:10px;padding:1px 3px;margin-top:2px}
 .event-ack:hover{text-decoration:underline}
-.chart-expanded{position:fixed!important;inset:74px 18px 18px 258px!important;z-index:90;height:auto!important;box-shadow:0 30px 90px rgba(0,0,0,.6)}
 @media(max-width:1450px) and (min-width:1051px){
   :root{--sidebar-w:220px}
   .headline-row h1{font-size:23px}
@@ -817,7 +816,6 @@ dialog.modal[open]{
   .map-panel,.resources-panel,.fault-panel{height:300px}
   .page-head{align-items:flex-start;flex-wrap:wrap}
   .page-actions,.panel-actions{flex-wrap:wrap}
-  .chart-expanded{inset:calc(var(--mobile-nav-h) + var(--topbar-h) + 8px) 8px 8px!important}
   .modal-actions{flex-wrap:wrap}
   .toast{max-width:calc(100vw - 24px)}
 }
@@ -1135,6 +1133,8 @@ body.core-offline .overview-view .kpi-card::after{
 
 /* CI rerun marker: responsive overview contract verified locally. */
 
+/* CI: keenetic probe contract files are present on the PR branch. */
+
 /* Operational density: ten pinned resources and a readable domestic outage chart. */
 .overview-row-domestic{grid-template-columns:minmax(0,820px);justify-content:start}
 .domestic-stream-panel{width:100%;max-width:820px}
@@ -1166,8 +1166,8 @@ body.core-offline .overview-view .kpi-card::after{
   .overview-row-pinned .resource-card{flex-basis:180px;width:180px}
 }
 
-/* Ensure domestic chart and legend share the same panel height. */
-.overview-row-dual>.domestic-stream-panel{grid-template-rows:56px minmax(0,1fr) 38px}
+/* Keep both scope charts identical in panel, plot, and legend geometry. */
+.overview-row-dual>.streams-panel,.overview-row-dual>.domestic-stream-panel{display:grid;grid-template-rows:56px minmax(0,1fr) 38px}
 .overview-row-dual>.domestic-stream-panel .domestic-chart-wrap{min-height:0;height:auto!important}
 .overview-row-dual>.domestic-stream-panel .stream-legend{min-height:38px;overflow:hidden}
 

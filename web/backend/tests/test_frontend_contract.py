@@ -52,7 +52,7 @@ class FrontendContractTest(unittest.TestCase):
         for item in (
             "resourceDialog","detailDialog","diagTrace","diagTraceDomestic",
             "diagCheck","openAddResource","overviewAddResource","groupDialog","openAddGroup","groupForm",
-            "sidebarAddResource","manageGroups","expandChart","enableNotifications",
+            "sidebarAddResource","manageGroups","checkAllResources","enableNotifications",
             "ackAllIncidents","resourceIdentityPreview","resourceTargetHint",
             "resourceCatalogForm","catalogSearch","resourceCatalogGroups","customResourceTarget",
             "customResourceName","customResourceGroup","customCatalogMatch","addCatalogResources","resourceEditDialog",
@@ -190,13 +190,23 @@ class FrontendContractTest(unittest.TestCase):
             "overflow-x:clip",
             "--mobile-nav-h:56px",
             "min-height:44px",
-            ".chart-expanded{inset:calc(var(--mobile-nav-h)",
         ):
             self.assertIn(token, self.css)
         self.assertIn(
             ".kpi-grid,.overview-row-chart,.overview-row-middle,.overview-row-bottom,.resource-cards{grid-template-columns:minmax(0,1fr)!important}",
             self.css,
         )
+
+    def test_dual_charts_share_ranges_refresh_and_fixed_layout(self):
+        self.assertNotIn("expandChart", self.html + self.js)
+        self.assertNotIn("chart-expanded", self.css + self.js)
+        self.assertIn('api("/api/realtime?minutes="+S.streamMinutes+"&scope=DOMESTIC")', self.js)
+        self.assertIn('setInterval(function(){if(!S.loading)loadAll(true)},5000)', self.js)
+        self.assertIn(".overview-row-dual>.streams-panel,.overview-row-dual>.domestic-stream-panel{display:grid;grid-template-rows:56px minmax(0,1fr) 38px}", self.css)
+
+    def test_bulk_check_button_calls_owner_endpoint(self):
+        self.assertIn('id="checkAllResources"', self.html)
+        self.assertIn('api("/api/check-all",{method:"POST"},true)', self.js)
 
     def test_global_search_can_offer_resource_addition(self):
         for token in (

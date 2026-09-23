@@ -164,6 +164,28 @@ def write_check(
                         "Срок TLS снова вне порога тревоги", now,
                     ))
 
+        elif probe_scope == "RUSSIA":
+            # Open one Russia-scope incident only after the configured number
+            # of consecutive confirmed failures; unknown probe results do not alert.
+            confirmed_failures = {"DNS_ERROR", "TCP_ERROR", "TLS_ERROR", "HTTP_ERROR", "TIMEOUT", "BLOCKED_TARGET"}
+            recent = conn.execute(
+                """SELECT status FROM checks WHERE resource_id=? AND probe_scope='RUSSIA'
+                   ORDER BY checked_at DESC,id DESC LIMIT ?""",
+                (resource_id, threshold),
+            ).fetchall()
+            failing = len(recent) >= threshold and all(x["status"] in confirmed_failures for x in recent)
+            if failing:
+                msg = f"{resource['name']}: ресурс недоступен из российского контура — {payload['status']}"
+                iid = _open(conn, resource_id, "RUSSIA_DOWN", "critical", msg, now)
+                if iid:
+                    notices.append(_notice("incident_opened", iid, resource["name"], "RUSSIA_DOWN", "critical", msg, now))
+            elif is_reachable(payload["status"]):
+                for iid in _close(conn, resource_id, "RUSSIA_DOWN", now):
+                    notices.append(_notice(
+                        "incident_closed", iid, resource["name"], "RUSSIA_DOWN", "info",
+                        "Доступность ресурса из российского контура восстановлена", now,
+                    ))
+
     for notice in notices:
         _notify(notice)
     return notices
