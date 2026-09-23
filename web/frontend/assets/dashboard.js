@@ -380,21 +380,34 @@ function updateClock(){
   q("#clockDate").textContent=date
 }
 
-async function loadAll(silent){
+function mergeRealtimeWindow(previous,current,totalMinutes){
+  if(!previous||totalMinutes<=60)return current;
+  var floor=Number(current.to||Date.now()/1000)-totalMinutes*60,refreshFrom=Number(current.from||0),oldRows=new Map((previous.resources||[]).map(function(row){return [Number(row.id),row]}));
+  var resources=(current.resources||[]).map(function(row){
+    var old=oldRows.get(Number(row.id)),points=new Map();
+    (old&&old.points||[]).forEach(function(point){var ts=Number(point.timestamp);if(ts>=floor&&ts<refreshFrom)points.set(ts+"|"+point.status+"|"+point.latency_ms,point)});
+    (row.points||[]).forEach(function(point){var ts=Number(point.timestamp);if(ts>=floor)points.set(ts+"|"+point.status+"|"+point.latency_ms,point)});
+    return Object.assign({},row,{points:Array.from(points.values()).sort(function(a,b){return Number(a.timestamp)-Number(b.timestamp)})})
+  });
+  return Object.assign({},current,{minutes:totalMinutes,from:floor,resources:resources})
+}
+
+async function loadAll(silent,realtimeWindow){
   if(S.loading)return;
   S.loading=true;
   try{
+    var requestMinutes=Number(realtimeWindow||S.streamMinutes);
     var a=await Promise.all([
       api("/api/dashboard"),
       api("/api/incidents?limit=100"),
       api("/api/system"),
       api("/api/groups"),
-      api("/api/realtime?minutes="+S.streamMinutes+"&scope=EXTERNAL"),
-      api("/api/realtime?minutes="+S.streamMinutes+"&scope=DOMESTIC"),
+      api("/api/realtime?minutes="+requestMinutes+"&scope=EXTERNAL"),
+      api("/api/realtime?minutes="+requestMinutes+"&scope=DOMESTIC"),
       api("/api/events?limit=30"),
       api("/api/session")
     ]);
-    S.dashboard=a[0];if(S.dashboard&&Array.isArray(S.dashboard.resources))S.dashboard.resources=S.dashboard.resources.map(normalizeResourceShape);S.incidents=a[1];notifyIncidentTransitions(S.incidents);S.system=a[2];S.groups=a[3];S.realtime=a[4];S.realtimeDom=a[5];S.events=a[6];
+    S.dashboard=a[0];if(S.dashboard&&Array.isArray(S.dashboard.resources))S.dashboard.resources=S.dashboard.resources.map(normalizeResourceShape);S.incidents=a[1];notifyIncidentTransitions(S.incidents);S.system=a[2];S.groups=a[3];S.realtime=mergeRealtimeWindow(S.realtime,a[4],S.streamMinutes);S.realtimeDom=mergeRealtimeWindow(S.realtimeDom,a[5],S.streamMinutes);S.events=a[6];
     S.authRequired=!!a[7].auth_required;S.owner=!S.authRequired||!!a[7].authenticated;
     S.lastSuccessAt=Date.now();renderAll();setCoreOnline(true)
   }catch(e){
@@ -546,8 +559,8 @@ function drawResourceTimeline(containerId,statusId,source,scope){
   }).join("");
   qa("#"+containerId+" [data-open-resource]").forEach(function(b){b.onclick=function(){openDetail(Number(b.dataset.openResource))}})
 }
-function renderRealtime(){drawResourceTimeline("globalTimeline","globalTimelineStatus",S.realtime,"GLOBAL")}
-function renderDomesticRealtime(){drawResourceTimeline("russiaTimeline","russiaTimelineStatus",S.realtimeDom,"RUSSIA")}
+function renderRealtime(){if(S.view!=="resources")return;drawResourceTimeline("globalTimeline","globalTimelineStatus",S.realtime,"GLOBAL")}
+function renderDomesticRealtime(){if(S.view!=="resources")return;drawResourceTimeline("russiaTimeline","russiaTimelineStatus",S.realtimeDom,"RUSSIA")}
 function renderEvents(){
   var el=q("#eventFeed"),rows=S.events||[];
   var important=rows.filter(function(ev){return ev.severity==="critical"||ev.severity==="warning"}).length;
@@ -1174,7 +1187,7 @@ function setup(){
   q("#enableNotifications").onclick=async function(){var button=this;if(!("Notification" in window)){toast("Браузер не поддерживает уведомления");return}await withBusy(button,"Запрашиваем…",async function(){var p=await Notification.requestPermission();renderNotifications();toast(p==="granted"?"Уведомления включены":"Разрешение не выдано")})};
   q("#deleteResource").onclick=deleteResource;q("#editResource").onclick=function(){var r=resourceById(S.detailId);q("#detailDialog").close();if(r)openResourceForm(r)};q("#detailCheck").onclick=function(){var b=this,id=S.detailId;q("#detailDialog").close();manualCheck(id,b)};q("#detailTrace").onclick=function(){var b=this,id=S.detailId;q("#detailDialog").close();trace(id,false,b)};
   window.addEventListener("resize",function(){renderRealtime();renderDomesticRealtime();renderOverviewTable();applyDashboardPreferences()});
-  loadAll(false);S.poll=setInterval(function(){if(!S.loading)loadAll(true)},5000)
+  loadAll(false);S.poll=setInterval(function(){if(!S.loading)loadAll(true,Math.min(60,S.streamMinutes))},5000)
 }
 document.addEventListener("DOMContentLoaded",setup);
 })();

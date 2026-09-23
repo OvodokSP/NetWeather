@@ -205,13 +205,15 @@ class FrontendContractTest(unittest.TestCase):
     def test_dual_resource_timelines_share_range_and_refresh(self):
         self.assertNotIn("expandChart", self.html + self.js)
         self.assertNotIn("chart-expanded", self.css + self.js)
-        self.assertIn('api("/api/realtime?minutes="+S.streamMinutes+"&scope=DOMESTIC")', self.js)
+        self.assertIn('api("/api/realtime?minutes="+requestMinutes+"&scope=DOMESTIC")', self.js)
+        self.assertIn("function mergeRealtimeWindow(previous,current,totalMinutes)", self.js)
+        self.assertIn("mergeRealtimeWindow(S.realtime,a[4],S.streamMinutes)", self.js)
         self.assertIn('data-minutes="10080"', self.html)
         self.assertIn('Деление шкалы — 10 секунд', self.html)
         self.assertNotIn('Отчёты', self.html)
         self.assertNotIn('streamChart', self.html)
         self.assertIn('alerts_enabled', self.js)
-        self.assertIn('setInterval(function(){if(!S.loading)loadAll(true)},5000)', self.js)
+        self.assertIn('setInterval(function(){if(!S.loading)loadAll(true,Math.min(60,S.streamMinutes))},5000)', self.js)
         self.assertIn('class="monitoring-timeline-grid"', self.html)
         self.assertIn(".timeline-segment.up{background:#42df9c}.timeline-segment.down{background:#ff845c}.timeline-segment.unknown{background:#596579}", self.css)
 
