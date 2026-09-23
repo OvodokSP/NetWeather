@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#08111f">
   <meta name="description" content="NetWeather — мониторинг доступности ресурсов и диагностика сетевых проблем в реальном времени.">
   <title>NetWeather</title>
-  <link rel="stylesheet" href="/assets/dashboard.css?v=0.3.10-dynamic19">
+  <link rel="stylesheet" href="/assets/dashboard.css?v=0.3.10-dynamic20">
 </head>
 <body>
 <div class="shell">
@@ -404,99 +404,4 @@
       <button type="button" class="modal-close" aria-label="Закрыть окно">×</button>
     </div>
     <div class="catalog-toolbar">
-      <div class="catalog-search-wrap"><span>⌕</span><input class="input" id="catalogSearch" placeholder="Найти ресурс в каталоге…"></div>
-      <div class="catalog-selection-pill"><b id="catalogSelectedCount">0</b><span>выбрано</span></div>
-    </div>
-    <div id="resourceCatalogGroups" class="resource-catalog-groups">
-      <div class="catalog-loading">Загружаем каталог…</div>
-    </div>
-
-    <section class="custom-resource-block">
-      <div class="custom-resource-head">
-        <div><span>СВОЙ РЕСУРС</span><h3>Не нашли нужный сервис?</h3><p>Вставьте URL — NetWeather определит название и проверит, нет ли его уже в каталоге.</p></div>
-      </div>
-      <div class="custom-resource-grid">
-        <label>URL или домен<input class="input" id="customResourceTarget" maxlength="2048" placeholder="https://example.com"></label>
-        <label>Название<input class="input" id="customResourceName" maxlength="120" placeholder="Определится автоматически"></label>
-        <label>Группа<select class="select" id="customResourceGroup"></select></label>
-      </div>
-      <div id="customCatalogMatch" class="custom-match hidden"></div>
-    </section>
-
-    <div class="catalog-modal-actions">
-      <div id="catalogSelectionSummary" class="catalog-selection-summary">Ничего не выбрано</div>
-      <div class="catalog-action-buttons">
-        <button type="button" class="btn secondary modal-close">Отмена</button>
-        <button type="submit" class="btn primary" id="addCatalogResources">Добавить выбранные</button>
-      </div>
-    </div>
-  </form>
-</dialog>
-
-<dialog id="resourceEditDialog" class="modal edit-resource-modal">
-  <form id="resourceForm">
-    <div class="modal-head"><div><span>РЕСУРС</span><h2 id="resourceDialogTitle">Изменить ресурс</h2></div><button type="button" class="modal-close" aria-label="Закрыть окно">×</button></div>
-    <input type="hidden" id="resourceId">
-    <div class="form-grid">
-      <label>Название<div class="resource-name-field"><span id="resourceIdentityPreview" class="resource-identity-preview"><span>NW</span></span><input class="input" id="resourceName" required maxlength="120"></div></label>
-      <label>URL или домен<input class="input" id="resourceTarget" required maxlength="2048"><small id="resourceTargetHint" class="field-hint"></small></label>
-      <label>Группа<input class="input" id="resourceGroup" list="groupOptions" required><datalist id="groupOptions"></datalist></label>
-      <label>Интервал<select class="select" id="resourceInterval"><option value="30">30 сек</option><option value="60">1 мин</option><option value="300">5 мин</option><option value="900">15 мин</option><option value="3600">1 час</option></select></label>
-      <label>HTTP от<input class="input" id="statusMin" type="number" min="100" max="599" value="200"></label>
-      <label>HTTP до<input class="input" id="statusMax" type="number" min="100" max="599" value="399"></label>
-      <label>Медленный ответ, мс<input class="input" id="slowThreshold" type="number" min="100" max="120000" value="1500"></label>
-      <label>Ошибок до тревоги<input class="input" id="failureThreshold" type="number" min="1" max="10" value="2"></label>
-    </div>
-    <div class="switch-row"><label><input type="checkbox" id="resourceEnabled" checked> Мониторинг включён</label><label><input type="checkbox" id="alertsEnabled" checked> Тревоги включены</label></div>
-    <div class="modal-actions"><button type="button" class="btn secondary modal-close">Отмена</button><button type="submit" class="btn primary">Сохранить изменения</button></div>
-  </form>
-</dialog>
-
-<dialog id="detailDialog" class="modal detail-modal">
-  <div class="modal-head"><div><span>РЕСУРС</span><h2 id="detailTitle">—</h2></div><button type="button" class="modal-close" aria-label="Закрыть окно">×</button></div>
-  <div id="detailBody"></div>
-  <div class="modal-actions split owner-only"><button class="btn danger" id="deleteResource">Удалить</button><div><button class="btn secondary" id="editResource">Изменить</button><button class="btn secondary" id="detailTrace">Traceroute</button><button class="btn primary" id="detailCheck">Проверить</button></div></div>
-</dialog>
-
-<dialog id="groupDialog" class="modal small-modal">
-  <form id="groupForm">
-    <div class="modal-head"><div><span>ГРУППА РЕСУРСОВ</span><h2 id="groupDialogTitle">Новая группа</h2></div><button type="button" class="modal-close" aria-label="Закрыть окно">×</button></div>
-    <input type="hidden" id="groupKey">
-    <label class="field-label">Название<input class="input" id="groupTitle" required maxlength="80" placeholder="Рабочие сервисы"></label>
-    <label class="field-label">Цвет<input class="input color-input" id="groupColor" type="color" value="#3A8DFF"></label>
-    <div class="modal-actions"><button type="button" class="btn secondary modal-close">Отмена</button><button type="submit" class="btn primary">Сохранить</button></div>
-  </form>
-</dialog>
-
-
-<dialog id="confirmDialog" class="modal small-modal confirm-modal" aria-labelledby="confirmTitle">
-  <div class="modal-head">
-    <div><span id="confirmEyebrow">ПОДТВЕРЖДЕНИЕ</span><h2 id="confirmTitle">Подтвердите действие</h2></div>
-    <button type="button" class="modal-close" aria-label="Закрыть окно">×</button>
-  </div>
-  <div class="confirm-body">
-    <p id="confirmMessage">Продолжить?</p>
-    <small id="confirmHint"></small>
-  </div>
-  <div class="modal-actions">
-    <button type="button" class="btn secondary" id="confirmCancel">Отмена</button>
-    <button type="button" class="btn danger" id="confirmAccept">Продолжить</button>
-  </div>
-</dialog>
-
-<dialog id="ownerLoginDialog" class="modal small-modal" aria-labelledby="ownerLoginTitle">
-  <form id="ownerLoginForm">
-    <div class="modal-head">
-      <div><span>ДОСТУП ВЛАДЕЛЬЦА</span><h2 id="ownerLoginTitle">Войти в режим управления</h2></div>
-      <button type="button" class="modal-close" aria-label="Закрыть окно">×</button>
-    </div>
-    <label class="field-label">Пароль<input class="input" id="ownerPassword" type="password" required maxlength="512" autocomplete="current-password"></label>
-    <p class="auth-note">Пароль передаётся только текущему NetWeather Core и не сохраняется в браузере.</p>
-    <div class="modal-actions"><button type="button" class="btn secondary modal-close">Отмена</button><button type="submit" class="btn primary">Войти</button></div>
-  </form>
-</dialog>
-
-<div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
-<script src="/assets/dashboard.js?v=0.3.10-dynamic19"></script>
-</body>
-</html>
+      <div class="catalog-search-wrap"
