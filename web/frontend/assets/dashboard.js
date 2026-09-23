@@ -4,7 +4,7 @@
 var COLORS=["#ff6174","#58c7ff","#78a5ff","#42df9c","#ffd34f","#9a65ff","#56e1d0","#ff8bc7","#b8e35d","#7bb6ff"];
 var MAX_PINNED_RESOURCES=10;
 var S={
-  dashboard:null,incidents:[],system:null,groups:[],realtime:null,realtimeDom:null,events:[],
+  dashboard:null,incidents:[],system:null,groups:[],realtime:null,realtimeDom:null,events:[],incidentNoticesInitialized:false,
   historyExt:[],historyDom:[],streamMinutes:60,detailId:null,diagId:null,
   faultId:null,view:"overview",poll:null,streamMeta:null,chartMeta:{},authRequired:false,
   owner:true,mapScale:1,metaCache:{},catalog:null,catalogSelected:{},customCatalogMatch:null,customAutoCatalogKey:null,
@@ -438,7 +438,7 @@ async function loadAll(silent){
       api("/api/history?hours="+hours+"&scope=DOMESTIC"),
       api("/api/session")
     ]);
-    S.dashboard=a[0];if(S.dashboard&&Array.isArray(S.dashboard.resources))S.dashboard.resources=S.dashboard.resources.map(normalizeResourceShape);S.incidents=a[1];S.system=a[2];S.groups=a[3];S.realtime=a[4];S.realtimeDom=a[5];S.events=a[6];S.historyExt=a[7];S.historyDom=a[8];
+    S.dashboard=a[0];if(S.dashboard&&Array.isArray(S.dashboard.resources))S.dashboard.resources=S.dashboard.resources.map(normalizeResourceShape);S.incidents=a[1];notifyIncidentTransitions(S.incidents);S.system=a[2];S.groups=a[3];S.realtime=a[4];S.realtimeDom=a[5];S.events=a[6];S.historyExt=a[7];S.historyDom=a[8];
     S.authRequired=!!a[9].auth_required;S.owner=!S.authRequired||!!a[9].authenticated;
     S.lastSuccessAt=Date.now();renderAll();setCoreOnline(true)
   }catch(e){
@@ -994,6 +994,29 @@ function renderProbes(){
   var probes=S.dashboard.probes||[];
   el.innerHTML=probes.length?probes.map(function(p){return '<article class="probe-page-card"><h2>'+esc(p.name)+'</h2><p>'+esc(p.scope)+(p.agent_version?' · агент '+esc(p.agent_version):'')+' · '+(p.online?"онлайн":"нет связи")+'</p><div class="probe-page-meta"><div><span>Последняя связь</span><b>'+ago(p.last_seen_at)+'</b></div><div><span>Возраст данных</span><b>'+(p.age_seconds==null?"—":duration(p.age_seconds))+'</b></div></div></article>'}).join(""):empty("Точки наблюдения не подключены","")
   renderProbeLegend()
+}
+
+function notifyIncidentTransitions(incidents){
+  var storageKey="netweather_notified_incident_transitions",seen=[];
+  try{seen=JSON.parse(localStorage.getItem(storageKey)||"[]");if(!Array.isArray(seen))seen=[]}catch(_){seen=[]}
+  var known=new Set(seen),transitions=[];
+  (incidents||[]).forEach(function(i){
+    if(i.opened_at)transitions.push({key:String(i.id)+":open",time:Number(i.opened_at),incident:i,closed:false});
+    if(i.closed_at)transitions.push({key:String(i.id)+":closed",time:Number(i.closed_at),incident:i,closed:true});
+  });
+  transitions.sort(function(a,b){return a.time-b.time});
+  var bootstrap=!S.incidentNoticesInitialized&&seen.length===0;
+  transitions.forEach(function(t){
+    if(known.has(t.key))return;
+    known.add(t.key);
+    if(!bootstrap&&"Notification" in window&&Notification.permission==="granted"){
+      var russian=t.incident.kind==="RUSSIA_DOWN";
+      var title=t.closed?(russian?"Доступность в РФ восстановлена":"Доступность восстановлена"):(russian?"Ресурс недоступен из РФ":"Инцидент NetWeather");
+      try{new Notification(title,{body:t.incident.resource_name+" · "+(t.closed?(t.incident.message||"Проверка снова успешна"):t.incident.message),tag:"netweather-"+t.key,renotify:false})}catch(_){ }
+    }
+  });
+  S.incidentNoticesInitialized=true;
+  try{localStorage.setItem(storageKey,JSON.stringify(Array.from(known).slice(-300)))}catch(_){ }
 }
 
 function renderNotifications(){

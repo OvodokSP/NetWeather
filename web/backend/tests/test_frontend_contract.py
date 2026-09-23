@@ -208,6 +208,12 @@ class FrontendContractTest(unittest.TestCase):
         self.assertIn('id="checkAllResources"', self.html)
         self.assertIn('api("/api/check-all",{method:"POST"},true)', self.js)
 
+    def test_browser_notifications_follow_incident_transitions_once(self):
+        self.assertIn("function notifyIncidentTransitions(incidents)", self.js)
+        self.assertIn('netweather_notified_incident_transitions', self.js)
+        self.assertIn('tag:"netweather-"+t.key,renotify:false', self.js)
+        self.assertIn('new Notification(title', self.js)
+
     def test_global_search_can_offer_resource_addition(self):
         for token in (
             "function searchTargetCandidate(",
