@@ -221,7 +221,7 @@ class NetWeatherApiTest(unittest.TestCase):
         self.assertEqual(events.status_code, 200)
         self.assertIsInstance(events.json(), list)
 
-    def test_realtime_uses_rolling_availability(self):
+    def test_realtime_points_show_bucket_state_without_rolling_average(self):
         rid = self.client.get("/api/dashboard").json()["resources"][0]["id"]
         now = int(time.time())
         with self.main.db() as conn:
@@ -232,12 +232,12 @@ class NetWeatherApiTest(unittest.TestCase):
                     (rid, now - (59 - idx) * 60, status, 120 if status == "OK" else 8000, "GLOBAL"),
                 )
         payload = self.client.get("/api/realtime?minutes=60&scope=GLOBAL").json()
-        self.assertEqual(payload["availability_window_seconds"], 3600)
         row = next(r for r in payload["resources"] if r["id"] == rid)
         self.assertTrue(row["points"])
         latest = row["points"][-1]["availability"]
-        self.assertGreater(latest, 98.0)
-        self.assertLess(latest, 99.0)
+        self.assertEqual(latest, 100)
+        failed = next(p for p in row["points"] if p["timestamp"] == ((now - 29 * 60) // 30) * 30)
+        self.assertEqual(failed["availability"], 0)
 
     def test_ranked_resource_catalog_and_batch_add(self):
         response = self.client.get("/api/resource-catalog")
@@ -477,6 +477,8 @@ class NetWeatherApiTest(unittest.TestCase):
     def test_russia_incident_emits_one_open_and_one_recovery(self):
         created = self.client.post("/api/resources", headers=self.auth, json={"name":"Russia outage","target":"https://example.com","failure_threshold":2})
         rid = created.json()["id"]
+        baseline = {"status":"OK","response_time_ms":120,"message":"HTTP 200"}
+        self.main.write_check(rid, baseline, probe_key="test-global", probe_scope="GLOBAL")
         bad = {"status":"TIMEOUT","response_time_ms":8000,"message":"timeout"}
         first = self.main.write_check(rid, bad, probe_key="test-russia", probe_scope="RUSSIA")
         second = self.main.write_check(rid, bad, probe_key="test-russia", probe_scope="RUSSIA")
@@ -488,6 +490,50 @@ class NetWeatherApiTest(unittest.TestCase):
         recovery = self.main.write_check(rid, good, probe_key="test-russia", probe_scope="RUSSIA")
         self.assertEqual([n["event"] for n in recovery], ["incident_closed"])
         self.assertEqual(self.client.get("/api/incidents?active=true").json(), [])
+
+    def test_russia_failures_do_not_open_restriction_when_global_resource_is_down(self):
+        created = self.client.post("/api/resources", headers=self.auth, json={"name":"Same outage","target":"https://example.com","failure_threshold":1})
+        rid = created.json()["id"]
+        bad = {"status":"TIMEOUT","response_time_ms":8000,"message":"timeout"}
+        self.main.write_check(rid, bad, probe_key="test-global", probe_scope="GLOBAL")
+        notices = self.main.write_check(rid, bad, probe_key="test-russia", probe_scope="RUSSIA")
+        self.assertEqual(notices, [])
+        active = self.client.get("/api/incidents?active=true").json()
+        self.assertEqual([incident["kind"] for incident in active], ["DOWN"])
+
+    def test_unknown_russia_measurement_is_a_chart_gap_not_a_failure(self):
+        created = self.client.post("/api/resources", headers=self.auth, json={"name":"Unknown RU","target":"https://unknown.example"})
+        rid = created.json()["id"]
+        now = int(time.time())
+        with self.main.db() as conn:
+            conn.execute(
+                "INSERT INTO checks(resource_id,checked_at,status,response_time_ms,probe_scope) VALUES(?,?,?,?,?)",
+                (rid, now, "UNKNOWN", 0, "RUSSIA"),
+            )
+        payload = self.client.get("/api/realtime?minutes=60&scope=DOMESTIC").json()
+        row = next(resource for resource in payload["resources"] if resource["id"] == rid)
+        self.assertEqual(row["points"][-1]["availability"], None)
+
+    def test_ping_incidents_are_logged_without_notifications(self):
+        created = self.client.post("/api/resources", headers=self.auth, json={
+            "name":"Slow only","target":"https://example.com","slow_threshold_ms":100,
+        })
+        rid = created.json()["id"]
+        slow = {"status":"OK","response_time_ms":500,"http_status":200,"message":"HTTP 200"}
+        with patch("app.incidents._notify") as notify:
+            self.main.write_check(rid, slow)
+        self.assertFalse(notify.called)
+
+    def test_resource_can_opt_out_of_down_notifications(self):
+        created = self.client.post("/api/resources", headers=self.auth, json={
+            "name":"Unsubscribed","target":"https://example.com","failure_threshold":1,"alerts_enabled":False,
+        })
+        rid = created.json()["id"]
+        bad = {"status":"TIMEOUT","response_time_ms":8000,"message":"timeout"}
+        with patch("app.incidents._notify") as notify:
+            notices = self.main.write_check(rid, bad)
+        self.assertEqual(notices, [])
+        self.assertFalse(notify.called)
 
     def test_bulk_check_runs_enabled_resources_and_records_results(self):
         payload = {

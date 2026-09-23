@@ -169,12 +169,23 @@ async def run_russia_check(row) -> None:
         # An incomplete or mixed Globalping result is not evidence that the
         # resource is unavailable in Russia. Keep it explicitly unknown so
         # the UI cannot turn a provider timeout into a regional outage.
-        status = (
-            "OK" if classification == "OK"
-            else "DNS_ERROR" if classification == "DNS_FAILURE"
-            else "HTTP_ERROR" if classification in {"SERVICE_DOWN", "REGIONAL_OUTAGE"}
-            else "UNKNOWN"
-        )
+        status = "OK" if classification == "OK" else "UNKNOWN"
+        if classification == "DNS_FAILURE":
+            status = "DNS_ERROR"
+        elif result and result.status == "finished":
+            # A Russian failure is meaningful as a restriction signal only
+            # when the same resource is currently reachable from the global
+            # probe. Provider errors and target failures without that baseline
+            # remain unknown instead of being presented as a block.
+            with db() as conn:
+                global_check = conn.execute(
+                    "SELECT status FROM checks WHERE resource_id=? AND probe_scope='GLOBAL' ORDER BY checked_at DESC,id DESC LIMIT 1",
+                    (int(row["id"]),),
+                ).fetchone()
+            independent_failures = int(summary.get("failed") or 0) - int(summary.get("internal_failures") or 0)
+            valid = int(summary.get("valid") or 0)
+            if global_check and is_reachable(global_check["status"]) and valid >= 2 and independent_failures >= 2:
+                status = "HTTP_ERROR"
         write_check(int(row["id"]), {
             "status": status, "response_time_ms": int(summary.get("median_latency_ms") or 0),
             "dns_ms": None, "tcp_ms": None, "tls_ms": None, "http_ms": None, "http_status": None,
@@ -903,16 +914,15 @@ def realtime(minutes:int=Query(default=60,ge=5,le=10080), scope:str=Query(defaul
     now=int(time.time())
     since=now-minutes*60
     bucket=max(30,(minutes*60)//240)
-    availability_window=3600
     with db() as conn:
         resources=[dict(r) for r in conn.execute(
             "SELECT id,name,target,group_name FROM resources WHERE enabled=1 ORDER BY name"
         ).fetchall()]
         rows=conn.execute("""SELECT resource_id,checked_at,status,response_time_ms,dns_ms,tcp_ms,tls_ms,http_ms,http_status
           FROM checks WHERE checked_at>=? AND probe_scope=? ORDER BY checked_at ASC,id ASC""",
-          (since-availability_window,scope_key)).fetchall()
+          (since,scope_key)).fetchall()
         stats24=conn.execute("""SELECT resource_id,
-          COUNT(*) total,
+          SUM(CASE WHEN status IN ('OK','HTTP_REJECTED','DNS_ERROR','TCP_ERROR','TLS_ERROR','HTTP_ERROR','TIMEOUT','BLOCKED_TARGET') THEN 1 ELSE 0 END) total,
           SUM(CASE WHEN status IN ('OK','HTTP_REJECTED') THEN 1 ELSE 0 END) ok,
           AVG(response_time_ms) avg_latency,
           MAX(checked_at) last_checked
@@ -924,9 +934,11 @@ def realtime(minutes:int=Query(default=60,ge=5,le=10080), scope:str=Query(defaul
         rid=int(row["resource_id"])
         b=(int(row["checked_at"])//bucket)*bucket
         target=by_resource.setdefault(rid,{})
-        point=target.setdefault(b,{"timestamp":b,"total":0,"ok":0,"latency_sum":0,"latency_count":0})
+        point=target.setdefault(b,{"timestamp":b,"total":0,"known":0,"ok":0,"latency_sum":0,"latency_count":0})
         point["total"]+=1
-        point["ok"]+=int(is_reachable(row["status"]))
+        if row["status"] in {"OK","HTTP_REJECTED","DNS_ERROR","TCP_ERROR","TLS_ERROR","HTTP_ERROR","TIMEOUT","BLOCKED_TARGET"}:
+            point["known"]+=1
+            point["ok"]+=int(is_reachable(row["status"]))
         if row["response_time_ms"] is not None:
             point["latency_sum"]+=int(row["response_time_ms"])
             point["latency_count"]+=1
@@ -938,17 +950,12 @@ def realtime(minutes:int=Query(default=60,ge=5,le=10080), scope:str=Query(defaul
         for idx,p in enumerate(ordered):
             if p["timestamp"] < since:
                 continue
-            window_start=p["timestamp"]-availability_window
-            rolling_total=0
-            rolling_ok=0
-            j=idx
-            while j>=0 and ordered[j]["timestamp"]>=window_start:
-                rolling_total+=ordered[j]["total"]
-                rolling_ok+=ordered[j]["ok"]
-                j-=1
             points.append({
                 "timestamp":p["timestamp"],
-                "availability":round(rolling_ok/rolling_total*100,1) if rolling_total else None,
+                # Keep each point tied to the checks made in this bucket.
+                # A rolling hour average makes a resource seem to drift
+                # through percentages after it has already recovered/failed.
+                "availability":round(p["ok"]/p["known"]*100,1) if p["known"] else None,
                 "latency_ms":round(p["latency_sum"]/p["latency_count"]) if p["latency_count"] else None,
                 "checks":p["total"],
             })
@@ -964,7 +971,6 @@ def realtime(minutes:int=Query(default=60,ge=5,le=10080), scope:str=Query(defaul
         })
     return {
         "scope":scope,"minutes":minutes,"bucket_seconds":bucket,
-        "availability_window_seconds":availability_window,
         "from":since,"to":now,"resources":result,
     }
 
@@ -1043,8 +1049,6 @@ if FRONTEND_DIR.exists():
     if assets.exists(): app.mount("/assets",StaticFiles(directory=assets),name="assets")
     @app.api_route("/{full_path:path}",methods=["GET","HEAD"])
     def spa(full_path:str):
-        if full_path == "api" or full_path.startswith("api/"):
-            return JSONResponse(status_code=404,content={"detail":"Not Found"})
         root=FRONTEND_DIR.resolve()
         index=root/"index.html"
         if not full_path:

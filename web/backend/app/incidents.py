@@ -165,21 +165,27 @@ def write_check(
                     ))
 
         elif probe_scope == "RUSSIA":
-            # Open one Russia-scope incident only after the configured number
-            # of consecutive confirmed failures; unknown probe results do not alert.
+            # A Russia-only failure is a restriction signal only if the same
+            # resource is currently reachable from the global probe. Unknowns
+            # and simultaneous global outages must not open a regional alert.
             confirmed_failures = {"DNS_ERROR", "TCP_ERROR", "TLS_ERROR", "HTTP_ERROR", "TIMEOUT", "BLOCKED_TARGET"}
+            global_check = conn.execute(
+                "SELECT status FROM checks WHERE resource_id=? AND probe_scope='GLOBAL' ORDER BY checked_at DESC,id DESC LIMIT 1",
+                (resource_id,),
+            ).fetchone()
             recent = conn.execute(
                 """SELECT status FROM checks WHERE resource_id=? AND probe_scope='RUSSIA'
                    ORDER BY checked_at DESC,id DESC LIMIT ?""",
                 (resource_id, threshold),
             ).fetchall()
-            failing = len(recent) >= threshold and all(x["status"] in confirmed_failures for x in recent)
+            failing = bool(global_check and is_reachable(global_check["status"]) and len(recent) >= threshold
+                           and all(x["status"] in confirmed_failures for x in recent))
             if failing:
-                msg = f"{resource['name']}: ресурс недоступен из российского контура — {payload['status']}"
+                msg = f"{resource['name']}: вероятное ограничение в РФ — из российского контура недоступен, глобальная проверка успешна"
                 iid = _open(conn, resource_id, "RUSSIA_DOWN", "critical", msg, now)
                 if iid:
                     notices.append(_notice("incident_opened", iid, resource["name"], "RUSSIA_DOWN", "critical", msg, now))
-            elif is_reachable(payload["status"]):
+            elif is_reachable(payload["status"]) or not (global_check and is_reachable(global_check["status"])):
                 for iid in _close(conn, resource_id, "RUSSIA_DOWN", now):
                     notices.append(_notice(
                         "incident_closed", iid, resource["name"], "RUSSIA_DOWN", "info",
@@ -187,5 +193,8 @@ def write_check(
                     ))
 
     for notice in notices:
-        _notify(notice)
+        # Notifications are only for resource down/recovery transitions.
+        # Slow-response and certificate events stay in the incident history.
+        if notice["kind"] in {"DOWN", "RUSSIA_DOWN"}:
+            _notify(notice)
     return notices

@@ -136,8 +136,9 @@ class FrontendContractTest(unittest.TestCase):
         self.assertNotIn('toast("Фильтр карты:', self.js)
 
     def test_availability_axis_matches_reference_bands(self):
-        self.assertIn("var ticks=[100,99,98,95,90]", self.js)
-        self.assertIn("function availabilityY(", self.js)
+        self.assertIn("var plotBottom=h-p.b,ticks=[100,50,0]", self.js)
+        self.assertIn('v===100?"Доступен":v===50?"Частично":"Не отвечает"', self.js)
+        self.assertIn("if(pt.availability==null){penDown=false;return}", self.js)
 
     def test_overview_resources_are_problem_first_and_bounded(self):
         self.assertIn(".compact-table{", self.css)
@@ -213,21 +214,24 @@ class FrontendContractTest(unittest.TestCase):
         self.assertIn('netweather_notified_incident_transitions', self.js)
         self.assertIn('tag:"netweather-"+t.key,renotify:false', self.js)
         self.assertIn('new Notification(title', self.js)
+        self.assertIn('["DOWN","RUSSIA_DOWN"].indexOf(String(t.incident.kind||""))<0', self.js)
 
     def test_pinned_resource_cards_wrap_long_labels_inside_card_width(self):
         self.assertIn(".overview-row-pinned .resource-card{grid-template-columns:minmax(0,1fr)}", self.css)
         self.assertIn(".overview-row-pinned .resource-state{flex:0 1 62%;min-width:0;white-space:normal;overflow:visible;overflow-wrap:anywhere;text-overflow:clip;line-height:1.15}", self.css)
 
     def test_russian_availability_is_explicit_per_resource(self):
-        for label in ("Доступен из РФ", "Недоступен из РФ", "Нет данных по РФ"):
+        for label in ("Доступен из РФ", "Вероятное ограничение в РФ", "Нет данных по РФ"):
             self.assertIn(label, self.js)
         self.assertIn("function russianResourceState(r)", self.js)
+        self.assertIn("var ruFailure=isConfirmedUnavailable(dom.status)||chartFailure", self.js)
+        self.assertIn("Сбой ресурса · РФ отдельно не подтверждена", self.js)
         self.assertIn("class=\"resource-ru-status ", self.js)
         self.assertIn("class=\"table-resource-ru ", self.js)
         self.assertIn("esc(russianResourceState(r).text)", self.js)
         self.assertIn("isConfirmedUnavailable((r.domestic||{}).status))return 0", self.js)
         self.assertIn(".resource-ru-status.bad,.table-resource-ru.bad{color:var(--red)}", self.css)
-        self.assertIn(".overview-row-pinned .resource-card{height:auto!important;min-height:156px;grid-template-rows:auto 16px auto 40px auto}", self.css)
+        self.assertIn(".overview-row-pinned .resource-card{height:auto!important;min-height:156px;grid-template-rows:auto auto auto 40px auto}", self.css)
         self.assertIn(".overview-row-pinned .resource-card-foot span{overflow:visible;text-overflow:clip;white-space:normal;overflow-wrap:anywhere;line-height:1.2}", self.css)
 
     def test_kpi_cards_keep_enough_width_for_values_at_demo_viewports(self):

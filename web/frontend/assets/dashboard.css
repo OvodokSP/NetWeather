@@ -1181,10 +1181,11 @@ body.core-offline .overview-view .kpi-card::after{
 .resource-state.warn{max-width:62%;white-space:normal;text-align:right;line-height:1.15}
 @media(max-width:1450px) and (min-width:1051px){.kpi-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .resource-ru-status,.table-resource-ru{display:flex;align-items:center;gap:5px;min-width:0;font-size:10px;font-weight:700;line-height:1.2}
-.resource-ru-status{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.resource-ru-status{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
 .resource-ru-status i,.table-resource-ru i{width:6px;height:6px;flex:0 0 6px;border-radius:50%;background:currentColor}
 .resource-ru-status.bad,.table-resource-ru.bad{color:var(--red)}
 .resource-ru-status.ok,.table-resource-ru.ok{color:var(--green)}
+.resource-ru-status.warn,.table-resource-ru.warn{color:var(--amber)}
 .resource-ru-status.neutral,.table-resource-ru.neutral{color:var(--muted)}
 .table-resource-ru{margin-top:3px;white-space:normal}
 .full-table .table-row>div.ok{color:var(--green);font-weight:700}
@@ -1192,7 +1193,7 @@ body.core-offline .overview-view .kpi-card::after{
 .full-table .table-row>div.neutral{color:var(--muted)}
 .overview-row-pinned .resource-card{grid-template-rows:auto 16px 28px minmax(24px,1fr) auto}
 .compact-table .table-row{height:54px}
-.overview-row-pinned .resource-card{height:auto!important;min-height:156px;grid-template-rows:auto 16px auto 40px auto}
+.overview-row-pinned .resource-card{height:auto!important;min-height:156px;grid-template-rows:auto auto auto 40px auto}
 .overview-row-pinned .resource-card-metrics{align-items:start;gap:8px}
 .overview-row-pinned .resource-card-metrics span{line-height:1.2;margin-bottom:4px}
 .overview-row-pinned .resource-card-foot{display:grid;grid-template-columns:minmax(0,1fr);gap:2px;align-items:start}
