@@ -10,15 +10,13 @@ class SecurityContractTest(unittest.TestCase):
         cls.compose = (cls.root / "docker-compose.yml").read_text(encoding="utf-8")
         cls.main = (cls.root / "backend" / "app" / "main.py").read_text(encoding="utf-8")
         repo_root = cls.root.parent
+        cls.repo_root = repo_root
         cls.workflow = (repo_root / ".github" / "workflows" / "deploy-web.yml").read_text(encoding="utf-8")
-        cls.release_workflow = (repo_root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+        cls.build_workflow = (repo_root / ".github" / "workflows" / "build.yml").read_text(encoding="utf-8")
         cls.readme = (repo_root / "README.md").read_text(encoding="utf-8")
         cls.helper = (cls.root / "deploy" / "security" / "netweather-deploy-helper").read_text(encoding="utf-8")
         cls.gate = (cls.root / "deploy" / "security" / "netweather-ssh-gate").read_text(encoding="utf-8")
         cls.guard = (cls.root / "deploy" / "security" / "netweather-egress-guard").read_text(encoding="utf-8")
-        cls.keenetic_probe = (cls.root / "deploy" / "keenetic" / "netweather-probe.sh").read_text(encoding="utf-8")
-        cls.keenetic_installer = (cls.root / "deploy" / "keenetic" / "install-netweather-probe.sh").read_text(encoding="utf-8")
-        cls.keenetic_service = (cls.root / "deploy" / "keenetic" / "S99netweather-probe").read_text(encoding="utf-8")
 
     def test_image_runs_as_non_root(self):
         self.assertIn("USER 10001:10001", self.dockerfile)
@@ -52,20 +50,18 @@ class SecurityContractTest(unittest.TestCase):
 
     def test_android_preview_is_installable_traceable_and_clearly_labeled(self):
         required = (
-            "testDebugUnitTest assembleDebug",
-            "NetWeather-0.1.0-alpha-debug.apk",
+            "./gradlew test --no-daemon --stacktrace",
+            "assembleDebug",
+            "NetWeather-${GITHUB_SHA::12}-debug.apk",
             "sha256sum",
-            "android-v0.1.0-alpha-preview.1",
-            "docs/ANDROID_PREVIEW.md",
-            "--prerelease",
+            "android-v0.4.1-build-${{ github.run_number }}",
+            "prerelease: true",
         )
         for token in required:
-            self.assertIn(token, self.release_workflow)
-        self.assertNotIn("assembleRelease", self.release_workflow)
-        self.assertIn(
-            "releases/tag/android-v0.1.0-alpha-preview.1",
-            self.readme,
-        )
+            self.assertIn(token, self.build_workflow)
+        self.assertNotIn("assembleRelease", self.build_workflow)
+        self.assertFalse((self.repo_root / ".github" / "workflows" / "release.yml").exists())
+        self.assertIn("releases", self.readme)
 
     def test_runtime_has_no_host_bind_mounts_or_privilege(self):
         required = (
@@ -113,22 +109,12 @@ class SecurityContractTest(unittest.TestCase):
         self.assertIn("candidate.relative_to(root)", self.main)
         self.assertIn('raise RuntimeError("Owner authentication secret is required")', self.main)
 
-    def test_keenetic_probe_is_pinned_to_direct_wan_and_supervised(self):
-        for token in (
-            'NETWEATHER_DIRECT_INTERFACE is required',
-            '--interface "$DIRECT_INTERFACE"',
-            '-i "$DIRECT_INTERFACE"',
-            'NETWEATHER_RUN_ONCE',
-            'last-success',
-            'agent_version=$AGENT_VERSION_QUERY',
-        ):
-            self.assertIn(token, self.keenetic_probe)
-        self.assertIn('DIRECT_INTERFACE="${NETWEATHER_DIRECT_INTERFACE:-eth2.4}"', self.keenetic_installer)
-        self.assertIn('NETWEATHER_AGENT_TOKEN must contain 64 hexadecimal characters', self.keenetic_installer)
-        self.assertIn('sha256sum', self.keenetic_installer)
-        self.assertIn('NETWEATHER_REF must be the verified 40-character Git commit', self.keenetic_installer)
-        self.assertIn('/opt/etc/netweather-probe.env', self.keenetic_service)
-        self.assertIn('last successful cycle', self.keenetic_service)
+    def test_retired_router_probe_has_no_dead_ui_or_installers(self):
+        self.assertFalse((self.root / "deploy" / "keenetic").exists())
+        frontend = (self.root / "frontend" / "index.html").read_text(encoding="utf-8")
+        self.assertNotIn("/api/agent/config.tsv", frontend)
+        self.assertNotIn("/api/agent/result", frontend)
+        self.assertNotIn("Agent API", frontend)
 
 
 if __name__ == "__main__":

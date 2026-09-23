@@ -1,81 +1,45 @@
 # NetWeather Project Status
 
-## Current checkpoint
+## Verified checkpoint — 2026-09-23
 
-**Web:** `0.4.1-web` candidate
-**Development branch:** `feature/web-vps-monitoring`
-**Production domain:** `netweather.online`
+- Web release: `0.4.1-web`; production: [netweather.online](https://netweather.online).
+- Repository: `OvodokSP/NetWeather`; PR #4 (`NetWeather 0.4.1`) is merged.
+- The canonical backend is FastAPI + SQLite. Web and Android use the same resource catalog and API.
+- The service does not require a router, Keenetic, Entware, a home server, or user hardware.
+- Measurement scopes: `GLOBAL` (VPS), `RUSSIA` (public Globalping probes selected with `country=RU`), and optional `USER` (paired Android device).
+- Globalping, OONI, and IODA are enabled in production. Globalping is used for incident/manual diagnostics and the bounded Russian contour; ordinary healthy VPS checks do not consume its quota.
+- Free basic resource monitoring and addition are enabled. Billing and paid deep-check entitlements remain disabled.
+- Android preview `0.4.1-alpha` supports one-time-code pairing and sends local measurements only after the owner approves pairing. Current preview artifacts are debug-signed.
 
-## Confirmed foundation
+## Production snapshot
 
-- Global VPS monitoring is working and is the hardware-free baseline.
-- Keenetic/Entware/router runtime and agent API have been removed; old telemetry is retained as excluded `LEGACY` data.
-- Deterministic assessment, provider abstraction and a quota reserve are implemented.
-- Globalping submission, persistent quota accounting, result polling and conservative multi-probe classification are implemented.
-- OONI and IODA evidence adapters are event-driven and cached; external failures do not alter the baseline conclusion.
-- `StatusProvider` reads allowlisted GitHub and Cloudflare public status summaries only on incidents/manual diagnostics; it adds context without overriding probe results.
-- Resource details expose a redacted evidence timeline from checks, incidents, and providers for up to 12 months.
-- `GET /api/capabilities` declares free basic resource addition, owner-only controls, and paid checks disabled until billing/entitlements exist.
-- Android device enrollment uses an expiring unique code approved by the owner on the Web site; device tokens are independently revocable.
-- Resource groups are implemented.
-- Ranked resource catalog is implemented.
-- Manual/catalog duplicate protection is implemented.
-- Incidents and history are implemented.
-- Overview is configurable.
-- Web typography has a tested 10 px minimum.
-- Production container is non-root/read-only/capability-free.
-- NetWeather cannot initiate connections to host/private/VPN networks.
-- Deployment key is forced-command only.
-- Production image build happens off-host.
-- Production UI is publicly readable; anonymous users can add a basic HTTP/HTTPS resource, while privileged mutations require an owner session.
-- Catalog anti-bot HTTP rejections are represented as reachable rather than false outages.
-- Android latest results and interval settings use persisted reactive state.
-- Android `0.4.1-alpha` uploads local measurements only after explicit device pairing. Its preview APK is published only after the updated CI/release workflow succeeds.
+At the audit on 2026-09-23, `/api/health`, `/api/system`, `/api/diagnostics/status`, `/api/dashboard`, `/api/incidents`, `/api/resources`, `/api/groups`, and `/api/capabilities` returned HTTP 200. Health reported `0.4.1-web`; system reported 15 resources, 83,822 checks, Globalping/OONI/IODA enabled, and the scheduler/database healthy. Dashboard had a live `GLOBAL` probe and a live `RUSSIA` probe. Some Russian resource results were `UNKNOWN`; those are insufficient evidence to label a resource blocked.
 
-## Deployment channel
+One open incident was an acknowledged TLS expiry warning for Instagram. Acknowledged means read; it remains in the active list until the condition clears. The UI separates unread count from open incident count.
 
-End-to-end auto-deploy is verified and active for the development branch.
+The deployed HTML, JavaScript, and CSS matched the repository's `main` branch at the audit point. `/` returned HTTP 200 for GET. `HEAD /` returned 405 with `Allow: GET`, which is expected for this GET-only route and is not a page failure.
 
-Verified:
-- repository variable enables workflow;
-- web verification succeeds;
-- production image builds off-host;
-- non-root image assertion succeeds;
-- artifact reaches VPS over restricted SSH.
-- deploy helper uses root-owned state, verifies the exact image identity, and waits for Docker health;
-- production starts in mandatory owner-auth mode and fails closed if no owner secret is configured.
+## Confirmed product contracts
 
-## Current UI checkpoint
+- A single backend owns resources, groups, checks, incidents, evidence, and device pairing.
+- Global monitoring is useful without Android. Android is optional and is never treated as evidence for all of Russia.
+- Russian availability is measured by public Globalping probes. Unknown provider results remain unknown.
+- Deep diagnostics are event-driven, deduplicated, and quota-limited. Available paid capabilities stay hidden while billing is disabled.
+- Production uses a non-root container, read-only root filesystem, dropped capabilities, restricted SSH delivery, an isolated data volume, and host-owned egress controls.
+- Public users can read the dashboard and add basic HTTP/HTTPS resources. Owner-only actions require the owner session.
+- Incident acknowledgement marks an event as read; it does not resolve or close an active condition.
 
-Completed in 0.3.10:
-- shared dialog open/close/focus behavior;
-- backdrop close and Escape contract;
-- focus return to opener;
-- explicit focus-visible states;
-- busy-state / double-submit protection;
-- custom destructive confirmation dialog;
-- keyboard global search navigation;
-- stale Core state;
-- real map-region filter;
-- live probe layer on the map page;
-- GitHub project documentation/templates refresh.
-- public basic-resource addition / protected privileged-mutation access model;
-- non-shifting opaque search overlay with keyboard navigation;
-- privacy-safe local resource icons without third-party browser requests;
-- fault-domain panel hidden until an independent comparison probe exists.
-- operational Overview with freshness, resource-count and median-latency KPIs;
-- problem-first bounded resource table and explicit issue filter;
-- readable natural page scrolling instead of viewport compression;
-- catalog groups retain natural height and use one shared catalog scrollbar.
+## Remaining work
 
-Next UI work:
-- physical-device verification of Global State / Your Network on representative phones;
-- contextual help/tooltips and remaining empty/error-state polish.
+1. Capture and retain successful live-provider fixtures for Globalping, OONI, and IODA; provider availability is currently confirmed, but fixture-backed production response verification is still open.
+2. Test pairing, sync, notifications, and responsive layout on physical Android devices, including a narrow screen.
+3. Rehearse SQLite backup and restore on a production-like copy.
+4. Configure Android production signing and publish a production-signed release.
+5. Finish contextual help and remaining empty/error-state polish after device QA.
+6. Decide whether selected manual deep diagnostics should become available before billing is introduced; do not consume external quota for healthy background checks.
 
-## Next functional work
+## Recently corrected in this audit
 
-1. Verify live Globalping, OONI and IODA responses from production and retain real response fixtures for contract regression.
-2. Complete representative physical-device pairing and responsive-layout QA.
-3. Perform an application data backup/restore rehearsal without touching other VPS services.
-4. Configure a production signing key before creating a signed Android release; preview remains debug-signed.
-5. Billing and paid entitlements remain disabled until the licensing model is selected.
+- Removed obsolete Keenetic/Entware probe installers, service files, and their security-contract test.
+- Removed the dead Agent API panel that advertised routes no longer served by the backend.
+- Updated the README and cache-busted both web assets after the UI cleanup.

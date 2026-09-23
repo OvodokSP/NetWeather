@@ -62,6 +62,15 @@ class NetWeatherApiTest(unittest.TestCase):
         self.assertEqual(self.client.get("/api/system").status_code, 200)
         self.assertEqual(self.client.get("/api/groups").status_code, 200)
 
+    def test_unknown_api_paths_return_json_404_without_breaking_spa_routes(self):
+        for path in ("/api/agent/config.tsv", "/api/agent/result", "/api/nonexistent"):
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 404)
+            self.assertEqual(response.json(), {"detail": "Not Found"})
+        client_route = self.client.get("/resources/nonexistent-client-route")
+        self.assertEqual(client_route.status_code, 200)
+        self.assertIn("text/html", client_route.headers["content-type"])
+
     def test_owner_session_and_group_crud(self):
         status = self.client.get("/api/session")
         self.assertEqual(status.status_code, 200)

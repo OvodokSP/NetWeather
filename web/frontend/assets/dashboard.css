@@ -1135,8 +1135,6 @@ body.core-offline .overview-view .kpi-card::after{
 
 /* CI rerun marker: responsive overview contract verified locally. */
 
-/* CI: keenetic probe contract files are present on the PR branch. */
-
 /* Operational density: ten pinned resources and a readable domestic outage chart. */
 .overview-row-domestic{grid-template-columns:minmax(0,820px);justify-content:start}
 .domestic-stream-panel{width:100%;max-width:820px}

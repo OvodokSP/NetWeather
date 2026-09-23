@@ -1043,6 +1043,8 @@ if FRONTEND_DIR.exists():
     if assets.exists(): app.mount("/assets",StaticFiles(directory=assets),name="assets")
     @app.api_route("/{full_path:path}",methods=["GET","HEAD"])
     def spa(full_path:str):
+        if full_path == "api" or full_path.startswith("api/"):
+            return JSONResponse(status_code=404,content={"detail":"Not Found"})
         root=FRONTEND_DIR.resolve()
         index=root/"index.html"
         if not full_path:

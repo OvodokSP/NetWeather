@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#08111f">
   <meta name="description" content="NetWeather — мониторинг доступности ресурсов и диагностика сетевых проблем в реальном времени.">
   <title>NetWeather</title>
-  <link rel="stylesheet" href="/assets/dashboard.css?v=0.3.10-dynamic16">
+  <link rel="stylesheet" href="/assets/dashboard.css?v=0.4.1-assets-20260923-1">
 </head>
 <body>
 <div class="shell">
@@ -348,7 +348,6 @@
         <div class="page-head"><div><h1>Интеграции</h1><p>API, probes и внешние каналы.</p></div></div>
         <div class="settings-grid">
           <article class="panel setting-card"><span>API</span><h2>NetWeather API</h2><p>Чтение публичных данных доступно без входа; управляющие запросы требуют права владельца.</p><div class="setting-box">/api/dashboard · /api/resources · /api/incidents · /api/realtime</div></article>
-          <article class="panel setting-card"><span>PROBE</span><h2>Agent API</h2><p>Подключение Keenetic/устройств использует отдельный agent token.</p><div class="setting-box">/api/agent/config.tsv · /api/agent/result</div></article>
         </div>
       </section>
 
@@ -361,7 +360,7 @@
           <article class="panel setting-card"><span>CORE</span><h2>Runtime</h2><div id="systemInfo" class="system-info"></div></article>
           <article class="panel setting-card wide"><span>БЕЗОПАСНОСТЬ</span><h2>Изоляция NetWeather</h2><p>NetWeather работает через собственный контейнер и upstream. Конфигурация VPN/Xray не является частью deployment сайта.</p><div id="securityState" class="setting-box"></div></article>
           <article class="panel setting-card"><span>УВЕДОМЛЕНИЯ</span><h2>Каналы и политика оповещений</h2><p>Браузерные уведомления и серверный webhook для открытий и закрытий инцидентов.</p><div class="setting-box">Состояние каналов доступно в подробностях.</div><button class="btn secondary" data-view-jump="notifications">Открыть подробности</button></article>
-          <article class="panel setting-card"><span>ИНТЕГРАЦИИ</span><h2>API и точки наблюдения</h2><p>Публичное чтение данных, agent API и внешние каналы подключения.</p><div class="setting-box">/api/dashboard · /api/resources · /api/realtime</div><button class="btn secondary" data-view-jump="integrations">Открыть подробности</button></article>
+          <article class="panel setting-card"><span>ИНТЕГРАЦИИ</span><h2>API и точки наблюдения</h2><p>Публичное чтение данных и внешние источники измерений.</p><div class="setting-box">/api/dashboard · /api/resources · /api/realtime</div><button class="btn secondary" data-view-jump="integrations">Открыть подробности</button></article>
         </div>
       </section>
 
@@ -498,6 +497,6 @@
 </dialog>
 
 <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
-<script src="/assets/dashboard.js?v=0.3.10-dynamic16"></script>
+<script src="/assets/dashboard.js?v=0.4.1-assets-20260923-1"></script>
 </body>
 </html>

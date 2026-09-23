@@ -9,19 +9,18 @@
 
 | Контур | Состояние |
 |---|---|
-| Web | [netweather.online](https://netweather.online), `0.3.10-web` |
-| Android | [alpha-preview APK и SHA-256](https://github.com/OvodokSP/NetWeather/releases/tag/android-v0.1.0-alpha-preview.1) |
-| Probes | Global Probe работает; Domestic/Browser Probe и единый fault-domain находятся в разработке |
+| Web | [netweather.online](https://netweather.online), `0.4.1-web` |
+| Android | `0.4.1-alpha` preview APK, debug-signed; см. [GitHub Releases](https://github.com/OvodokSP/NetWeather/releases) |
+| Probes | VPS (`GLOBAL`), публичные Globalping-точки РФ (`RUSSIA`) и необязательное Android-устройство (`USER`) |
 
 ## Что такое NetWeather
 
-NetWeather объединяет несколько точек наблюдения в одну картину сети.
+NetWeather объединяет независимые источники измерений в одну картину сети. Сервис работает без домашнего роутера, Keenetic, Entware или другого пользовательского оборудования.
 
-- **Global Probe** — внешний VPS: DNS → TCP → TLS → HTTP, история и серверная диагностика.
-- **Domestic Probe** — российская точка наблюдения: сравнение доступности из внутреннего контура.
-- **Browser Probe** — следующий основной этап: проверка доступности через фактическое соединение посетителя без установки ПО.
-- **Native Probe** — Android / router probe для глубокой локальной диагностики и traceroute.
-- **Fault Domain** — сведение результатов probes в понятный вывод: где именно начинается отказ.
+- **GLOBAL** — VPS-проверки DNS → TCP → TLS → HTTP; расширенные Globalping-измерения запускаются по событию или вручную.
+- **RUSSIA** — независимые публичные Globalping-точки в РФ. Недостаточные данные показываются как «нет данных», а не как подтверждённая блокировка.
+- **USER** — необязательные локальные измерения Android после сопряжения устройства с сайтом.
+- Вывод о причине сбоя строится только по полученным измерениям; локальная сеть и оператор не угадываются без соответствующих данных.
 
 Ключевой принцип продукта: **ничего устанавливать не обязательно; установка probe только повышает глубину и доказательность диагностики.**
 
@@ -38,7 +37,7 @@ NetWeather объединяет несколько точек наблюдени
 - DNS/TCP/TLS/HTTP этапы;
 - события и инциденты;
 - read/unread для инцидентов;
-- диагностика и server-side traceroute;
+- диагностика, инциденты и история измерений;
 - настраиваемый Overview и закреплённые ресурсы;
 - problem-first Overview: здоровье, свежесть данных, доступные ресурсы, типичный отклик, график, события и быстрый фильтр проблем;
 - естественная прокрутка Overview без обрезания таблицы и с читаемыми карточками на desktop/mobile;
@@ -49,16 +48,17 @@ NetWeather объединяет несколько точек наблюдени
 
 ### Android
 
-Android-клиент остаётся частью общей архитектуры и развивается как Native Probe:
+Android-клиент — необязательный локальный probe и работает с тем же каталогом ресурсов:
 
 - локальные проверки;
 - история;
 - фоновые задачи;
 - уведомления;
 - виджеты;
-- интеграция с общей моделью NetWeather Probe.
+- сопряжение с сайтом одноразовым кодом;
+- отправка локальных измерений после явного сопряжения.
 
-Установочная alpha-preview сборка публикуется в [GitHub Releases](https://github.com/OvodokSP/NetWeather/releases/tag/android-v0.1.0-alpha-preview.1). Это подписанный debug APK для проверки, а не production-signed релиз; точные ограничения описаны в [docs/ANDROID_PREVIEW.md](docs/ANDROID_PREVIEW.md).
+Preview-сборки автоматически публикуются в [GitHub Releases](https://github.com/OvodokSP/NetWeather/releases). Это debug-сборки, не production-signed релиз; ограничения описаны в [docs/ANDROID_PREVIEW.md](docs/ANDROID_PREVIEW.md).
 
 ## Архитектура репозитория
 
@@ -68,7 +68,7 @@ NetWeather/
 ├── web/
 │   ├── backend/            FastAPI, SQLite, monitoring core
 │   ├── frontend/           dashboard UI
-│   └── deploy/             smoke, Keenetic probe, security boundary
+│   └── deploy/             smoke test и security boundary
 ├── docs/
 │   ├── ARCHITECTURE.md     модель probes и поток данных
 │   ├── UI_GUIDELINES.md    контракт интерфейса
@@ -129,14 +129,13 @@ Android:
 
 ## Roadmap
 
-Ближайший продуктовый контур:
+Оставшиеся этапы:
 
-1. polish web UI и interaction contract;
-2. Keenetic как постоянный Domestic Probe;
-3. Browser Probe;
-4. сравнение `GLOBAL ↔ DOMESTIC ↔ USER`;
-5. fault-domain engine;
-6. только после полезного рабочего инструмента — аккаунты, права, лицензии и capability-тарифы.
+1. проверить pairing и адаптивность на реальных Android-устройствах;
+2. сохранить подтверждённые live-ответы Globalping/OONI/IODA как регрессионные fixtures;
+3. провести репетицию backup/restore на копии данных;
+4. настроить production signing для Android;
+5. отдельно решить, когда включать платные глубокие проверки и биллинг.
 
 См. [ROADMAP.md](ROADMAP.md).
 
