@@ -125,8 +125,8 @@ jobs:
 
           curl -fsS --max-time 3 http://127.0.0.1:18081/ >/dev/null
           curl -fsS --max-time 3 http://127.0.0.1:18081/api/system >/dev/null
-          curl -fsS --max-time 3 http://127.0.0.1:18081/api/diagnostics/status | python -c 'import json,sys; assert json.load(sys.stdin)["enabled"] is True'
-          curl -fsS --max-time 3 http://127.0.0.1:18081/api/system | python -c 'import json,sys; d=json.load(sys.stdin); assert d["ooni_enabled"] is True and d["ioda_enabled"] is True'
+          curl -fsS --max-time 3 http://127.0.0.1:18081/api/diagnostics/status | python -c 'import json,sys; assert json.load(sys.stdin)["enabled"] is False'
+          curl -fsS --max-time 3 http://127.0.0.1:18081/api/system | python -c 'import json,sys; d=json.load(sys.stdin); assert d["ooni_enabled"] is False and d["ioda_enabled"] is False and d["monitoring_paused"] is True'
           curl -fsS --max-time 3 http://127.0.0.1:18081/api/groups >/dev/null
           python - <<'PY'
           import json
