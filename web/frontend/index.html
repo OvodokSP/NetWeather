@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#08111f">
   <meta name="description" content="NetWeather — мониторинг доступности ресурсов и диагностика сетевых проблем в реальном времени.">
   <title>NetWeather</title>
-  <link rel="stylesheet" href="/assets/dashboard.css?v=0.4.2-timeline10">
+  <link rel="stylesheet" href="/assets/dashboard.css?v=0.4.3-dual10s">
 </head>
 <body>
 <div class="shell">
@@ -124,6 +124,20 @@
             </article>
           </div>
 
+          <div class="overview-timelines">
+            <div class="timeline-controls"><div class="segmented" aria-label="Период наблюдений"><button class="seg active" data-minutes="60">1ч</button><button class="seg" data-minutes="360">6ч</button><button class="seg" data-minutes="1440">24ч</button><button class="seg" data-minutes="10080">7д</button></div><span>Одновременное обновление каждые 10 секунд · деление шкалы — 10 секунд</span><div class="timeline-legend"><i class="up"></i>Доступен <i class="down"></i>Недоступен <i class="unknown"></i>Нет данных</div></div>
+            <div class="monitoring-timeline-grid">
+              <article class="panel timeline-panel" data-scope="global">
+                <div class="panel-head compact"><div><h2>Глобальный контур</h2><span class="panel-subtitle">Состояние каждого ресурса по последовательным проверкам</span></div><span class="stream-scope-badge" id="globalTimelineStatus">нет данных</span></div>
+                <div id="globalTimeline" class="resource-timeline-list"></div>
+              </article>
+              <article class="panel timeline-panel" data-scope="russia">
+                <div class="panel-head compact"><div><h2>Российский контур</h2><span class="panel-subtitle">Проверки из российской точки наблюдения</span></div><span class="stream-scope-badge" id="russiaTimelineStatus">нет данных</span></div>
+                <div id="russiaTimeline" class="resource-timeline-list"></div>
+              </article>
+            </div>
+          </div>
+
           <div class="overview-row overview-row-events-map">
             <article class="panel events-panel" data-dashboard-panel="events">
               <div class="panel-head compact">
@@ -201,17 +215,6 @@
         <div class="page-head">
           <div><h1>Мониторинг и трассировка</h1><p>Ресурсы, группы, интервалы, диагностика и маршрут до цели.</p></div>
           <div class="page-actions"><button class="btn secondary owner-only" id="checkAllResources">Проверить все</button><button class="btn secondary" data-view-jump="diagnostics">Трассировка</button><button class="btn secondary owner-only" id="manageGroups">Группы</button><button class="btn primary" id="openAddResource">+ Добавить ресурс</button></div>
-        </div>
-        <div class="timeline-controls"><div class="segmented" aria-label="Период наблюдений"><button class="seg active" data-minutes="60">1ч</button><button class="seg" data-minutes="360">6ч</button><button class="seg" data-minutes="1440">24ч</button><button class="seg" data-minutes="10080">7д</button></div><span>Деление шкалы — 10 секунд · статус обновляется по фактическим проверкам</span><div class="timeline-legend"><i class="up"></i>Доступен <i class="down"></i>Недоступен <i class="unknown"></i>Нет данных</div></div>
-        <div class="monitoring-timeline-grid">
-          <article class="panel timeline-panel" data-scope="global">
-            <div class="panel-head compact"><div><h2>Глобальный контур</h2><span class="panel-subtitle">Состояние каждого ресурса по последовательным проверкам</span></div><span class="stream-scope-badge" id="globalTimelineStatus">нет данных</span></div>
-            <div id="globalTimeline" class="resource-timeline-list"></div>
-          </article>
-          <article class="panel timeline-panel" data-scope="russia">
-            <div class="panel-head compact"><div><h2>Российский контур</h2><span class="panel-subtitle">Проверки из российской точки наблюдения</span></div><span class="stream-scope-badge" id="russiaTimelineStatus">нет данных</span></div>
-            <div id="russiaTimeline" class="resource-timeline-list"></div>
-          </article>
         </div>
         <article class="panel page-panel">
           <div class="filters">
@@ -428,6 +431,6 @@
 </dialog>
 
 <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
-<script src="/assets/dashboard.js?v=0.4.2-timeline10"></script>
+<script src="/assets/dashboard.js?v=0.4.3-dual10s"></script>
 </body>
 </html>

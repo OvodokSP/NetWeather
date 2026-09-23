@@ -144,6 +144,15 @@ class FrontendContractTest(unittest.TestCase):
         self.assertIn('class="timeline-notification ', self.js)
         self.assertIn('scale_seconds', (self.root / "backend" / "app" / "main.py").read_text(encoding="utf-8"))
 
+    def test_overview_timelines_share_one_ten_second_refresh(self):
+        self.assertIn('class="overview-timelines"', self.html)
+        self.assertIn('api("/api/realtime/combined?minutes="+requestMinutes)', self.js)
+        self.assertEqual(self.js.count('api("/api/realtime/'), 1)
+        self.assertIn('S.poll=setInterval(function(){if(!S.loading)loadAll(true,Math.min(60,S.streamMinutes))},10000)', self.js)
+        self.assertIn('@app.get("/api/realtime/combined")', (self.root / "backend" / "app" / "main.py").read_text(encoding="utf-8"))
+        self.assertIn("repeating-linear-gradient(90deg,#42df9c", self.css)
+        self.assertIn("repeating-linear-gradient(90deg,#ff5368", self.css)
+
     def test_overview_resources_are_problem_first_and_bounded(self):
         self.assertIn(".compact-table{", self.css)
         self.assertIn("overflow-y:visible", self.css)
@@ -205,15 +214,17 @@ class FrontendContractTest(unittest.TestCase):
     def test_dual_resource_timelines_share_range_and_refresh(self):
         self.assertNotIn("expandChart", self.html + self.js)
         self.assertNotIn("chart-expanded", self.css + self.js)
-        self.assertIn('api("/api/realtime?minutes="+requestMinutes+"&scope=DOMESTIC")', self.js)
+        self.assertIn('api("/api/realtime/combined?minutes="+requestMinutes)', self.js)
         self.assertIn("function mergeRealtimeWindow(previous,current,totalMinutes)", self.js)
-        self.assertIn("mergeRealtimeWindow(S.realtime,a[4],S.streamMinutes)", self.js)
+        self.assertIn("mergeRealtimeWindow(S.realtime,a[4].global,S.streamMinutes)", self.js)
+        self.assertIn("mergeRealtimeWindow(S.realtimeDom,a[4].russia,S.streamMinutes)", self.js)
         self.assertIn('data-minutes="10080"', self.html)
-        self.assertIn('Деление шкалы — 10 секунд', self.html)
+        self.assertIn('деление шкалы — 10 секунд', self.html)
+        self.assertIn('class="overview-timelines"', self.html)
         self.assertNotIn('Отчёты', self.html)
         self.assertNotIn('streamChart', self.html)
         self.assertIn('alerts_enabled', self.js)
-        self.assertIn('setInterval(function(){if(!S.loading)loadAll(true,Math.min(60,S.streamMinutes))},5000)', self.js)
+        self.assertIn('setInterval(function(){if(!S.loading)loadAll(true,Math.min(60,S.streamMinutes))},10000)', self.js)
         self.assertIn('class="monitoring-timeline-grid"', self.html)
         self.assertIn(".timeline-segment.up{background:#42df9c}.timeline-segment.down{background:#ff845c}.timeline-segment.unknown{background:#596579}", self.css)
 

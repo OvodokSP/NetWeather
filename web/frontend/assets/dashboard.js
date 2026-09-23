@@ -365,7 +365,7 @@ function openView(name){
   S.view=name;
   qa(".view").forEach(function(v){v.classList.toggle("active",v.id==="view-"+name)});
   qa(".side-item[data-view]").forEach(function(b){b.classList.toggle("active",b.dataset.view===name)});
-  if(name==="resources"){renderRealtime();renderDomesticRealtime()}
+  if(name==="overview"){renderRealtime();renderDomesticRealtime()}
   if(name==="diagnostics")renderDiagnostics();
   if(name==="probes")renderProbes();
   if(name==="map")renderMapPage();
@@ -402,13 +402,12 @@ async function loadAll(silent,realtimeWindow){
       api("/api/incidents?limit=100"),
       api("/api/system"),
       api("/api/groups"),
-      api("/api/realtime?minutes="+requestMinutes+"&scope=EXTERNAL"),
-      api("/api/realtime?minutes="+requestMinutes+"&scope=DOMESTIC"),
+      api("/api/realtime/combined?minutes="+requestMinutes),
       api("/api/events?limit=30"),
       api("/api/session")
     ]);
-    S.dashboard=a[0];if(S.dashboard&&Array.isArray(S.dashboard.resources))S.dashboard.resources=S.dashboard.resources.map(normalizeResourceShape);S.incidents=a[1];notifyIncidentTransitions(S.incidents);S.system=a[2];S.groups=a[3];S.realtime=mergeRealtimeWindow(S.realtime,a[4],S.streamMinutes);S.realtimeDom=mergeRealtimeWindow(S.realtimeDom,a[5],S.streamMinutes);S.events=a[6];
-    S.authRequired=!!a[7].auth_required;S.owner=!S.authRequired||!!a[7].authenticated;
+    S.dashboard=a[0];if(S.dashboard&&Array.isArray(S.dashboard.resources))S.dashboard.resources=S.dashboard.resources.map(normalizeResourceShape);S.incidents=a[1];notifyIncidentTransitions(S.incidents);S.system=a[2];S.groups=a[3];S.realtime=mergeRealtimeWindow(S.realtime,a[4].global,S.streamMinutes);S.realtimeDom=mergeRealtimeWindow(S.realtimeDom,a[4].russia,S.streamMinutes);S.events=a[5];
+    S.authRequired=!!a[6].auth_required;S.owner=!S.authRequired||!!a[6].authenticated;
     S.lastSuccessAt=Date.now();renderAll();setCoreOnline(true)
   }catch(e){
     setCoreOnline(false);
@@ -554,13 +553,13 @@ function drawResourceTimeline(containerId,statusId,source,scope){
     var latency=latest&&latest.latency_ms!=null?latest.latency_ms:(scope==="RUSSIA"?(resource.domestic||{}).response_time_ms:(resource.external||{}).response_time_ms);
     var checked=latest?latest.timestamp:null,alert=!!resource.alerts_enabled;
     var marker=segments.map(function(seg){return '<i class="timeline-segment '+seg.state+'" style="left:'+Math.max(0,seg.left).toFixed(4)+'%;width:'+Math.max(0,seg.width).toFixed(4)+'%" title="'+esc(seg.title)+'"></i>'}).join("");
-    var tickPx=el.clientWidth/(S.streamMinutes*6);
+    var tickPx=Math.max(3.5,el.clientWidth/(S.streamMinutes*6));
     return '<article class="resource-timeline-row" data-resource="'+row.id+'"><div class="timeline-row-head"><button class="timeline-resource-open" data-open-resource="'+row.id+'" title="Открыть ресурс"><b>'+esc(row.name||row.target||"Ресурс")+'</b><span>'+esc(row.target||"")+'</span></button><span class="timeline-notification '+(alert?"enabled":"disabled")+'" title="'+(alert?"Уведомления включены":"Уведомления выключены")+'" aria-label="'+(alert?"Уведомления включены":"Уведомления выключены")+'">'+(alert?"✓":"○")+'</span></div><div class="timeline-track" role="img" aria-label="'+esc(row.name)+': '+esc(currentState)+'; шкала с делениями 10 секунд" style="--timeline-tick:'+tickPx+'px">'+marker+'</div><div class="timeline-axis"><span>'+formatTimelineTime(start)+'</span><span>10 секунд на деление</span><span>'+formatTimelineTime(end)+'</span></div><div class="timeline-details"><span class="timeline-state '+state+'"><i></i>'+esc(currentState)+'</span><span>Отклик: <b>'+esc(num(latency," мс"))+'</b></span><span>Последняя проверка: <b>'+esc(checked?ago(checked):"нет")+'</b></span>'+(latest&&latest.http_status?'<span>HTTP '+esc(latest.http_status)+'</span>':"")+'</div></article>'
   }).join("");
   qa("#"+containerId+" [data-open-resource]").forEach(function(b){b.onclick=function(){openDetail(Number(b.dataset.openResource))}})
 }
-function renderRealtime(){if(S.view!=="resources")return;drawResourceTimeline("globalTimeline","globalTimelineStatus",S.realtime,"GLOBAL")}
-function renderDomesticRealtime(){if(S.view!=="resources")return;drawResourceTimeline("russiaTimeline","russiaTimelineStatus",S.realtimeDom,"RUSSIA")}
+function renderRealtime(){drawResourceTimeline("globalTimeline","globalTimelineStatus",S.realtime,"GLOBAL")}
+function renderDomesticRealtime(){drawResourceTimeline("russiaTimeline","russiaTimelineStatus",S.realtimeDom,"RUSSIA")}
 function renderEvents(){
   var el=q("#eventFeed"),rows=S.events||[];
   var important=rows.filter(function(ev){return ev.severity==="critical"||ev.severity==="warning"}).length;
@@ -1174,7 +1173,7 @@ function setup(){
   q("#customResourceName").oninput=function(){this.dataset.autoSuggested="0"};
   q("#resourceForm").onsubmit=saveResource;q("#groupForm").onsubmit=saveGroup;q("#openAddGroup").onclick=function(){openGroupForm(null)};
   qa(".modal-close").forEach(function(b){b.onclick=function(){closeDialog(b.closest("dialog"))}});
-  qa('.seg[data-minutes]').forEach(function(b){b.onclick=function(){qa('.seg[data-minutes]').forEach(function(x){x.classList.toggle("active",x===b)});S.streamMinutes=Number(b.dataset.minutes);loadAll(true)}});
+  qa('.seg[data-minutes]').forEach(function(b){b.onclick=function(){qa('.seg[data-minutes]').forEach(function(x){x.classList.toggle("active",Number(x.dataset.minutes)===Number(b.dataset.minutes))});S.streamMinutes=Number(b.dataset.minutes);loadAll(true)}});
   qa("[data-overview-resource-mode]").forEach(function(b){b.onclick=function(){S.overviewResourceMode=b.dataset.overviewResourceMode;qa("[data-overview-resource-mode]").forEach(function(x){x.classList.toggle("active",x===b)});renderOverviewTable()}});
   q("#checkAllResources").onclick=async function(){var button=this;try{await withBusy(button,"Проверяем…",async function(){var result=await api("/api/check-all",{method:"POST"},true);await loadAll(true);toast("Проверка завершена: "+result.checked+" ресурсов · доступно "+result.ok+" · проблемы "+result.failed)})}catch(e){toast(e.message)}};
   q("#mapZoomIn").onclick=function(){S.mapScale=Math.min(2,S.mapScale+.15);q("#worldMapSvg").style.transform="scale("+S.mapScale+")"};
@@ -1187,7 +1186,7 @@ function setup(){
   q("#enableNotifications").onclick=async function(){var button=this;if(!("Notification" in window)){toast("Браузер не поддерживает уведомления");return}await withBusy(button,"Запрашиваем…",async function(){var p=await Notification.requestPermission();renderNotifications();toast(p==="granted"?"Уведомления включены":"Разрешение не выдано")})};
   q("#deleteResource").onclick=deleteResource;q("#editResource").onclick=function(){var r=resourceById(S.detailId);q("#detailDialog").close();if(r)openResourceForm(r)};q("#detailCheck").onclick=function(){var b=this,id=S.detailId;q("#detailDialog").close();manualCheck(id,b)};q("#detailTrace").onclick=function(){var b=this,id=S.detailId;q("#detailDialog").close();trace(id,false,b)};
   window.addEventListener("resize",function(){renderRealtime();renderDomesticRealtime();renderOverviewTable();applyDashboardPreferences()});
-  loadAll(false);S.poll=setInterval(function(){if(!S.loading)loadAll(true,Math.min(60,S.streamMinutes))},5000)
+  loadAll(false);S.poll=setInterval(function(){if(!S.loading)loadAll(true,Math.min(60,S.streamMinutes))},10000)
 }
 document.addEventListener("DOMContentLoaded",setup);
 })();

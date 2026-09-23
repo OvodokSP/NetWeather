@@ -951,6 +951,38 @@ def realtime(minutes:int=Query(default=60,ge=5,le=10080), scope:str=Query(defaul
     }
 
 
+@app.get("/api/realtime/combined")
+def realtime_combined(minutes:int=Query(default=60,ge=5,le=10080)):
+    """Return GLOBAL and RUSSIA timelines from one snapshot and one DB query."""
+    now=int(time.time())
+    since=now-minutes*60
+    scopes=("GLOBAL","RUSSIA")
+    with db() as conn:
+        resources=[dict(r) for r in conn.execute(
+            "SELECT id,name,target,group_name,alerts_enabled FROM resources WHERE enabled=1 ORDER BY name"
+        ).fetchall()]
+        rows=conn.execute("""SELECT resource_id,probe_scope,checked_at,status,response_time_ms,dns_ms,tcp_ms,tls_ms,http_ms,http_status
+          FROM checks WHERE checked_at>=? AND probe_scope IN (?,?) ORDER BY probe_scope,checked_at ASC,id ASC""",
+          (since,*scopes)).fetchall()
+    by_scope={scope:{} for scope in scopes}
+    known_statuses={"OK","HTTP_REJECTED","DNS_ERROR","TCP_ERROR","TLS_ERROR","HTTP_ERROR","TIMEOUT","BLOCKED_TARGET"}
+    for row in rows:
+        rid=int(row["resource_id"])
+        points=by_scope[row["probe_scope"]].setdefault(rid,[])
+        state="UP" if is_reachable(row["status"]) else "DOWN" if row["status"] in known_statuses else "UNKNOWN"
+        points.append({"timestamp":int(row["checked_at"]),"state":state,"status":row["status"],
+                       "latency_ms":row["response_time_ms"],"http_status":row["http_status"],"checks":1})
+    result={}
+    for scope in scopes:
+        scope_resources=[]
+        for resource in resources:
+            points=by_scope[scope].get(int(resource["id"]),[])
+            scope_resources.append({**resource,"last_checked_at":points[-1]["timestamp"] if points else None,"points":points})
+        result[scope.lower()]={"scope":scope,"minutes":minutes,"scale_seconds":10,"from":since,"to":now,"resources":scope_resources}
+    return {"scope":"BOTH","minutes":minutes,"scale_seconds":10,"from":since,"to":now,
+            "global":result["global"],"russia":result["russia"]}
+
+
 @app.get("/api/events")
 def recent_events(limit:int=Query(default=30,ge=1,le=100)):
     with db() as conn:

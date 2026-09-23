@@ -221,6 +221,19 @@ class NetWeatherApiTest(unittest.TestCase):
         self.assertEqual(events.status_code, 200)
         self.assertIsInstance(events.json(), list)
 
+    def test_realtime_combined_returns_both_scopes_from_one_snapshot(self):
+        response = self.client.get("/api/realtime/combined?minutes=60")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["scope"], "BOTH")
+        self.assertEqual(payload["global"]["scope"], "GLOBAL")
+        self.assertEqual(payload["russia"]["scope"], "RUSSIA")
+        self.assertEqual(payload["global"]["from"], payload["russia"]["from"])
+        self.assertEqual(payload["global"]["to"], payload["russia"]["to"])
+        self.assertEqual(payload["minutes"], 60)
+        self.assertEqual(payload["scale_seconds"], 10)
+        self.assertEqual(len(payload["global"]["resources"]), len(payload["russia"]["resources"]))
+
     def test_realtime_points_show_bucket_state_without_rolling_average(self):
         rid = self.client.get("/api/dashboard").json()["resources"][0]["id"]
         now = int(time.time())

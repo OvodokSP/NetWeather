@@ -1099,6 +1099,16 @@ body.core-offline .overview-view .kpi-card::after{
 /* Final responsive guard: content grows instead of overlapping at 100% zoom. */
 .overview-view{height:auto!important;overflow:visible!important}
 .overview-grid{height:auto!important;grid-template-rows:none!important;min-height:0}
+.overview-timelines{min-width:0}
+.overview-timelines .monitoring-timeline-grid{margin-bottom:0}
+.overview-timelines .timeline-controls{padding:2px 0 9px}
+.overview-timelines .resource-timeline-list{max-height:360px}
+.overview-timelines .timeline-track{height:12px;border-radius:3px}
+.overview-timelines .timeline-segment{opacity:1;background-color:transparent!important}
+.overview-timelines .timeline-segment.up{background-image:repeating-linear-gradient(90deg,#42df9c 0, #42df9c calc(var(--timeline-tick)*.62), transparent calc(var(--timeline-tick)*.62), transparent var(--timeline-tick))}
+.overview-timelines .timeline-segment.down{background-image:repeating-linear-gradient(90deg,#ff5368 0, #ff5368 calc(var(--timeline-tick)*.62), transparent calc(var(--timeline-tick)*.62), transparent var(--timeline-tick))}
+.overview-timelines .timeline-segment.unknown{background-image:repeating-linear-gradient(90deg,#596579 0, #596579 calc(var(--timeline-tick)*.62), transparent calc(var(--timeline-tick)*.62), transparent var(--timeline-tick))}
+.overview-timelines .timeline-state.down i,.overview-timelines .timeline-legend i.down{background:#ff5368}
 .overview-row-chart{grid-template-columns:minmax(0,1.85fr) minmax(300px,.95fr);align-items:stretch}
 .overview-row-domestic{display:grid;grid-template-columns:minmax(0,1fr)}
 .streams-panel,.events-panel{height:360px!important}

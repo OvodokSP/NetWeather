@@ -146,9 +146,14 @@ The Overview must remain customizable without producing empty holes.
 Operational hierarchy is fixed even when optional capabilities are hidden:
 
 1. current health, freshness and four core KPIs;
-2. time-series evidence and recent events;
+2. matching GLOBAL and RUSSIA per-resource availability timelines and recent events;
 3. pinned resources;
 4. a problem-first resource table and capability-specific diagnostics.
+
+The two availability timelines share a resource order, 1h/6h/24h/7d range selector, and a single
+combined API snapshot refreshed every 10 seconds. Each timeline uses a 10-second scale division,
+with distinct green (available), red (unavailable), and neutral (unknown) separated segments.
+The Monitoring page keeps the resource list and diagnostics; availability timelines stay on Overview.
 
 The resource table on Overview is a bounded summary, not a duplicate of Monitoring. It shows at
 most 8 rows, sorts items requiring attention first and offers an explicit problem-only filter.
