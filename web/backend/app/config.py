@@ -25,7 +25,8 @@ PUBLIC_ADD_WINDOW_SECONDS = int(os.getenv("NETWEATHER_PUBLIC_ADD_WINDOW_SECONDS"
 REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "8"))
 FRONTEND_DIR = Path(os.getenv("FRONTEND_DIR", "/app/frontend"))
 SEED_DEFAULTS = os.getenv("NETWEATHER_SEED_DEFAULTS", "true").lower() == "true"
-SCHEDULER_ENABLED = os.getenv("NETWEATHER_SCHEDULER_ENABLED", "true").lower() == "true"
+# Production monitoring is paused until explicitly re-enabled in a reviewed change.
+SCHEDULER_ENABLED = False
 ALERT_WEBHOOK_URL = os.getenv("ALERT_WEBHOOK_URL", "").strip()
 CLIENT_PROBE_STALE_SECONDS = int(os.getenv("NETWEATHER_CLIENT_PROBE_STALE_SECONDS", "180"))
 SERVER_PROBE_STALE_SECONDS = int(os.getenv("NETWEATHER_SERVER_PROBE_STALE_SECONDS", "180"))
