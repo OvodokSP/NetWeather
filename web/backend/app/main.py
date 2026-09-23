@@ -525,7 +525,7 @@ def delete_group(group_key: str):
     return {"ok":True,"reassigned_to":"CUSTOM"}
 
 
-@app.get("/api/target-meta", dependencies=[Depends(require_monitoring_enabled)])
+@app.get("/api/target-meta")
 async def target_metadata(target:str=Query(min_length=1,max_length=2048)):
     return await discover_target_metadata(target)
 
@@ -780,17 +780,19 @@ async def manual_check(resource_id:int):
 async def trace_resource(resource_id:int): return await traceroute_to_resource(resource_id)
 
 
-@app.get("/api/v1/client-probe/resources", dependencies=[Depends(require_monitoring_enabled)])
+@app.get("/api/v1/client-probe/resources")
 def client_probe_resources(device: DeviceIdentity = Depends(require_device)):
+    require_monitoring_enabled()
     with db() as conn:
         rows = conn.execute("""SELECT id,name,target,group_name,expected_status_min,expected_status_max
           FROM resources WHERE enabled=1 ORDER BY group_name,name""").fetchall()
     return [dict(row) for row in rows]
 
 
-@app.post("/api/v1/client-probe/result", dependencies=[Depends(require_monitoring_enabled)])
+@app.post("/api/v1/client-probe/result")
 def client_probe_result(payload: ClientProbeResult, probe: ClientProbeRegistration,
                         device: DeviceIdentity = Depends(require_device)):
+    require_monitoring_enabled()
     probe_key = probe.probe_key if device.device_id == "LOCAL_DEVELOPMENT" else device.device_id
     probe_name = probe.name if device.device_id == "LOCAL_DEVELOPMENT" else device.name
     register_probe(probe_key, probe_name, "USER", probe.app_version, "dns,tcp,tls,http")

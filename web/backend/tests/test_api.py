@@ -308,28 +308,16 @@ class NetWeatherApiTest(unittest.TestCase):
         deleted = self.client.delete("/api/resources/%d" % rid, headers=self.auth)
         self.assertEqual(deleted.status_code, 200)
 
-    def test_optional_android_probe_classification(self):
-        dash = self.client.get("/api/dashboard").json()
-        rid = dash["resources"][0]["id"]
-        # Global result is created directly, then the optional Android probe reports a failure.
-        good = {"status":"OK","response_time_ms":120,"dns_ms":10,"tcp_ms":20,"tls_ms":30,"http_ms":60,
-                "http_status":200,"resolved_ip":"93.184.216.34","tls_days_left":90,
-                "final_url":"https://example.com","location":None,"message":"HTTP 200"}
-        self.main.write_check(rid, good)
-        payload = {"resource_id":rid,"status":"TIMEOUT","response_time_ms":8000,"dns_ms":10,"tcp_ms":20,
-                   "tls_ms":30,"http_ms":None,"http_status":None,"resolved_ip":"93.184.216.34","message":"timeout"}
-        for _ in range(2):
-            r = self.client.post("/api/v1/client-probe/result", json={
-                "payload":payload,
-                "probe":{"probe_key":"ANDROID_TEST_123","name":"Galaxy test","app_version":"0.4.0"},
-            })
-            self.assertEqual(r.status_code, 200)
-        dash = self.client.get("/api/dashboard").json()
-        row = next(x for x in dash["resources"] if x["id"] == rid)
-        self.assertEqual(row["diagnosis"], "LOCAL_NETWORK")
-        self.assertTrue(dash["summary"]["your_network_available"])
-        self.assertEqual(next(p for p in dash["probes"] if p["probe_key"] == "ANDROID_TEST_123")["agent_version"], "0.4.0")
-        self.assertGreaterEqual(dash["summary"]["local"], 1)
+    def test_optional_android_probe_is_rejected_while_site_monitoring_is_paused(self):
+        rid = self.client.get("/api/dashboard").json()["resources"][0]["id"]
+        result = self.client.post("/api/v1/client-probe/result", json={
+            "payload":{"resource_id":rid,"status":"TIMEOUT","response_time_ms":8000,"message":"timeout"},
+            "probe":{"probe_key":"ANDROID_TEST_123","name":"Galaxy test","app_version":"0.4.0"},
+        })
+        self.assertEqual(result.status_code, 503)
+        self.assertFalse(any(p["probe_key"] == "ANDROID_TEST_123"
+                             for p in self.client.get("/api/dashboard").json()["probes"]))
+
 
     def test_device_code_pairing_issues_unique_token_and_blocks_spoofed_probe_key(self):
         self.main.AUTH_REQUIRED = True
