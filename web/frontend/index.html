@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#08111f">
   <meta name="description" content="NetWeather — мониторинг доступности ресурсов и диагностика сетевых проблем в реальном времени.">
   <title>NetWeather</title>
-  <link rel="stylesheet" href="/assets/dashboard.css?v=0.3.10-dynamic16">
+  <link rel="stylesheet" href="/assets/dashboard.css?v=0.3.10-dynamic17">
 </head>
 <body>
 <div class="shell">
@@ -347,7 +347,7 @@
         <div class="page-head"><div><h1>Интеграции</h1><p>API, probes и внешние каналы.</p></div></div>
         <div class="settings-grid">
           <article class="panel setting-card"><span>API</span><h2>NetWeather API</h2><p>Чтение публичных данных доступно без входа; управляющие запросы требуют права владельца.</p><div class="setting-box">/api/dashboard · /api/resources · /api/incidents · /api/realtime</div></article>
-          <article class="panel setting-card"><span>PROBE</span><h2>Agent API</h2><p>Подключение Keenetic/устройств использует отдельный agent token.</p><div class="setting-box">/api/agent/config.tsv · /api/agent/result</div></article>
+          <article class="panel setting-card"><span>PROBE</span><h2>Точка наблюдения приложения</h2><p>Клиентская точка NetWeather отправляет собственные измерения отдельно от глобального и российского контуров.</p><div class="setting-box">/api/v1/client-probe/resources · /api/v1/client-probe/result</div></article>
         </div>
       </section>
 
@@ -497,6 +497,6 @@
 </dialog>
 
 <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
-<script src="/assets/dashboard.js?v=0.3.10-dynamic16"></script>
+<script src="/assets/dashboard.js?v=0.3.10-dynamic17"></script>
 </body>
 </html>
