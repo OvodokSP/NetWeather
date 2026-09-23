@@ -5,7 +5,7 @@ var COLORS=["#ff6174","#58c7ff","#78a5ff","#42df9c","#ffd34f","#9a65ff","#56e1d0
 var S={
   dashboard:null,incidents:[],system:null,groups:[],realtime:null,realtimeDom:null,events:[],incidentNoticesInitialized:false,
   streamMinutes:60,detailId:null,diagId:null,
-  faultId:null,view:"overview",poll:null,streamMeta:null,chartMeta:{},authRequired:false,
+  faultId:null,view:"overview",poll:null,authRequired:false,
   owner:true,mapScale:1,metaCache:{},catalog:null,catalogSelected:{},customCatalogMatch:null,customAutoCatalogKey:null,
   dashboardPrefs:null,searchIndex:-1,searchAddTarget:null,pendingSearchTarget:null,coreOnline:false,lastSuccessAt:null,
   overviewResourceMode:"ALL"
@@ -654,7 +654,7 @@ function renderOverviewTable(){
   q("#overviewResourceSummary").textContent=S.overviewResourceMode==="ISSUES"?(issues?issues+" требуют внимания":"Проблем не обнаружено"):(issues?issues+" требуют внимания · проблемные показаны первыми":rows.length+" ресурсов · всё спокойно");
   if(!visible.length){el.innerHTML=empty("Всё спокойно","Сейчас нет ресурсов, требующих внимания.");return}
   el.innerHTML='<div class="table-head"><div>Ресурс</div><div>Статус</div><div>Отклик</div><div>Уведомления</div><div>DNS</div><div>TCP</div><div>TLS</div><div>HTTP</div><div></div></div>'+visible.map(function(r){
-    var rt=realtimeById(r.id)||{},x=r.domestic||r.external||{},ruState=russianResourceState(r);
+    var x=r.domestic||r.external||{},ruState=russianResourceState(r);
     return '<div class="table-row" data-resource="'+r.id+'" tabindex="0" aria-label="Открыть ресурс «'+esc(r.name)+'». '+esc(ruState.text)+'"><div class="table-resource with-logo">'+resourceIconHtml(r.target,r.name)+'<div><b>'+esc(r.name)+'</b><span>'+esc(r.target)+'</span><small class="table-resource-ru '+ruState.className+'"><i></i>'+esc(ruState.text)+'</small></div></div><div><span class="status-chip '+resourceDisplayClass(r)+'">'+esc(resourceDisplayText(r))+'</span></div><div>'+num(x.response_time_ms," мс")+'</div><div>'+(r.alerts_enabled?"✓ Включены":"○ Выключены")+'</div><div><i class="stage-dot '+stageState("DNS",r,x)+'"></i></div><div><i class="stage-dot '+stageState("TCP",r,x)+'"></i></div><div><i class="stage-dot '+stageState("TLS",r,x)+'"></i></div><div><i class="stage-dot '+stageState("HTTP",r,x)+'"></i></div><button type="button" class="row-more" data-row-more="'+r.id+'" aria-label="Открыть «'+esc(r.name)+'»">⋮</button></div>'
   }).join("");
   qa("#overviewResourceTable .table-row").forEach(function(row){
@@ -881,10 +881,6 @@ function showDiagnostic(r){
 }
 
 function setStage(n,v,good){var e=q("#stage"+n);e.querySelector("b").textContent=v==null?"—":Math.round(v)+" мс";e.className="diag-step "+(v==null?"":good?"good":"bad")}
-
-function drawSimpleChart(canvas,data,key,percent,color,floor){
-  if(!canvas)return;var rect=canvas.getBoundingClientRect(),dpr=Math.min(2,devicePixelRatio||1);canvas.width=Math.max(280,Math.floor(rect.width*dpr));canvas.height=Math.max(180,Math.floor(rect.height*dpr));var ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);var w=rect.width,h=rect.height,p={l:38,r:10,t:12,b:24};ctx.clearRect(0,0,w,h);if(!data.length)return;var vals=data.map(function(x){return Number(x[key]||0)}),min=percent?(floor==null?0:floor):Math.min.apply(null,vals),max=percent?100:Math.max.apply(null,vals);if(max===min)max=min+1;ctx.font="10px system-ui";ctx.strokeStyle=getCss("--line-soft");ctx.fillStyle=getCss("--muted");for(var i=0;i<=4;i++){var y=p.t+(h-p.t-p.b)*i/4;ctx.beginPath();ctx.moveTo(p.l,y);ctx.lineTo(w-p.r,y);ctx.stroke();var v=max-(max-min)*i/4;ctx.fillText(percent?Math.round(v)+"%":Math.round(v)+"",3,y+3)}ctx.strokeStyle=color||COLORS[1];ctx.lineWidth=1.7;ctx.beginPath();data.forEach(function(x,i){var xx=p.l+(w-p.l-p.r)*(data.length===1?.5:i/(data.length-1)),yy=p.t+(h-p.t-p.b)*(1-(Number(x[key]||0)-min)/(max-min));if(i===0)ctx.moveTo(xx,yy);else ctx.lineTo(xx,yy)});ctx.stroke();if(data.length===1){var only=Number(data[0][key]||0),xx=p.l+(w-p.l-p.r)/2,yy=p.t+(h-p.t-p.b)*(1-(only-min)/(max-min));ctx.fillStyle=color||COLORS[1];ctx.beginPath();ctx.arc(xx,yy,3,0,Math.PI*2);ctx.fill()}
-}
 
 function drawSpark(canvas,values,color){
   if(!canvas)return;var r=canvas.getBoundingClientRect(),w=Math.max(45,r.width||70),h=Math.max(20,r.height||30),dpr=Math.min(2,devicePixelRatio||1);canvas.width=w*dpr;canvas.height=h*dpr;var ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);if(!values||values.length<2)return;var min=Math.min.apply(null,values),max=Math.max.apply(null,values);if(max===min)max=min+1;ctx.strokeStyle=color;ctx.lineWidth=1.35;ctx.beginPath();values.forEach(function(v,i){var x=i/(values.length-1)*(w-2)+1,y=h-2-(v-min)/(max-min)*(h-5);if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)});ctx.stroke()
